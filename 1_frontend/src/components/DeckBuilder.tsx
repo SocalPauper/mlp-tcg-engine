@@ -2,16 +2,17 @@ import React, { useState, useEffect } from 'react';
 
 interface Card {
   id: string;
+  cardNumber: string;
   name: string;
-  set_code: string;
-  card_type: string;
+  type: string;
   rarity: string;
+  set_code: string;
+  traits: string;
   cost: number;
   power: number;
   defense: number;
-  traits: string;
-  effect_text: string;
-  image_url: string;
+  effectText: string;
+  imageUrl: string;
 }
 
 interface Deck {
@@ -27,17 +28,14 @@ interface Deck {
 
 export default function DeckBuilder() {
   const [cards, setCards] = useState<Card[]>([]);
+  const [decks, setDecks] = useState<Deck[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'hub' | 'editor'>('hub');
 
-  // Hub starts completely empty (no hardcoded placeholder decks)
-  const [decks, setDecks] = useState<Deck[]>([]);
-
-  // Active Deck Editor State
   const [activeDeck, setActiveDeck] = useState<Deck>({
     id: '',
     name: 'New Custom Deck',
-    author: 'Anonymous',
+    author: 'Player',
     isPublic: false,
     mane: null,
     stories: [],
@@ -49,39 +47,34 @@ export default function DeckBuilder() {
   const [importExportText, setImportExportText] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
 
+  // Fetch cards and existing decks from backend API
   useEffect(() => {
-    // Robust fetch with HTML fallback prevention
-    fetch('/api/cards')
-      .then((res) => {
-        const contentType = res.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('API did not return JSON (check backend route)');
-        }
-        return res.json();
-      })
-      .then((data) => {
-        setCards(Array.isArray(data) ? data : []);
+    Promise.all([
+      fetch('/api/cards').then((res) => res.json()),
+      fetch('/api/decks').then((res) => res.json()).catch(() => [])
+    ])
+      .then(([cardsData, decksData]) => {
+        setCards(Array.isArray(cardsData) ? cardsData : []);
+        setDecks(Array.isArray(decksData) ? decksData : []);
         setLoading(false);
       })
       .catch((err) => {
-        console.warn('API fetch failed, trying local JSON fallback:', err.message);
-        // Fallback or empty array so UI never breaks
-        setCards([]);
+        console.error('Failed to load card catalog or decks:', err);
         setLoading(false);
       });
   }, []);
 
   if (loading) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center', color: '#fff', background: '#111827', height: '100vh' }}>
-        Loading Card Database...
+      <div style={{ padding: '3rem', textAlign: 'center', color: '#f472b6', background: '#111827', minHeight: '100vh', fontSize: '1.25rem', fontWeight: 'bold' }}>
+        Loading Card Database & Decks...
       </div>
     );
   }
 
   // --- Filtering Helpers ---
   const maneCharacters = cards.filter(
-    (c) => c.card_type === 'Character' && c.rarity === 'Mane'
+    (c) => c.type === 'Character' && (c.rarity === 'Mane' || c.id?.includes('Mane'))
   );
 
   const storyCards = cards.filter((c) => c.name?.toLowerCase().includes('story'));
@@ -93,23 +86,23 @@ export default function DeckBuilder() {
   });
 
   const sceneCards = cards.filter(
-    (c) => c.card_type === 'Scene' || c.set_code?.startsWith('ER')
+    (c) => c.type === 'Scene' || c.set_code?.startsWith('ER') || c.id?.includes('ER')
   );
 
   const getLegalMainDeckCards = () => {
     return cards.filter((c) => {
-      if (c.card_type === 'Character' && c.rarity === 'Mane') return false;
+      if (c.type === 'Character' && (c.rarity === 'Mane' || c.id?.includes('Mane'))) return false;
       if (c.name?.toLowerCase().includes('story')) return false;
-      if (c.card_type === 'Scene' || c.set_code?.startsWith('ER')) return false;
+      if (c.type === 'Scene' || c.set_code?.startsWith('ER')) return false;
       if (!activeDeck.mane) return true;
-      return c.traits?.split(', ').some((t) => activeDeck.mane?.traits.includes(t));
+      return c.traits?.split(', ').some((t) => activeDeck.mane?.traits?.includes(t));
     });
   };
 
   // --- Handlers ---
   const handleCreateNewDeck = () => {
     setActiveDeck({
-      id: Date.now().toString(),
+      id: 'deck-' + Date.now(),
       name: 'My Custom Deck',
       author: 'Player',
       isPublic: false,
@@ -128,16 +121,29 @@ export default function DeckBuilder() {
     setView('editor');
   };
 
-  const handleSaveDeck = () => {
-    const existingIndex = decks.findIndex((d) => d.id === activeDeck.id);
-    if (existingIndex >= 0) {
-      const updated = [...decks];
-      updated[existingIndex] = activeDeck;
-      setDecks(updated);
-    } else {
-      setDecks([...decks, activeDeck]);
+  const handleSaveDeck = async () => {
+    try {
+      const response = await fetch('/api/decks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(activeDeck),
+      });
+      if (!response.ok) throw new Error('Failed to save deck');
+      const savedDeck = await response.json();
+
+      const existingIndex = decks.findIndex((d) => d.id === savedDeck.id);
+      if (existingIndex >= 0) {
+        const updated = [...decks];
+        updated[existingIndex] = savedDeck;
+        setDecks(updated);
+      } else {
+        setDecks([...decks, savedDeck]);
+      }
+      setView('hub');
+    } catch (err) {
+      console.error('Error saving deck:', err);
+      alert('Failed to save deck to database.');
     }
-    setView('hub');
   };
 
   const handleExportDeck = () => {
@@ -158,7 +164,7 @@ export default function DeckBuilder() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#111827', color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      {/* Top Header Bar */}
+      {/* Header */}
       <header style={{ background: '#1f2937', borderBottom: '1px solid #374151', padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0, color: '#f472b6' }}>
@@ -178,7 +184,7 @@ export default function DeckBuilder() {
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Main Content */}
       <main style={{ flex: 1, padding: '1.5rem', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
         {view === 'hub' ? (
           <div>
@@ -186,7 +192,7 @@ export default function DeckBuilder() {
               <div>
                 <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', margin: 0 }}>Deck Management Hub</h2>
                 <p style={{ fontSize: '0.875rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>
-                  Manage your custom decks or import/export deck configurations. Click any deck to edit.
+                  Browse community decks or build and manage your own custom configurations.
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -210,7 +216,7 @@ export default function DeckBuilder() {
 
             {decks.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '4rem', background: '#1f2937', borderRadius: '1rem', border: '1px dashed #374151', color: '#9ca3af' }}>
-                <p style={{ fontSize: '1rem', marginBottom: '1rem' }}>No decks created yet. Click "+ Create New Deck" to get started!</p>
+                <p style={{ fontSize: '1rem', marginBottom: '1rem' }}>No decks found in the database. Click "+ Create New Deck" to get started!</p>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
@@ -227,11 +233,12 @@ export default function DeckBuilder() {
                           {deck.isPublic ? 'Public' : 'Private'}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.875rem', color: '#9ca3af', background: '#111827', padding: '0.75rem', borderRadius: '0.5rem', marginTop: '1rem' }}>
+                      <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 1rem 0' }}>Author: {deck.author}</p>
+                      <div style={{ fontSize: '0.875rem', color: '#9ca3af', background: '#111827', padding: '0.75rem', borderRadius: '0.5rem' }}>
                         <div>Mane Character: {deck.mane ? deck.mane.name : 'None'}</div>
-                        <div>Story Arcs: {deck.stories.length > 0 ? '4 / 4' : '0 / 4'}</div>
-                        <div>Scenes: {deck.scenes.length} / 15</div>
-                        <div>Main Deck: {deck.main.length} cards</div>
+                        <div>Story Arcs: {deck.stories?.length > 0 ? '4 / 4' : '0 / 4'}</div>
+                        <div>Scenes: {deck.scenes?.length || 0} / 15</div>
+                        <div>Main Deck: {deck.main?.length || 0} cards</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
@@ -288,19 +295,19 @@ export default function DeckBuilder() {
                   onClick={() => setActiveTab('stories')}
                   style={{ background: activeTab === 'stories' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
                 >
-                  2. Story Arcs ({activeDeck.stories.length}/4)
+                  2. Story Arcs ({activeDeck.stories?.length || 0}/4)
                 </button>
                 <button
                   onClick={() => setActiveTab('scenes')}
                   style={{ background: activeTab === 'scenes' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
                 >
-                  3. Scene Cards ({activeDeck.scenes.length}/15)
+                  3. Scene Cards ({activeDeck.scenes?.length || 0}/15)
                 </button>
                 <button
                   onClick={() => setActiveTab('main')}
                   style={{ background: activeTab === 'main' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
                 >
-                  4. Card Pool ({activeDeck.main.length})
+                  4. Card Pool ({activeDeck.main?.length || 0})
                 </button>
               </div>
 
@@ -320,20 +327,26 @@ export default function DeckBuilder() {
               </div>
             </div>
 
-            {/* Selector Grid Area */}
+            {/* Clickable Card Selection Grid */}
             <div style={{ flex: 1, background: '#1f2937', border: '1px solid #374151', borderRadius: '1rem', padding: '1.5rem' }}>
               {activeTab === 'mane' && (
                 <div>
                   <h3 style={{ marginTop: 0 }}>Choose Your Mane Character</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
-                    {maneCharacters.map((card) => (
+                    {(maneCharacters.length > 0 ? maneCharacters : cards.slice(0, 12)).map((card) => (
                       <div
                         key={card.id}
                         onClick={() => setActiveDeck({ ...activeDeck, mane: card })}
                         style={{ background: '#111827', border: activeDeck.mane?.id === card.id ? '2px solid #db2777' : '1px solid #374151', borderRadius: '0.75rem', padding: '0.75rem', cursor: 'pointer' }}
                       >
-                        <img src={card.image_url || '/assets/default-card-back.webp'} alt={card.name} style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '0.5rem' }} />
+                        <img 
+                          src={card.imageUrl} 
+                          alt={card.name} 
+                          style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '0.5rem' }}
+                          onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                        />
                         <h4 style={{ fontSize: '0.875rem', margin: '0.5rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
+                        <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>Traits: {card.traits || 'None'}</p>
                       </div>
                     ))}
                   </div>
@@ -345,22 +358,28 @@ export default function DeckBuilder() {
                   <h3 style={{ marginTop: 0 }}>Select a Story Arc (Set of 4)</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginTop: '1rem' }}>
                     {Object.entries(groupedStoryArcs).map(([arcName, arcCards]) => {
-                      const isSelected = activeDeck.stories.some((s) => arcCards.some((ac) => ac.id === s.id));
+                      const isSelected = activeDeck.stories?.some((s) => arcCards.some((ac) => ac.id === s.id));
                       return (
                         <div
                           key={arcName}
                           onClick={() => setActiveDeck({ ...activeDeck, stories: isSelected ? [] : arcCards.slice(0, 4) })}
                           style={{ background: '#111827', border: isSelected ? '2px solid #db2777' : '1px solid #374151', borderRadius: '0.75rem', padding: '1rem', cursor: 'pointer' }}
                         >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                            <span style={{ fontWeight: 'bold', color: '#f472b6' }}>{arcName} Arc</span>
-                            <span style={{ fontSize: '0.75rem', background: isSelected ? '#db2777' : '#374151', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }}>
-                              {isSelected ? 'Selected (4/4)' : 'Click to Select'}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                            <span style={{ fontWeight: 'bold', color: '#f472b6', fontSize: '1rem' }}>{arcName} Arc</span>
+                            <span style={{ fontSize: '0.75rem', background: isSelected ? '#db2777' : '#374151', padding: '0.25rem 0.75rem', borderRadius: '0.375rem', fontWeight: 'bold' }}>
+                              {isSelected ? 'Selected (4/4)' : 'Click to Select Arc'}
                             </span>
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
                             {arcCards.map((card) => (
-                              <img key={card.id} src={card.image_url || '/assets/default-card-back.webp'} alt={card.name} style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '0.375rem' }} />
+                              <img 
+                                key={card.id} 
+                                src={card.imageUrl} 
+                                alt={card.name} 
+                                style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '0.375rem' }}
+                                onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                              />
                             ))}
                           </div>
                         </div>
@@ -372,24 +391,29 @@ export default function DeckBuilder() {
 
               {activeTab === 'scenes' && (
                 <div>
-                  <h3 style={{ marginTop: 0 }}>Select Scene Cards ({activeDeck.scenes.length} / 15)</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
-                    {sceneCards.map((card) => {
-                      const isSelected = activeDeck.scenes.some((s) => s.id === card.id);
+                  <h3 style={{ marginTop: 0 }}>Select Scene Cards ({activeDeck.scenes?.length || 0} / 15)</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+                    {(sceneCards.length > 0 ? sceneCards : cards).map((card) => {
+                      const isSelected = activeDeck.scenes?.some((s) => s.id === card.id);
                       return (
                         <div
                           key={card.id}
                           onClick={() => {
                             if (isSelected) {
                               setActiveDeck({ ...activeDeck, scenes: activeDeck.scenes.filter((s) => s.id !== card.id) });
-                            } else if (activeDeck.scenes.length < 15) {
-                              setActiveDeck({ ...activeDeck, scenes: [...activeDeck.scenes, card] });
+                            } else if ((activeDeck.scenes?.length || 0) < 15) {
+                              setActiveDeck({ ...activeDeck, scenes: [...(activeDeck.scenes || []), card] });
                             }
                           }}
                           style={{ background: '#111827', border: isSelected ? '2px solid #db2777' : '1px solid #374151', borderRadius: '0.75rem', padding: '0.5rem', cursor: 'pointer', position: 'relative' }}
                         >
                           {isSelected && <span style={{ position: 'absolute', top: '10px', right: '10px', background: '#db2777', fontSize: '0.625rem', padding: '0.125rem 0.375rem', borderRadius: '0.25rem', fontWeight: 'bold' }}>Added</span>}
-                          <img src={card.image_url || '/assets/default-card-back.webp'} alt={card.name} style={{ width: '100%', height: '160px', objectFit: 'cover', borderRadius: '0.375rem' }} />
+                          <img 
+                            src={card.imageUrl} 
+                            alt={card.name} 
+                            style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '0.375rem' }}
+                            onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                          />
                           <h4 style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
                         </div>
                       );
@@ -401,16 +425,22 @@ export default function DeckBuilder() {
               {activeTab === 'main' && (
                 <div>
                   <h3 style={{ marginTop: 0 }}>Attribute-Filtered Card Pool</h3>
-                  <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Filtered by Mane traits: {activeDeck.mane ? activeDeck.mane.traits : 'None (Showing All)'}</p>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+                  <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Click any card to add it to your main deck.</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
                     {getLegalMainDeckCards().map((card) => (
                       <div
                         key={card.id}
-                        onClick={() => setActiveDeck({ ...activeDeck, main: [...activeDeck.main, card] })}
+                        onClick={() => setActiveDeck({ ...activeDeck, main: [...(activeDeck.main || []), card] })}
                         style={{ background: '#111827', border: '1px solid #374151', borderRadius: '0.75rem', padding: '0.5rem', cursor: 'pointer' }}
                       >
-                        <img src={card.image_url || '/assets/default-card-back.webp'} alt={card.name} style={{ width: '100%', height: '160px', objectFit: 'cover', borderRadius: '0.375rem' }} />
+                        <img 
+                          src={card.imageUrl} 
+                          alt={card.name} 
+                          style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '0.375rem' }}
+                          onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                        />
                         <h4 style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
+                        <p style={{ fontSize: '0.675rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>Cost: {card.cost} | {card.traits}</p>
                       </div>
                     ))}
                   </div>
@@ -421,7 +451,7 @@ export default function DeckBuilder() {
         )}
       </main>
 
-      {/* Import Modal */}
+      {/* Import / Export Modal */}
       {showImportModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
           <div style={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '1rem', padding: '1.5rem', width: '500px', maxWidth: '90%' }}>

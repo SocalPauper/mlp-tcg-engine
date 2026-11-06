@@ -23,17 +23,21 @@ router.get('/', async (req, res) => {
     
     const result = await db.query(query, params);
     
-    // Flexible mapping to support both schema variations safely
+    // Explicitly map database columns to frontend-friendly properties matching your updated DB & R2 schema
     const cards = result.rows.map(row => ({
       id: row.id,
       cardNumber: row.card_number || row.cardnumber || row.id,
       name: row.name,
       type: row.card_type || row.cardtype || 'Character',
-      element: row.element || 'None',
-      imageUrl: row.image_url || row.imageurl || `/assets/cards/${row.id}.webp`,
+      rarity: row.rarity || 'Common',
+      set_code: row.set_code || row.setcode || 'BP01',
+      traits: row.traits || 'Pony',
+      cost: row.cost || 0,
       power: row.power || 0,
       defense: row.defense || 0,
-      effectText: row.effect_text || row.effecttext || ''
+      effectText: row.effect_text || row.effecttext || '',
+      // Ensure the Cloudflare R2 image URL stored in image_url is cleanly passed as imageUrl
+      imageUrl: row.image_url || row.imageurl || `https://pub-yourr2url.r2.dev/cards/${row.id}.webp`
     }));
 
     res.json(cards);
