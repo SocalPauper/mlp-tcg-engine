@@ -76,6 +76,38 @@ export default function DeckBuilder() {
     return groups;
   };
 
+  // Future-proofed tag-based matching helper for new expansion sets
+  const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
+    const leaderIdStr = String(leaderCard.id || leaderCard.cardNumber || '').toUpperCase();
+    const leaderName = (leaderCard.name || '').toLowerCase();
+    const setPrefix = leaderIdStr.split('-')[0];
+
+    const allStories = allCards.filter(c => isStoryCard(c.type));
+
+    // 1. Try matching both the exact expansion set AND a name keyword
+    let matchingStories = allStories.filter(s => {
+      const sId = String(s.id || s.cardNumber || '').toUpperCase();
+      const sName = (s.name || '').toLowerCase();
+      const belongsToSet = sId.startsWith(setPrefix);
+      const matchesCharacter = leaderName.split(' ')[0] && sName.includes(leaderName.split(' ')[0]);
+      return belongsToSet && matchesCharacter;
+    });
+
+    // 2. Fallback to any 4 stories from that exact block if character name isn't in title
+    if (matchingStories.length < 4) {
+      matchingStories = allStories.filter(s => {
+        const sId = String(s.id || s.cardNumber || '').toUpperCase();
+        return sId.startsWith(setPrefix);
+      });
+    }
+
+    if (matchingStories.length < 4) {
+      matchingStories = allStories.slice(0, 4);
+    }
+
+    return matchingStories.slice(0, 4);
+  };
+
   useEffect(() => {
     setIsLoading(true);
     Promise.all([
@@ -201,7 +233,9 @@ export default function DeckBuilder() {
       
       const chosenPrefix = groups[defaultPrefix] ? defaultPrefix : (availablePrefixes[0] || '');
       setSelectedStoryPrefix(chosenPrefix);
-      setPendingStories((groups[chosenPrefix] || []).slice(0, 4));
+      
+      const matchedStories = getStoriesForLeader(card, catalogCards);
+      setPendingStories(matchedStories.length >= 4 ? matchedStories : (groups[chosenPrefix] || []).slice(0, 4));
       setPendingLeader(card);
       setShowStoryModal(true);
       return;
@@ -216,7 +250,9 @@ export default function DeckBuilder() {
         
         const chosenPrefix = groups[defaultPrefix] ? defaultPrefix : (availablePrefixes[0] || '');
         setSelectedStoryPrefix(chosenPrefix);
-        setPendingStories((groups[chosenPrefix] || []).slice(0, 4));
+
+        const matchedStories = getStoriesForLeader(card, catalogCards);
+        setPendingStories(matchedStories.length >= 4 ? matchedStories : (groups[chosenPrefix] || []).slice(0, 4));
         setPendingLeader(card);
         setShowStoryModal(true);
       }
