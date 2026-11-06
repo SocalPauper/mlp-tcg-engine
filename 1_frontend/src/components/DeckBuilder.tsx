@@ -37,10 +37,12 @@ export default function DeckBuilder() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Modal State for Story Confirmation Popup
+  // Modal State for Story Confirmation & Selection Popup
   const [pendingStories, setPendingStories] = useState<Card[]>([]);
   const [pendingLeader, setPendingLeader] = useState<Card | null>(null);
   const [showStoryModal, setShowStoryModal] = useState<boolean>(false);
+  const [allStoryGroups, setAllStoryGroups] = useState<Record<string, Card[]>>({});
+  const [selectedStoryPrefix, setSelectedStoryPrefix] = useState<string>('');
 
   // Leader identification via ID patterns (-001 starter flagships, -RR, -CR, -GR)
   const isLeaderCard = (card: Card) => {
@@ -61,42 +63,17 @@ export default function DeckBuilder() {
     return typeStr.toLowerCase().includes('story');
   };
 
-const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
-    const leaderIdStr = String(leaderCard.id || leaderCard.cardNumber || '').trim().toUpperCase();
-    
-    // Filter all story cards from catalog
+  // Group all available story cards by their set prefix (e.g. BP01, SD01, etc.)
+  const buildStoryGroups = (allCards: Card[]) => {
     const allStories = allCards.filter(c => isStoryCard(c.type));
-    
-    // 1. Try exact set prefix match (e.g., leader 'BP01-CR04' matches stories starting with 'BP01')
-    const setPrefix = leaderIdStr.split('-')[0];
-    let matchingStories = allStories.filter(s => {
+    const groups: Record<string, Card[]> = {};
+    allStories.forEach(s => {
       const sId = String(s.id || s.cardNumber || '').toUpperCase();
-      return sId.startsWith(setPrefix);
+      const p = sId.split('-')[0] || 'GENERAL';
+      if (!groups[p]) groups[p] = [];
+      groups[p].push(s);
     });
-
-    // 2. If not enough exact prefix matches, group by set code and find a distinct matching group
-    if (matchingStories.length < 4) {
-      const prefixGroups: Record<string, Card[]> = {};
-      allStories.forEach(s => {
-        const sId = String(s.id || s.cardNumber || '').toUpperCase();
-        const p = sId.split('-')[0];
-        if (!prefixGroups[p]) prefixGroups[p] = [];
-        prefixGroups[p].push(s);
-      });
-
-      // Look for any group that isn't the default BP01 (or whatever default is first) if another exists
-      const availableGroups = Object.entries(prefixGroups).filter(([_, group]) => group.length >= 4);
-      
-      if (availableGroups.length > 0) {
-        // Try to pick a group that matches the leader's theme/set, or cycle based on leader ID hash
-        const targetGroup = availableGroups.find(([prefix]) => prefix === setPrefix) || availableGroups[0];
-        matchingStories = targetGroup[1].slice(0, 4);
-      } else {
-        matchingStories = allStories.slice(0, 4);
-      }
-    }
-
-    return matchingStories.slice(0, 4);
+    return groups;
   };
 
   useEffect(() => {
@@ -120,6 +97,7 @@ const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
 
       if (Array.isArray(cardsData)) {
         setCatalogCards(cardsData);
+        setAllStoryGroups(buildStoryGroups(cardsData));
         setTypeFilter('Leader / Mane Character');
       }
     }).finally(() => {
@@ -215,18 +193,31 @@ const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
       if (!isLeaderCard(card)) {
         return showError('You must select a valid Mane Character leader card first!');
       }
-      const matchingStories = getStoriesForLeader(card, catalogCards);
+      
+      const groups = allStoryGroups;
+      const leaderIdStr = String(card.id || card.cardNumber || '').toUpperCase();
+      const defaultPrefix = leaderIdStr.split('-')[0];
+      const availablePrefixes = Object.keys(groups);
+      
+      const chosenPrefix = groups[defaultPrefix] ? defaultPrefix : (availablePrefixes[0] || '');
+      setSelectedStoryPrefix(chosenPrefix);
+      setPendingStories((groups[chosenPrefix] || []).slice(0, 4));
       setPendingLeader(card);
-      setPendingStories(matchingStories);
       setShowStoryModal(true);
       return;
     }
 
     if (isLeaderCard(card)) {
       if (confirm(`Change Mane Leader to ${card.name}? (Note: This will reset your current deck contents).`)) {
-        const matchingStories = getStoriesForLeader(card, catalogCards);
+        const groups = allStoryGroups;
+        const leaderIdStr = String(card.id || card.cardNumber || '').toUpperCase();
+        const defaultPrefix = leaderIdStr.split('-')[0];
+        const availablePrefixes = Object.keys(groups);
+        
+        const chosenPrefix = groups[defaultPrefix] ? defaultPrefix : (availablePrefixes[0] || '');
+        setSelectedStoryPrefix(chosenPrefix);
+        setPendingStories((groups[chosenPrefix] || []).slice(0, 4));
         setPendingLeader(card);
-        setPendingStories(matchingStories);
         setShowStoryModal(true);
       }
       return;
@@ -258,6 +249,11 @@ const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
     setSelectedDeck({ ...selectedDeck, cards: [...selectedDeck.cards, card] });
   };
 
+  const handleStoryPrefixChange = (prefix: string) => {
+    setSelectedStoryPrefix(prefix);
+    setPendingStories((allStoryGroups[prefix] || []).slice(0, 4));
+  };
+
   const confirmStoryBundle = () => {
     if (!selectedDeck || !pendingLeader) return;
     setSelectedDeck({ 
@@ -268,7 +264,7 @@ const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
       stories: pendingStories 
     });
     setTypeFilter('All');
-    setEngineStatus(`Assigned ${pendingLeader.name} as Mane Leader with correct set stories bundled!`);
+    setEngineStatus(`Assigned ${pendingLeader.name} as Mane Leader with selected story arc!`);
     setShowStoryModal(false);
     setPendingLeader(null);
     setPendingStories([]);
@@ -387,15 +383,26 @@ const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
       {engineStatus && <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '10px', borderRadius: '12px', textAlign: 'center', fontWeight: 800 }}>{engineStatus}</div>}
       {errorMsg && <div style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '10px', borderRadius: '12px', textAlign: 'center', fontWeight: 800 }}>{errorMsg}</div>}
 
-      {/* Story Confirmation Modal Popup */}
+      {/* Story Selection & Confirmation Modal Popup */}
       {showStoryModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '20px', maxWidth: '700px', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: '2px solid #fbcfe8' }}>
-            <div>
-              <h3 style={{ margin: '0 0 4px 0', fontSize: '1.25rem', fontWeight: 900, color: '#1c1917' }}>📖 Confirm Bundled Story Cards</h3>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#78716c' }}>
-                Selecting leader <strong style={{ color: '#6b21a8' }}>{pendingLeader?.name}</strong> matches the following 4 expansion story cards:
-              </p>
+          <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '20px', maxWidth: '750px', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: '2px solid #fbcfe8' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <h3 style={{ margin: '0 0 4px 0', fontSize: '1.25rem', fontWeight: 900, color: '#1c1917' }}>📖 Select Story Arc for Leader</h3>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#78716c' }}>
+                  Choose the 4-part story expansion set to bundle with <strong style={{ color: '#6b21a8' }}>{pendingLeader?.name}</strong>:
+                </p>
+              </div>
+              <select 
+                value={selectedStoryPrefix} 
+                onChange={(e) => handleStoryPrefixChange(e.target.value)}
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #fbcfe8', fontWeight: 800, backgroundColor: '#fdf2f8', color: '#db2777' }}
+              >
+                {Object.keys(allStoryGroups).map(prefix => (
+                  <option key={prefix} value={prefix}>Story Set: {prefix} ({allStoryGroups[prefix].length} cards)</option>
+                ))}
+              </select>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', maxHeight: '350px', overflowY: 'auto', padding: '4px' }}>
@@ -420,7 +427,7 @@ const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #fdf2f8', paddingTop: '12px' }}>
               <button onClick={cancelStoryBundle} style={{ backgroundColor: '#e7e5e4', color: '#44403c', border: 'none', padding: '10px 18px', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={confirmStoryBundle} style={{ backgroundColor: '#db2777', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>Confirm & Add Leader</button>
+              <button onClick={confirmStoryBundle} style={{ backgroundColor: '#db2777', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>Confirm Story Set & Add Leader</button>
             </div>
           </div>
         </div>
@@ -506,7 +513,7 @@ const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
 
               {!selectedDeck?.maneCharacter && (
                 <div style={{ backgroundColor: '#fdf4f8', color: '#6b21a8', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 800, border: '1px solid #fbcfe8', textAlign: 'center' }}>
-                  ✨ Select your Mane Character Leader below to unlock deck building, filtering, and set-matched story preview.
+                  ✨ Select your Mane Character Leader below to choose your story set and unlock deck building.
                 </div>
               )}
 
@@ -577,12 +584,12 @@ const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
                 </div>
               </div>
 
-              {/* Stories Section (Auto-bundled & Locked) */}
+              {/* Stories Section (Interactive & Locked) */}
               <div>
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', fontWeight: 800, color: '#d97706' }}>📖 Stories ({selectedDeck?.stories?.length || 0}/4) [Set-Matched]</h4>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', fontWeight: 800, color: '#d97706' }}>📖 Stories ({selectedDeck?.stories?.length || 0}/4) [Set-Selected]</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '90px', overflowY: 'auto' }}>
                   {(!selectedDeck?.stories || selectedDeck.stories.length === 0) ? (
-                    <div style={{ color: '#a8a29e', fontSize: '0.7rem', textAlign: 'center', padding: '6px' }}>Select leader to bundle stories.</div>
+                    <div style={{ color: '#a8a29e', fontSize: '0.7rem', textAlign: 'center', padding: '6px' }}>Select leader to choose stories.</div>
                   ) : (
                     selectedDeck.stories.map(card => (
                       <div key={card.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fef3c7', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem' }}>
