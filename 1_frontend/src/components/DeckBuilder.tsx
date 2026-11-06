@@ -30,25 +30,14 @@ export default function DeckBuilder() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'hub' | 'editor'>('hub');
 
-  // Deck Hub State
-  const [decks, setDecks] = useState<Deck[]>([
-    {
-      id: '1',
-      name: 'Harmony Starters',
-      author: 'Jesse',
-      isPublic: true,
-      mane: null,
-      stories: [],
-      scenes: [],
-      main: [],
-    },
-  ]);
+  // Hub starts completely empty (no hardcoded placeholder decks)
+  const [decks, setDecks] = useState<Deck[]>([]);
 
   // Active Deck Editor State
   const [activeDeck, setActiveDeck] = useState<Deck>({
     id: '',
     name: 'New Custom Deck',
-    author: 'Jesse',
+    author: 'Anonymous',
     isPublic: false,
     mane: null,
     stories: [],
@@ -61,10 +50,13 @@ export default function DeckBuilder() {
   const [showImportModal, setShowImportModal] = useState(false);
 
   useEffect(() => {
-    // Fetch cards from your backend/API endpoint connected to PostgreSQL
+    // Robust fetch with HTML fallback prevention
     fetch('/api/cards')
       .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch cards');
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('API did not return JSON (check backend route)');
+        }
         return res.json();
       })
       .then((data) => {
@@ -72,15 +64,17 @@ export default function DeckBuilder() {
         setLoading(false);
       })
       .catch((err) => {
-        console.error('Error loading card database:', err);
+        console.warn('API fetch failed, trying local JSON fallback:', err.message);
+        // Fallback or empty array so UI never breaks
+        setCards([]);
         setLoading(false);
       });
   }, []);
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-900 text-pink-400 text-xl font-bold">
-        Loading Equestria Clash Card Database...
+      <div style={{ padding: '2rem', textAlign: 'center', color: '#fff', background: '#111827', height: '100vh' }}>
+        Loading Card Database...
       </div>
     );
   }
@@ -117,7 +111,7 @@ export default function DeckBuilder() {
     setActiveDeck({
       id: Date.now().toString(),
       name: 'My Custom Deck',
-      author: 'Jesse',
+      author: 'Player',
       isPublic: false,
       mane: null,
       stories: [],
@@ -143,7 +137,6 @@ export default function DeckBuilder() {
     } else {
       setDecks([...decks, activeDeck]);
     }
-    alert('Deck saved successfully!');
     setView('hub');
   };
 
@@ -158,53 +151,48 @@ export default function DeckBuilder() {
       setActiveDeck(parsed);
       setShowImportModal(false);
       setView('editor');
-      alert('Deck imported successfully!');
     } catch (e) {
       alert('Invalid JSON format for deck import.');
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col font-sans">
-      {/* Top Header Bar matching your navigation */}
-      <header className="bg-gray-800 border-b border-purple-900 px-6 py-4 flex justify-between items-center shadow-lg">
+    <div style={{ minHeight: '100vh', background: '#111827', color: '#fff', display: 'flex', flexDirection: 'column' }}>
+      {/* Top Header Bar */}
+      <header style={{ background: '#1f2937', borderBottom: '1px solid #374151', padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0, color: '#f472b6' }}>
             Equestria Clash TCG
           </h1>
-          <p className="text-xs text-gray-400">KAYOU MLP ONLINE ENGINE</p>
+          <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>KAYOU MLP ONLINE ENGINE</span>
         </div>
-        <div className="flex items-center space-x-4">
+        <div>
           {view === 'editor' && (
             <button
               onClick={() => setView('hub')}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-sm font-semibold rounded-lg transition"
+              style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem' }}
             >
               ← Back to Deck Hub
             </button>
           )}
-          <span className="text-sm bg-purple-900/50 border border-purple-700 px-3 py-1.5 rounded-full text-purple-300">
-            Jesse
-          </span>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+      <main style={{ flex: 1, padding: '1.5rem', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
         {view === 'hub' ? (
-          /* --- DECK HUB VIEW --- */
           <div>
-            <div className="flex justify-between items-center mb-6">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <div>
-                <h2 className="text-3xl font-bold text-white">Deck Management Hub</h2>
-                <p className="text-gray-400 text-sm">
-                  Browse community public decks or manage and build your own custom deck configurations.
+                <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', margin: 0 }}>Deck Management Hub</h2>
+                <p style={{ fontSize: '0.875rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>
+                  Manage your custom decks or import/export deck configurations. Click any deck to edit.
                 </p>
               </div>
-              <div className="flex space-x-3">
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <button
                   onClick={handleCreateNewDeck}
-                  className="px-5 py-2.5 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 font-bold rounded-xl shadow-lg transition"
+                  style={{ background: 'linear-gradient(to right, #db2777, #9333ea)', color: '#fff', border: 'none', padding: '0.75rem 1.25rem', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
                 >
                   + Create New Deck
                 </button>
@@ -213,229 +201,139 @@ export default function DeckBuilder() {
                     setImportExportText('');
                     setShowImportModal(true);
                   }}
-                  className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 font-semibold rounded-xl transition text-sm"
+                  style={{ background: '#1f2937', color: '#fff', border: '1px solid #374151', padding: '0.75rem 1.25rem', borderRadius: '0.75rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.875rem' }}
                 >
                   Import Deck JSON
                 </button>
               </div>
             </div>
 
-            {/* Decks Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {decks.map((deck) => (
-                <div
-                  key={deck.id}
-                  className="bg-gray-800/80 border border-gray-700/80 rounded-2xl p-5 shadow-xl flex flex-col justify-between hover:border-pink-500/50 transition"
-                >
-                  <div>
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-xl font-bold text-pink-300">{deck.name}</h3>
-                      <span
-                        className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
-                          deck.isPublic
-                            ? 'bg-green-900/50 text-green-300 border border-green-700'
-                            : 'bg-yellow-900/50 text-yellow-300 border border-yellow-700'
-                        }`}
+            {decks.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '4rem', background: '#1f2937', borderRadius: '1rem', border: '1px dashed #374151', color: '#9ca3af' }}>
+                <p style={{ fontSize: '1rem', marginBottom: '1rem' }}>No decks created yet. Click "+ Create New Deck" to get started!</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                {decks.map((deck) => (
+                  <div
+                    key={deck.id}
+                    onClick={() => handleEditDeck(deck)}
+                    style={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '1rem', padding: '1.25rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#f472b6' }}>{deck.name}</h3>
+                        <span style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', borderRadius: '9999px', background: deck.isPublic ? '#065f46' : '#92400e', color: '#fff', fontWeight: 'bold' }}>
+                          {deck.isPublic ? 'Public' : 'Private'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.875rem', color: '#9ca3af', background: '#111827', padding: '0.75rem', borderRadius: '0.5rem', marginTop: '1rem' }}>
+                        <div>Mane Character: {deck.mane ? deck.mane.name : 'None'}</div>
+                        <div>Story Arcs: {deck.stories.length > 0 ? '4 / 4' : '0 / 4'}</div>
+                        <div>Scenes: {deck.scenes.length} / 15</div>
+                        <div>Main Deck: {deck.main.length} cards</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleEditDeck(deck); }}
+                        style={{ flex: 1, background: '#7c3aed', color: '#fff', border: 'none', padding: '0.5rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer' }}
                       >
-                        {deck.isPublic ? 'Public' : 'Private'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 mb-4">Author: {deck.author}</p>
-                    <div className="space-y-2 text-sm bg-gray-900/50 p-3 rounded-xl border border-gray-800">
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Mane Character:</span>
-                        <span className="font-medium text-white">
-                          {deck.mane ? deck.mane.name : 'None'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Story Arcs:</span>
-                        <span className="font-medium text-white">
-                          {deck.stories.length > 0 ? '4 / 4' : '0 / 4'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Scenes:</span>
-                        <span className="font-medium text-white">{deck.scenes.length} / 15</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Main Deck:</span>
-                        <span className="font-medium text-white">{deck.main.length} cards</span>
-                      </div>
+                        Edit
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveDeck(deck); handleExportDeck(); }}
+                        style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer' }}
+                      >
+                        Export
+                      </button>
                     </div>
                   </div>
-                  <div className="mt-6 flex space-x-3">
-                    <button
-                      onClick={() => handleEditDeck(deck)}
-                      className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 font-semibold rounded-xl text-sm transition text-center"
-                    >
-                      Edit Deck
-                    </button>
-                    <button
-                      onClick={() => {
-                        setActiveDeck(deck);
-                        handleExportDeck();
-                      }}
-                      className="px-4 py-2 bg-gray-700 hover:bg-gray-600 font-semibold rounded-xl text-sm transition"
-                    >
-                      Export
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
-          /* --- DECK BUILDER EDITOR VIEW --- */
-          <div className="flex flex-col lg:flex-row gap-8">
-            {/* Sidebar Summary & Controls */}
-            <div className="w-full lg:w-80 bg-gray-800/90 border border-gray-700 rounded-2xl p-5 shadow-xl flex flex-col justify-between h-fit">
-              <div>
-                <div className="mb-4">
-                  <label className="text-xs text-gray-400 uppercase font-semibold">Deck Name</label>
-                  <input
-                    type="text"
-                    value={activeDeck.name}
-                    onChange={(e) => setActiveDeck({ ...activeDeck, name: e.target.value })}
-                    className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-pink-500"
-                  />
-                </div>
-
-                {/* Public / Private Toggle */}
-                <div className="mb-4 flex items-center justify-between bg-gray-900/60 p-3 rounded-xl border border-gray-700">
-                  <span className="text-sm font-semibold text-gray-300">Visibility:</span>
-                  <button
-                    onClick={() => setActiveDeck({ ...activeDeck, isPublic: !activeDeck.isPublic })}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                      activeDeck.isPublic
-                        ? 'bg-green-600 text-white'
-                        : 'bg-yellow-600 text-gray-900'
-                    }`}
-                  >
-                    {activeDeck.isPublic ? 'Public' : 'Private'}
-                  </button>
-                </div>
-
-                <div className="space-y-3 text-sm mb-6">
-                  <div className="p-3 bg-gray-900/50 rounded-xl border border-gray-800">
-                    <span className="text-gray-400 block text-xs">Mane Character</span>
-                    <span className="font-bold text-pink-400 truncate block">
-                      {activeDeck.mane ? activeDeck.mane.name : 'Not Selected'}
-                    </span>
-                  </div>
-                  <div className="p-3 bg-gray-900/50 rounded-xl border border-gray-800">
-                    <span className="text-gray-400 block text-xs">Story Arcs (Required 4)</span>
-                    <span className="font-bold text-purple-300">
-                      {activeDeck.stories.length === 4 ? 'Complete (4/4)' : `${activeDeck.stories.length}/4`}
-                    </span>
-                  </div>
-                  <div className="p-3 bg-gray-900/50 rounded-xl border border-gray-800">
-                    <span className="text-gray-400 block text-xs">Scene Cards</span>
-                    <span
-                      className={`font-bold ${
-                        activeDeck.scenes.length === 15 ? 'text-green-400' : 'text-yellow-400'
-                      }`}
-                    >
-                      {activeDeck.scenes.length} / 15
-                    </span>
-                  </div>
-                  <div className="p-3 bg-gray-900/50 rounded-xl border border-gray-800">
-                    <span className="text-gray-400 block text-xs">Main Deck Cards</span>
-                    <span className="font-bold text-white">{activeDeck.main.length} cards</span>
-                  </div>
-                </div>
+          <div style={{ display: 'flex', gap: '2rem' }}>
+            {/* Sidebar Editor Controls */}
+            <div style={{ width: '300px', background: '#1f2937', border: '1px solid #374151', borderRadius: '1rem', padding: '1.25rem', height: 'fit-content' }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 'bold' }}>DECK NAME</label>
+                <input
+                  type="text"
+                  value={activeDeck.name}
+                  onChange={(e) => setActiveDeck({ ...activeDeck, name: e.target.value })}
+                  style={{ width: '100%', marginTop: '0.25rem', background: '#111827', border: '1px solid #374151', borderRadius: '0.5rem', padding: '0.5rem', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }}
+                />
               </div>
 
-              {/* Navigation Tabs */}
-              <div className="flex flex-col space-y-2 mb-6">
+              <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111827', padding: '0.5rem 0.75rem', borderRadius: '0.5rem' }}>
+                <span style={{ fontSize: '0.875rem' }}>Visibility:</span>
+                <button
+                  onClick={() => setActiveDeck({ ...activeDeck, isPublic: !activeDeck.isPublic })}
+                  style={{ background: activeDeck.isPublic ? '#059669' : '#d97706', color: '#fff', border: 'none', padding: '0.25rem 0.75rem', borderRadius: '0.375rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  {activeDeck.isPublic ? 'Public' : 'Private'}
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
                 <button
                   onClick={() => setActiveTab('mane')}
-                  className={`p-3 rounded-xl text-left font-semibold text-sm transition ${
-                    activeTab === 'mane'
-                      ? 'bg-pink-600 text-white shadow-lg'
-                      : 'bg-gray-900 text-gray-300 hover:bg-gray-700'
-                  }`}
+                  style={{ background: activeTab === 'mane' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
                 >
-                  1. Mane Character
+                  1. Mane Character ({activeDeck.mane ? '1' : '0'})
                 </button>
                 <button
                   onClick={() => setActiveTab('stories')}
-                  className={`p-3 rounded-xl text-left font-semibold text-sm transition ${
-                    activeTab === 'stories'
-                      ? 'bg-pink-600 text-white shadow-lg'
-                      : 'bg-gray-900 text-gray-300 hover:bg-gray-700'
-                  }`}
+                  style={{ background: activeTab === 'stories' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
                 >
-                  2. Story Arcs
+                  2. Story Arcs ({activeDeck.stories.length}/4)
                 </button>
                 <button
                   onClick={() => setActiveTab('scenes')}
-                  className={`p-3 rounded-xl text-left font-semibold text-sm transition ${
-                    activeTab === 'scenes'
-                      ? 'bg-pink-600 text-white shadow-lg'
-                      : 'bg-gray-900 text-gray-300 hover:bg-gray-700'
-                  }`}
+                  style={{ background: activeTab === 'scenes' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
                 >
                   3. Scene Cards ({activeDeck.scenes.length}/15)
                 </button>
                 <button
                   onClick={() => setActiveTab('main')}
-                  className={`p-3 rounded-xl text-left font-semibold text-sm transition ${
-                    activeTab === 'main'
-                      ? 'bg-pink-600 text-white shadow-lg'
-                      : 'bg-gray-900 text-gray-300 hover:bg-gray-700'
-                  }`}
+                  style={{ background: activeTab === 'main' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
                 >
-                  4. Attribute Card Pool
+                  4. Card Pool ({activeDeck.main.length})
                 </button>
               </div>
 
-              {/* Save & Export Actions */}
-              <div className="space-y-2">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <button
                   onClick={handleSaveDeck}
-                  className="w-full py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 font-bold rounded-xl shadow-lg transition text-center"
+                  style={{ background: '#059669', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}
                 >
                   Save Deck
                 </button>
                 <button
                   onClick={handleExportDeck}
-                  className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 font-semibold rounded-xl text-sm transition text-center"
+                  style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.875rem' }}
                 >
                   Export JSON
                 </button>
               </div>
             </div>
 
-            {/* Main Selector Grid */}
-            <div className="flex-1 bg-gray-800/60 border border-gray-700 rounded-2xl p-6 shadow-xl">
+            {/* Selector Grid Area */}
+            <div style={{ flex: 1, background: '#1f2937', border: '1px solid #374151', borderRadius: '1rem', padding: '1.5rem' }}>
               {activeTab === 'mane' && (
                 <div>
-                  <h3 className="text-2xl font-bold mb-2 text-white">Choose Your Mane Character</h3>
-                  <p className="text-sm text-gray-400 mb-6">
-                    Select the foundational Mane Character that dictates your deck's attributes and legal card pool.
-                  </p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <h3 style={{ marginTop: 0 }}>Choose Your Mane Character</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
                     {maneCharacters.map((card) => (
                       <div
                         key={card.id}
                         onClick={() => setActiveDeck({ ...activeDeck, mane: card })}
-                        className={`border-2 rounded-2xl p-3 cursor-pointer bg-gray-900/80 transition hover:border-pink-500 ${
-                          activeDeck.mane?.id === card.id
-                            ? 'border-pink-500 shadow-lg shadow-pink-500/20 bg-gray-900'
-                            : 'border-gray-800'
-                        }`}
+                        style={{ background: '#111827', border: activeDeck.mane?.id === card.id ? '2px solid #db2777' : '1px solid #374151', borderRadius: '0.75rem', padding: '0.75rem', cursor: 'pointer' }}
                       >
-                        <img
-                          src={card.image_url || '/assets/default-card-back.webp'}
-                          alt={card.name}
-                          className="w-full h-56 object-cover rounded-xl mb-3"
-                          onError={(e) => {
-                            e.currentTarget.src = '/assets/default-card-back.webp';
-                          }}
-                        />
-                        <h4 className="font-bold text-sm truncate text-white">{card.name}</h4>
-                        <p className="text-xs text-gray-400 mt-1 truncate">Traits: {card.traits}</p>
+                        <img src={card.image_url || '/assets/default-card-back.webp'} alt={card.name} style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '0.5rem' }} />
+                        <h4 style={{ fontSize: '0.875rem', margin: '0.5rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
                       </div>
                     ))}
                   </div>
@@ -444,51 +342,25 @@ export default function DeckBuilder() {
 
               {activeTab === 'stories' && (
                 <div>
-                  <h3 className="text-2xl font-bold mb-2 text-white">Select a Story Arc (Set of 4)</h3>
-                  <p className="text-sm text-gray-400 mb-6">
-                    Choose one complete story arc containing 4 sequential cards.
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <h3 style={{ marginTop: 0 }}>Select a Story Arc (Set of 4)</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginTop: '1rem' }}>
                     {Object.entries(groupedStoryArcs).map(([arcName, arcCards]) => {
-                      const isSelected = activeDeck.stories.some((s) =>
-                        arcCards.some((ac) => ac.id === s.id)
-                      );
+                      const isSelected = activeDeck.stories.some((s) => arcCards.some((ac) => ac.id === s.id));
                       return (
                         <div
                           key={arcName}
-                          onClick={() =>
-                            setActiveDeck({
-                              ...activeDeck,
-                              stories: isSelected ? [] : arcCards.slice(0, 4),
-                            })
-                          }
-                          className={`border-2 rounded-2xl p-5 cursor-pointer bg-gray-900/80 transition hover:border-pink-500 ${
-                            isSelected
-                              ? 'border-pink-500 shadow-lg shadow-pink-500/20 bg-gray-900'
-                              : 'border-gray-800'
-                          }`}
+                          onClick={() => setActiveDeck({ ...activeDeck, stories: isSelected ? [] : arcCards.slice(0, 4) })}
+                          style={{ background: '#111827', border: isSelected ? '2px solid #db2777' : '1px solid #374151', borderRadius: '0.75rem', padding: '1rem', cursor: 'pointer' }}
                         >
-                          <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-bold text-lg text-pink-300">{arcName} Arc</h4>
-                            <span
-                              className={`text-xs px-3 py-1 rounded-full font-bold ${
-                                isSelected ? 'bg-pink-600 text-white' : 'bg-gray-800 text-gray-400'
-                              }`}
-                            >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <span style={{ fontWeight: 'bold', color: '#f472b6' }}>{arcName} Arc</span>
+                            <span style={{ fontSize: '0.75rem', background: isSelected ? '#db2777' : '#374151', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }}>
                               {isSelected ? 'Selected (4/4)' : 'Click to Select'}
                             </span>
                           </div>
-                          <div className="grid grid-cols-4 gap-2">
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
                             {arcCards.map((card) => (
-                              <img
-                                key={card.id}
-                                src={card.image_url || '/assets/default-card-back.webp'}
-                                alt={card.name}
-                                className="w-full h-28 object-cover rounded-lg"
-                                onError={(e) => {
-                                  e.currentTarget.src = '/assets/default-card-back.webp';
-                                }}
-                              />
+                              <img key={card.id} src={card.image_url || '/assets/default-card-back.webp'} alt={card.name} style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '0.375rem' }} />
                             ))}
                           </div>
                         </div>
@@ -500,13 +372,8 @@ export default function DeckBuilder() {
 
               {activeTab === 'scenes' && (
                 <div>
-                  <h3 className="text-2xl font-bold mb-2 text-white">
-                    Select Scene Cards ({activeDeck.scenes.length} / 15 Required)
-                  </h3>
-                  <p className="text-sm text-gray-400 mb-6">
-                    Pick exactly 15 Scene or Event cards for your deck's scene stack.
-                  </p>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <h3 style={{ marginTop: 0 }}>Select Scene Cards ({activeDeck.scenes.length} / 15)</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
                     {sceneCards.map((card) => {
                       const isSelected = activeDeck.scenes.some((s) => s.id === card.id);
                       return (
@@ -514,39 +381,16 @@ export default function DeckBuilder() {
                           key={card.id}
                           onClick={() => {
                             if (isSelected) {
-                              setActiveDeck({
-                                ...activeDeck,
-                                scenes: activeDeck.scenes.filter((s) => s.id !== card.id),
-                              });
-                            } else {
-                              if (activeDeck.scenes.length < 15) {
-                                setActiveDeck({
-                                  ...activeDeck,
-                                  scenes: [...activeDeck.scenes, card],
-                                });
-                              }
+                              setActiveDeck({ ...activeDeck, scenes: activeDeck.scenes.filter((s) => s.id !== card.id) });
+                            } else if (activeDeck.scenes.length < 15) {
+                              setActiveDeck({ ...activeDeck, scenes: [...activeDeck.scenes, card] });
                             }
                           }}
-                          className={`border-2 rounded-2xl p-3 cursor-pointer bg-gray-900/80 transition relative hover:border-pink-500 ${
-                            isSelected
-                              ? 'border-pink-500 shadow-lg shadow-pink-500/20 bg-gray-900'
-                              : 'border-gray-800'
-                          }`}
+                          style={{ background: '#111827', border: isSelected ? '2px solid #db2777' : '1px solid #374151', borderRadius: '0.75rem', padding: '0.5rem', cursor: 'pointer', position: 'relative' }}
                         >
-                          {isSelected && (
-                            <span className="absolute top-4 right-4 bg-pink-600 text-xs px-2.5 py-1 rounded-full font-bold shadow">
-                              Added
-                            </span>
-                          )}
-                          <img
-                            src={card.image_url || '/assets/default-card-back.webp'}
-                            alt={card.name}
-                            className="w-full h-48 object-cover rounded-xl mb-2"
-                            onError={(e) => {
-                              e.currentTarget.src = '/assets/default-card-back.webp';
-                            }}
-                          />
-                          <h4 className="font-bold text-xs truncate text-white">{card.name}</h4>
+                          {isSelected && <span style={{ position: 'absolute', top: '10px', right: '10px', background: '#db2777', fontSize: '0.625rem', padding: '0.125rem 0.375rem', borderRadius: '0.25rem', fontWeight: 'bold' }}>Added</span>}
+                          <img src={card.image_url || '/assets/default-card-back.webp'} alt={card.name} style={{ width: '100%', height: '160px', objectFit: 'cover', borderRadius: '0.375rem' }} />
+                          <h4 style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
                         </div>
                       );
                     })}
@@ -556,40 +400,17 @@ export default function DeckBuilder() {
 
               {activeTab === 'main' && (
                 <div>
-                  <h3 className="text-2xl font-bold mb-2 text-white">Attribute-Filtered Card Pool</h3>
-                  <p className="text-sm text-gray-400 mb-6">
-                    Showing legal cards matching Mane Character attributes:{' '}
-                    <span className="text-pink-400 font-semibold">
-                      {activeDeck.mane ? activeDeck.mane.traits : 'None Selected (Showing All)'}
-                    </span>
-                  </p>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <h3 style={{ marginTop: 0 }}>Attribute-Filtered Card Pool</h3>
+                  <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Filtered by Mane traits: {activeDeck.mane ? activeDeck.mane.traits : 'None (Showing All)'}</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
                     {getLegalMainDeckCards().map((card) => (
                       <div
                         key={card.id}
-                        onClick={() =>
-                          setActiveDeck({
-                            ...activeDeck,
-                            main: [...activeDeck.main, card],
-                          })
-                        }
-                        className="border-2 border-gray-800 hover:border-pink-500 rounded-2xl p-3 cursor-pointer bg-gray-900/80 transition flex flex-col justify-between"
+                        onClick={() => setActiveDeck({ ...activeDeck, main: [...activeDeck.main, card] })}
+                        style={{ background: '#111827', border: '1px solid #374151', borderRadius: '0.75rem', padding: '0.5rem', cursor: 'pointer' }}
                       >
-                        <div>
-                          <img
-                            src={card.image_url || '/assets/default-card-back.webp'}
-                            alt={card.name}
-                            className="w-full h-48 object-cover rounded-xl mb-2"
-                            onError={(e) => {
-                              e.currentTarget.src = '/assets/default-card-back.webp';
-                            }}
-                          />
-                          <h4 className="font-bold text-xs truncate text-white">{card.name}</h4>
-                        </div>
-                        <div className="mt-3 pt-2 border-t border-gray-800 flex justify-between text-xs text-gray-400">
-                          <span>Cost: {card.cost}</span>
-                          <button className="text-pink-400 font-bold hover:underline">+ Add</button>
-                        </div>
+                        <img src={card.image_url || '/assets/default-card-back.webp'} alt={card.name} style={{ width: '100%', height: '160px', objectFit: 'cover', borderRadius: '0.375rem' }} />
+                        <h4 style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
                       </div>
                     ))}
                   </div>
@@ -600,34 +421,20 @@ export default function DeckBuilder() {
         )}
       </main>
 
-      {/* Import / Export Modal */}
+      {/* Import Modal */}
       {showImportModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 max-w-lg w-full shadow-2xl">
-            <h3 className="text-xl font-bold mb-2 text-white">Import / Export Deck JSON</h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Copy your deck JSON or paste a shared deck configuration below.
-            </p>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '1rem', padding: '1.5rem', width: '500px', maxWidth: '90%' }}>
+            <h3 style={{ marginTop: 0 }}>Import / Export Deck JSON</h3>
             <textarea
               value={importExportText}
               onChange={(e) => setImportExportText(e.target.value)}
               rows={8}
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs text-green-300 font-mono focus:outline-none focus:border-pink-500 mb-4"
-              placeholder="Paste deck JSON here..."
+              style={{ width: '100%', background: '#111827', border: '1px solid #374151', borderRadius: '0.5rem', padding: '0.75rem', color: '#4ade80', fontFamily: 'monospace', fontSize: '0.75rem', boxSizing: 'border-box' }}
             />
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm font-semibold transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleImportDeck}
-                className="px-5 py-2 bg-pink-600 hover:bg-pink-500 rounded-xl text-sm font-bold shadow-lg transition"
-              >
-                Import Deck
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+              <button onClick={() => setShowImportModal(false)} style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleImportDeck} style={{ background: '#db2777', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>Import</button>
             </div>
           </div>
         </div>
