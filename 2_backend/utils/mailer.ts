@@ -9,8 +9,7 @@ const transporter = nodemailer.createTransport({
 });
 
 export async function sendVerificationEmail(toEmail: string, userId: number) {
-  // Points to your backend verification route
-  const verificationLink = `http://localhost:3001/api/auth/confirm-email?userId=${userId}`;
+  const verificationLink = `https://mlp-tcg-engine.onrender.com/api/auth/confirm-email?userId=${userId}`;
 
   try {
     const info = await transporter.sendMail({

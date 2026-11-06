@@ -1,13 +1,10 @@
 import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
-import { initDatabase, pool } from '../4_data/db.ts';
-import { GameManager } from '../3_engine/gameManager.ts';
+import { initDatabase, pool } from '../db.js';
 
 // Import modular backend routes
-import authRouter from './routes/auth.ts';
-import cardsRouter from './routes/cards.ts';
-import decksRouter from './routes/decks.ts';
+import authRouter from './routes/auth.js';
 
 const app = express();
 app.use(cors());
@@ -17,10 +14,9 @@ const PORT = process.env.PORT || 3001;
 
 async function startServer() {
   try {
-    // Initialize Database connection and core tables
     await initDatabase();
 
-    // Ensure auth schema and users table exist
+    // Ensure auth schema and users table exist with all required columns
     await pool.query(`
       CREATE SCHEMA IF NOT EXISTS auth;
 
@@ -39,7 +35,7 @@ async function startServer() {
     `);
     console.log('[DATABASE] Auth schema and users table verified successfully.');
 
-    // Ensure the decks table exists for the Deck Builder feature
+    // Ensure the decks table exists in auth schema
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth.decks (
         id VARCHAR(255) PRIMARY KEY,
@@ -52,31 +48,18 @@ async function startServer() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('[DATABASE] Decks table verified successfully.');
+    console.log('[DATABASE] Auth decks table verified successfully.');
   } catch (err: any) {
     console.error('[DATABASE INIT ERROR]', err.message);
   }
 
-  // Mount REST API endpoints
   app.use('/api/auth', authRouter);
-  app.use('/api/cards', cardsRouter);
-  app.use('/api/decks', decksRouter);
 
-  // Site configuration announcement endpoint
-  app.get('/api/site/announcement', async (req, res) => {
-    try {
-      const result = await pool.query("SELECT value FROM site_config WHERE key = 'announcement'");
-      const message = result.rows.length > 0 ? result.rows[0].value : null;
-      res.json({ message });
-    } catch {
-      res.json({ message: null });
-    }
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', engine: 'MLP TCG Engine online' });
   });
 
-  // Create HTTP server and bind WebSocket GameManager
   const server = createServer(app);
-  new GameManager(server);
-
   server.listen(PORT, () => {
     console.log(`[SERVER] MLP TCG Backend active on port ${PORT}`);
   });

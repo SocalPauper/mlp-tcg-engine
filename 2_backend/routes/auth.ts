@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { pool as db } from '../../4_data/db.ts';
-import { sendVerificationEmail } from '../utils/mailer.ts';
+import { pool as db } from '../../db.js';
+import { sendVerificationEmail } from '../utils/mailer.js';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'mlp_tcg_super_secret_key_2026';
