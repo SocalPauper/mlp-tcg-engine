@@ -58,27 +58,49 @@ export default function DeckBuilder() {
     const typeStr = (card.type || '').toLowerCase();
     const nameStr = (card.name || '').toLowerCase();
     const idStr = String(card.id || card.cardNumber || '').toLowerCase();
-    // Broad match to catch scenes regardless of backend tag inconsistencies
     return typeStr.includes('scene') || typeStr.includes('stage') || typeStr.includes('location') || nameStr.includes('scene') || idStr.includes('scn');
   };
 
+  // Strict Story Card Validator: Filters out items (-SPR, -C, -R, etc.) and explicitly looks for story markers
   const isStoryCard = (card: Card) => {
     const typeStr = (card.type || '').toLowerCase();
     const nameStr = (card.name || '').toLowerCase();
-    const idStr = String(card.id || card.cardNumber || '').toLowerCase();
-    return typeStr.includes('story') || typeStr.includes('quest') || typeStr.includes('chapter') || nameStr.includes('stage') || idStr.includes('story');
+    const idStr = String(card.id || card.cardNumber || '').toUpperCase();
+
+    // Exclude promo/special item cards like -SPR
+    if (idStr.includes('-SPR') || idStr.includes('-C') && !idStr.includes('ST')) {
+      return false;
+    }
+
+    return (
+      typeStr.includes('story') || 
+      typeStr.includes('quest') || 
+      typeStr.includes('chapter') || 
+      nameStr.includes('searching for elements') ||
+      nameStr.includes('stage') ||
+      idStr.includes('ST') ||
+      idStr.includes('STORY')
+    );
   };
 
-  // Algorithm for Step 2:
-  // 1. Find all story cards.
-  // 2. Find each unique story name with the lowest serial number.
-  // 3. Add that card and the 3 subsequent cards as a set.
+  // Build Story Groups using strict validation and serial number sorting
   const buildStoryGroups = (allCards: Card[]) => {
-    const stories = allCards.filter(c => isStoryCard(c) || (c.type || '').toLowerCase().includes('event') || (c.cardNumber || '').toUpperCase().includes('ST'));
-    const sourcePool = stories.length >= 4 ? stories : allCards; // Fallback to all cards if tag is missing
+    let stories = allCards.filter(c => isStoryCard(c));
+    
+    // If strict filter is too aggressive and returns under 4 cards, fall back to cards explicitly containing Roman numerals or Stage labels
+    if (stories.length < 4) {
+      stories = allCards.filter(c => {
+        const name = (c.name || '').toLowerCase();
+        return name.includes('I') || name.includes('II') || name.includes('III') || name.includes('IV') || name.includes('stage');
+      });
+    }
+
+    if (stories.length < 4) {
+      stories = allCards.slice(0, 4); // Ultimate fallback
+    }
 
     // Sort pool by card ID / serial number ascending
-    const sortedPool = [...sourcePool].sort((a, b) => {
+    const sortedPool = [...stories].sort((a, b) => {
       const idA = String(a.id || a.cardNumber || '');
       const idB = String(b.id || b.cardNumber || '');
       return idA.localeCompare(idB);
@@ -91,7 +113,6 @@ export default function DeckBuilder() {
       const cleanName = (card.name || '').replace(/[-–—]\s*(Stage|Part|Episode)?\s*[0-9IVX]+/gi, '').trim();
       if (!cleanName || processedNames.has(cleanName)) return;
 
-      // Found a unique name with lowest serial number, grab this card and next 3
       const setCandidates = sortedPool.slice(index, index + 4);
       if (setCandidates.length >= 4) {
         groups[cleanName] = setCandidates;
@@ -342,7 +363,7 @@ export default function DeckBuilder() {
     }
   };
 
-  // Catalog filtering strictly driven by active step with safety fallback for scenes
+  // Catalog filtering strictly driven by active step
   const filteredCatalog = useMemo(() => {
     const result = catalogCards.filter(c => {
       const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -364,17 +385,16 @@ export default function DeckBuilder() {
       const cardElement = (c.element || '').toLowerCase();
       const matchesElement = !leaderElement || !cardElement || cardElement === 'neutral' || cardElement === leaderElement;
 
-      // Step 3: Scenes filtering. If backend data lacks specific scene flags, display non-leader cards so user can pick
+      // Step 3: Scenes filtering.
       if (builderStep === 'scenes') {
         const hasSceneCardsInDB = catalogCards.some(card => isSceneCard(card));
         if (hasSceneCardsInDB) {
           return matchesSearch && isScn && matchesElement;
         }
-        // Fallback: If DB has no explicit scene tags, allow selecting any non-leader card as a scene
-        return matchesSearch && matchesElement;
+        return matchesSearch && matchesElement; 
       }
 
-      // Step 4: Main deck cards (exclude scenes if explicit scene flags exist)
+      // Step 4: Main deck cards
       if (builderStep === 'main') {
         const hasSceneCardsInDB = catalogCards.some(card => isSceneCard(card));
         if (hasSceneCardsInDB) {
@@ -427,7 +447,7 @@ export default function DeckBuilder() {
       {engineStatus && <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '10px', borderRadius: '12px', textAlign: 'center', fontWeight: 800 }}>{engineStatus}</div>}
       {errorMsg && <div style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '10px', borderRadius: '12px', textAlign: 'center', fontWeight: 800 }}>{errorMsg}</div>}
 
-      {/* Step 2: Story Selection Modal Popup (Dynamic Unique Name + Lowest Serial Number Algorithm) */}
+      {/* Step 2: Story Selection Modal Popup */}
       {showStoryModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
           <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '20px', maxWidth: '750px', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: '2px solid #fbcfe8' }}>
@@ -435,7 +455,7 @@ export default function DeckBuilder() {
               <div>
                 <h3 style={{ margin: '0 0 4px 0', fontSize: '1.25rem', fontWeight: 900, color: '#1c1917' }}>📖 Step 2: Select Story Arc</h3>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#78716c' }}>
-                  Choose a story set to bundle with <strong style={{ color: '#6b21a8' }}>{pendingLeader?.name}</strong>:
+                  Choose a verified story set to bundle with <strong style={{ color: '#6b21a8' }}>{pendingLeader?.name}</strong>:
                 </p>
               </div>
               <select 
@@ -576,7 +596,7 @@ export default function DeckBuilder() {
 
               {!selectedDeck?.maneCharacter && (
                 <div style={{ backgroundColor: '#fdf4f8', color: '#6b21a8', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 800, border: '1px solid #fbcfe8', textAlign: 'center' }}>
-                  ✨ Step 1: Select your Mane Character Leader from the catalog below.
+                  ✨ Step 1: Select your Mane Character Leader below.
                 </div>
               )}
 
@@ -617,7 +637,7 @@ export default function DeckBuilder() {
               </div>
             </div>
 
-            {/* Deck Editor Sidebar (Ordered strictly by Steps 1 through 4) */}
+            {/* Deck Editor Sidebar */}
             <div style={{ backgroundColor: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #fde0e8', display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '660px', overflowY: 'auto' }}>
               
               {/* Step 1: Mane Leader Section */}
