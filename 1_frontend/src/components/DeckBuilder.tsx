@@ -37,7 +37,7 @@ export default function DeckBuilder() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Modal State for Story Selection Popup
+  // Modal State for Story Confirmation & Selection Popup
   const [pendingStories, setPendingStories] = useState<Card[]>([]);
   const [pendingLeader, setPendingLeader] = useState<Card | null>(null);
   const [showStoryModal, setShowStoryModal] = useState<boolean>(false);
@@ -66,7 +66,6 @@ export default function DeckBuilder() {
     const nameStr = (card.name || '').toLowerCase();
     const numStr = String(card.card_number || '').toUpperCase();
 
-    // Exclude promo/item cards like -SPR
     if (numStr.includes('-SPR')) return false;
 
     return (
@@ -80,15 +79,14 @@ export default function DeckBuilder() {
     );
   };
 
-  // Step 2 Algorithm:
+  // Algorithm for Step 2:
   // 1. Find all story cards.
-  // 2. Find each unique story name with the lowest serial number (card_number).
+  // 2. Find each unique story name with the lowest serial number.
   // 3. Add that card and the 3 subsequent cards as a set.
   const buildStoryGroups = (allCards: Card[]) => {
     const stories = allCards.filter(c => isStoryCard(c));
     const sourcePool = stories.length >= 4 ? stories : allCards;
 
-    // Sort pool by card_number ascending to find lowest serial numbers first
     const sortedPool = [...sourcePool].sort((a, b) => {
       const numA = String(a.card_number || a.id || '');
       const numB = String(b.card_number || b.id || '');
