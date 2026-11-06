@@ -55,6 +55,17 @@ async function startServer() {
 
   app.use('/api/auth', authRouter);
 
+  // Site configuration announcement endpoint
+  app.get('/api/site/announcement', async (req, res) => {
+    try {
+      const result = await pool.query("SELECT value FROM site_config WHERE key = 'announcement'");
+      const message = result.rows.length > 0 ? result.rows[0].value : null;
+      res.json({ message });
+    } catch {
+      res.json({ message: null });
+    }
+  });
+
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', engine: 'MLP TCG Engine online' });
   });
