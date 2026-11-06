@@ -32,7 +32,7 @@ export default function DeckBuilder() {
   const [catalogCards, setCatalogCards] = useState<Card[]>([]);
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('All');
+  const [builderStep, setBuilderStep] = useState<'leader' | 'stories' | 'scenes' | 'main'>('leader');
   const [engineStatus, setEngineStatus] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -62,6 +62,7 @@ export default function DeckBuilder() {
     return typeStr.toLowerCase().includes('story');
   };
 
+  // Group ALL available story cards in the database so the user can pick from any set
   const buildStoryGroups = (allCards: Card[]) => {
     const allStories = allCards.filter(c => isStoryCard(c.type));
     const groups: Record<string, Card[]> = {};
@@ -72,35 +73,6 @@ export default function DeckBuilder() {
       groups[p].push(s);
     });
     return groups;
-  };
-
-  const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
-    const leaderIdStr = String(leaderCard.id || leaderCard.cardNumber || '').toUpperCase();
-    const leaderName = (leaderCard.name || '').toLowerCase();
-    const setPrefix = leaderIdStr.split('-')[0];
-
-    const allStories = allCards.filter(c => isStoryCard(c.type));
-
-    let matchingStories = allStories.filter(s => {
-      const sId = String(s.id || s.cardNumber || '').toUpperCase();
-      const sName = (s.name || '').toLowerCase();
-      const belongsToSet = sId.startsWith(setPrefix);
-      const matchesCharacter = leaderName.split(' ')[0] && sName.includes(leaderName.split(' ')[0]);
-      return belongsToSet && matchesCharacter;
-    });
-
-    if (matchingStories.length < 4) {
-      matchingStories = allStories.filter(s => {
-        const sId = String(s.id || s.cardNumber || '').toUpperCase();
-        return sId.startsWith(setPrefix);
-      });
-    }
-
-    if (matchingStories.length < 4) {
-      matchingStories = allStories.slice(0, 4);
-    }
-
-    return matchingStories.slice(0, 4);
   };
 
   useEffect(() => {
@@ -124,7 +96,8 @@ export default function DeckBuilder() {
 
       if (Array.isArray(cardsData)) {
         setCatalogCards(cardsData);
-        setAllStoryGroups(buildStoryGroups(cardsData));
+        const groups = buildStoryGroups(cardsData);
+        setAllStoryGroups(groups);
       }
     }).finally(() => {
       setIsLoading(false);
@@ -154,7 +127,7 @@ export default function DeckBuilder() {
     saveDecksToStorage([newDeck, ...decks]);
     setSelectedDeck(newDeck);
     setViewMode('editor');
-    setTypeFilter('All');
+    setBuilderStep('leader');
     setEngineStatus('Step 1: Please select your Mane Character Leader.');
     setTimeout(() => setEngineStatus(null), 4500);
   };
@@ -170,6 +143,7 @@ export default function DeckBuilder() {
     if (!selectedDeck) return;
     if (!selectedDeck.maneCharacter) return showError('Deck must have a Mane Character leader!');
     if (selectedDeck.cards.length !== MAX_DECK_SIZE) return showError(`Main deck must contain exactly ${MAX_DECK_SIZE} cards.`);
+    if (selectedDeck.scenes.length !== MAX_SCENES_SIZE) return showError(`Scene deck must contain exactly ${MAX_SCENES_SIZE} cards.`);
 
     const updatedList = decks.map(d => d.id === selectedDeck.id ? selectedDeck : d);
     saveDecksToStorage(updatedList);
@@ -211,25 +185,18 @@ export default function DeckBuilder() {
     }
   };
 
-  // Step selection click handler based on workflow progression
   const handleAddCard = (card: Card) => {
     if (!selectedDeck) return;
     
-    // Step 1: Select Leader if not present
+    // Step 1: Leader Selection
     if (!selectedDeck.maneCharacter) {
       if (!isLeaderCard(card)) {
         return showError('Step 1: You must select a valid Mane Character leader card first!');
       }
-      const groups = allStoryGroups;
-      const leaderIdStr = String(card.id || card.cardNumber || '').toUpperCase();
-      const defaultPrefix = leaderIdStr.split('-')[0];
-      const availablePrefixes = Object.keys(groups);
-      
-      const chosenPrefix = groups[defaultPrefix] ? defaultPrefix : (availablePrefixes[0] || '');
-      setSelectedStoryPrefix(chosenPrefix);
-      
-      const matchedStories = getStoriesForLeader(card, catalogCards);
-      setPendingStories(matchedStories.length >= 4 ? matchedStories : (groups[chosenPrefix] || []).slice(0, 4));
+      const prefixes = Object.keys(allStoryGroups);
+      const defaultPrefix = prefixes[0] || '';
+      setSelectedStoryPrefix(defaultPrefix);
+      setPendingStories((allStoryGroups[defaultPrefix] || []).slice(0, 4));
       setPendingLeader(card);
       setShowStoryModal(true);
       return;
@@ -237,16 +204,10 @@ export default function DeckBuilder() {
 
     if (isLeaderCard(card)) {
       if (confirm(`Change Mane Leader to ${card.name}? (Note: This will reset your deck contents).`)) {
-        const groups = allStoryGroups;
-        const leaderIdStr = String(card.id || card.cardNumber || '').toUpperCase();
-        const defaultPrefix = leaderIdStr.split('-')[0];
-        const availablePrefixes = Object.keys(groups);
-        
-        const chosenPrefix = groups[defaultPrefix] ? defaultPrefix : (availablePrefixes[0] || '');
-        setSelectedStoryPrefix(chosenPrefix);
-
-        const matchedStories = getStoriesForLeader(card, catalogCards);
-        setPendingStories(matchedStories.length >= 4 ? matchedStories : (groups[chosenPrefix] || []).slice(0, 4));
+        const prefixes = Object.keys(allStoryGroups);
+        const defaultPrefix = prefixes[0] || '';
+        setSelectedStoryPrefix(defaultPrefix);
+        setPendingStories((allStoryGroups[defaultPrefix] || []).slice(0, 4));
         setPendingLeader(card);
         setShowStoryModal(true);
       }
@@ -255,20 +216,27 @@ export default function DeckBuilder() {
 
     const cardType = card.type || '';
 
-    // Step 3: Select Scenes
+    // Step 3: Scene Selection
     if (isSceneCard(cardType)) {
       if (selectedDeck.scenes.length >= MAX_SCENES_SIZE) return showError(`Maximum ${MAX_SCENES_SIZE} Scene cards allowed.`);
       const currentSceneCopies = selectedDeck.scenes.filter(c => c.id === card.id).length;
       if (currentSceneCopies >= MAX_COPIES_PER_CARD) return showError(`Limit reached! Max ${MAX_COPIES_PER_CARD} copies per scene card.`);
-      setSelectedDeck({ ...selectedDeck, scenes: [...selectedDeck.scenes, card] });
+      
+      const updatedScenes = [...selectedDeck.scenes, card];
+      setSelectedDeck({ ...selectedDeck, scenes: updatedScenes });
+      if (updatedScenes.length === MAX_SCENES_SIZE) {
+        setBuilderStep('main');
+        setEngineStatus('Step 3 Complete! Now select your 50 Main Deck cards (Step 4).');
+        setTimeout(() => setEngineStatus(null), 4000);
+      }
       return;
     }
 
     if (isStoryCard(cardType)) {
-      return showError('Step 2 is completed via the story selection popup.');
+      return showError('Step 2 stories are already locked in via the modal.');
     }
 
-    // Step 4: Select Main Deck Cards
+    // Step 4: Main Deck Selection
     if (selectedDeck.cards.length >= MAX_DECK_SIZE) {
       return showError(`Main deck is full! Maximum ${MAX_DECK_SIZE} cards allowed.`);
     }
@@ -295,11 +263,11 @@ export default function DeckBuilder() {
       scenes: [], 
       stories: pendingStories 
     });
-    setTypeFilter('All');
-    setEngineStatus(`Step 2 Complete! Story set confirmed. Now select your Scenes and Main Deck cards.`);
+    setBuilderStep('scenes');
     setShowStoryModal(false);
     setPendingLeader(null);
     setPendingStories([]);
+    setEngineStatus(`Step 2 Complete! Now select your 15 Scene cards (Step 3).`);
     setTimeout(() => setEngineStatus(null), 4000);
   };
 
@@ -311,7 +279,7 @@ export default function DeckBuilder() {
 
   const handleRemoveLeader = () => {
     if (!selectedDeck) return;
-    if (confirm('Removing the Mane Character leader will reset your entire deck and stories. Continue?')) {
+    if (confirm('Removing the Mane Character leader will reset your entire deck. Continue?')) {
       setSelectedDeck({
         ...selectedDeck,
         maneCharacter: null,
@@ -319,7 +287,7 @@ export default function DeckBuilder() {
         scenes: [],
         stories: []
       });
-      setTypeFilter('All');
+      setBuilderStep('leader');
       setEngineStatus('Leader removed. Step 1: Select a new Mane Character Leader.');
       setTimeout(() => setEngineStatus(null), 3000);
     }
@@ -337,18 +305,13 @@ export default function DeckBuilder() {
     } else {
       const updatedList = selectedDeck.scenes.filter(c => c.id !== cardId);
       setSelectedDeck({ ...selectedDeck, scenes: updatedList });
+      if (updatedList.length < MAX_SCENES_SIZE) {
+        setBuilderStep('scenes');
+      }
     }
   };
 
-  const uniqueCardTypes = useMemo(() => {
-    const types = new Set<string>();
-    catalogCards.forEach(c => {
-      if (c.type && !isStoryCard(c.type) && !isSceneCard(c.type)) types.add(c.type.trim());
-    });
-    return ['All', ...Array.from(types)] as string[];
-  }, [catalogCards]);
-
-  // Catalog filtering strictly adhering to the 4-step sequence
+  // Catalog filtering strictly driven by the active builder step
   const filteredCatalog = useMemo(() => {
     const result = catalogCards.filter(c => {
       const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -356,37 +319,35 @@ export default function DeckBuilder() {
       const isSty = isStoryCard(c.type);
       const isScn = isSceneCard(c.type);
 
-      // Never show stories in regular catalog
       if (isSty) return false;
 
-      // Step 1: If no leader selected, only show leaders
-      if (!selectedDeck?.maneCharacter) {
+      // Step 1: Leader selection
+      if (!selectedDeck?.maneCharacter || builderStep === 'leader') {
         return matchesSearch && isLdr;
       }
 
-      // Hide leaders once chosen
       if (isLdr) return false;
 
-      // Filter element/color matching rules for non-leader cards
+      // Color / Element matching rule
       const leaderElement = (selectedDeck.maneCharacter.element || '').toLowerCase();
       const cardElement = (c.element || '').toLowerCase();
       const matchesElement = !leaderElement || !cardElement || cardElement === 'neutral' || cardElement === leaderElement;
 
-      // Step 3 / Step 4 filtering based on active catalog view/type filter
-      if (typeFilter === 'Scenes') {
+      // Step 3: Scenes filtering
+      if (builderStep === 'scenes') {
         return matchesSearch && isScn && matchesElement;
       }
 
-      if (typeFilter === 'All') {
-        return matchesSearch && matchesElement && !isScn; // Main deck non-story non-scene items/characters
+      // Step 4: Main deck non-scene, non-story cards
+      if (builderStep === 'main') {
+        return matchesSearch && !isScn && matchesElement;
       }
 
-      const matchesType = c.type && c.type.trim().toLowerCase() === typeFilter.trim().toLowerCase();
-      return matchesSearch && matchesType && matchesElement && !isScn;
+      return matchesSearch && matchesElement;
     });
 
     return [...result].sort((a, b) => a.name.localeCompare(b.name));
-  }, [catalogCards, searchTerm, typeFilter, selectedDeck?.maneCharacter]);
+  }, [catalogCards, searchTerm, builderStep, selectedDeck?.maneCharacter]);
 
   const stackedDeckCards = useMemo(() => {
     if (!selectedDeck) return [];
@@ -426,7 +387,7 @@ export default function DeckBuilder() {
       {engineStatus && <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '10px', borderRadius: '12px', textAlign: 'center', fontWeight: 800 }}>{engineStatus}</div>}
       {errorMsg && <div style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '10px', borderRadius: '12px', textAlign: 'center', fontWeight: 800 }}>{errorMsg}</div>}
 
-      {/* Step 2: Story Selection Modal Popup */}
+      {/* Step 2: Story Selection Modal Popup (Unrestricted Set Picker) */}
       {showStoryModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
           <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '20px', maxWidth: '750px', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: '2px solid #fbcfe8' }}>
@@ -434,7 +395,7 @@ export default function DeckBuilder() {
               <div>
                 <h3 style={{ margin: '0 0 4px 0', fontSize: '1.25rem', fontWeight: 900, color: '#1c1917' }}>📖 Step 2: Select Story Arc</h3>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#78716c' }}>
-                  Choose the 4-part story expansion set to bundle with <strong style={{ color: '#6b21a8' }}>{pendingLeader?.name}</strong>:
+                  Choose any story expansion set to bundle with <strong style={{ color: '#6b21a8' }}>{pendingLeader?.name}</strong>:
                 </p>
               </div>
               <select 
@@ -492,7 +453,7 @@ export default function DeckBuilder() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
             {decks.map(deck => (
               <div key={deck.id} style={{ backgroundColor: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #fde0e8', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div onClick={() => { setSelectedDeck(deck); setViewMode('editor'); }} style={{ cursor: 'pointer' }}>
+                <div onClick={() => { setSelectedDeck(deck); setViewMode('editor'); setBuilderStep(deck.scenes?.length < 15 ? 'scenes' : 'main'); }} style={{ cursor: 'pointer' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
                     <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>{deck.name}</h4>
                     <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 6px', borderRadius: '6px', backgroundColor: deck.isPublic ? '#dcfce7' : '#fef3c7', color: deck.isPublic ? '#166534' : '#92400e' }}>
@@ -502,7 +463,7 @@ export default function DeckBuilder() {
                   <p style={{ margin: 0, fontSize: '0.75rem', color: '#78716c' }}>Cards: {deck.cards?.length || 0} / {MAX_DECK_SIZE} | Scenes: {deck.scenes?.length || 0} | Stories: {deck.stories?.length || 0}</p>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid #fdf2f8', paddingTop: '8px' }}>
-                  <button onClick={() => { setSelectedDeck(deck); setViewMode('editor'); }} style={{ flex: 1, backgroundColor: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', padding: '6px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '0.75rem' }}>Edit</button>
+                  <button onClick={() => { setSelectedDeck(deck); setViewMode('editor'); setBuilderStep(deck.scenes?.length < 15 ? 'scenes' : 'main'); }} style={{ flex: 1, backgroundColor: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', padding: '6px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '0.75rem' }}>Edit</button>
                   <button onClick={() => handleDeleteDeck(deck.id)} style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', padding: '6px 10px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '0.75rem' }}>✕</button>
                 </div>
               </div>
@@ -545,14 +506,31 @@ export default function DeckBuilder() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: '20px' }}>
             {/* Catalog Grid */}
             <div style={{ backgroundColor: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #fde0e8', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <input type="text" placeholder={!selectedDeck?.maneCharacter ? "Step 1: Search Mane Leaders..." : typeFilter === 'Scenes' ? "Search available scenes..." : "Search main deck cards..."} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ flex: 1, minWidth: '180px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #fbcfe8', outline: 'none' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <input 
+                  type="text" 
+                  placeholder={builderStep === 'scenes' ? "Search available scene cards..." : "Search main deck cards..."} 
+                  value={searchTerm} 
+                  onChange={(e) => setSearchTerm(e.target.value)} 
+                  style={{ flex: 1, minWidth: '180px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #fbcfe8', outline: 'none' }} 
+                />
+
+                {/* Step Switcher Tabs for User Control */}
                 {selectedDeck?.maneCharacter && (
-                  <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #fbcfe8', fontWeight: 700, backgroundColor: '#fdf2f8', color: '#db2777' }}>
-                    <option value="All">Step 4: Main Deck Cards</option>
-                    <option value="Scenes">Step 3: Scenes</option>
-                    {uniqueCardTypes.filter(t => t !== 'All').map(t => <option key={t} value={t}>Type: {t}</option>)}
-                  </select>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button 
+                      onClick={() => setBuilderStep('scenes')} 
+                      style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', fontWeight: 800, fontSize: '0.75rem', cursor: 'pointer', backgroundColor: builderStep === 'scenes' ? '#0284c7' : '#e0f2fe', color: builderStep === 'scenes' ? 'white' : '#0369a1' }}
+                    >
+                      Step 3: Scenes ({selectedDeck.scenes.length}/15)
+                    </button>
+                    <button 
+                      onClick={() => setBuilderStep('main')} 
+                      style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', fontWeight: 800, fontSize: '0.75rem', cursor: 'pointer', backgroundColor: builderStep === 'main' ? '#db2777' : '#fdf2f8', color: builderStep === 'main' ? 'white' : '#be185d' }}
+                    >
+                      Step 4: Main Deck ({selectedDeck.cards.length}/50)
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -564,7 +542,9 @@ export default function DeckBuilder() {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px', maxHeight: '550px', overflowY: 'auto' }}>
                 {filteredCatalog.map(card => {
-                  const currentCopies = selectedDeck?.cards.filter(c => c.id === card.id).length || 0;
+                  const currentCopies = (builderStep === 'scenes' 
+                    ? selectedDeck?.scenes.filter(c => c.id === card.id).length 
+                    : selectedDeck?.cards.filter(c => c.id === card.id).length) || 0;
                   const isMaxedOut = currentCopies >= MAX_COPIES_PER_CARD;
 
                   return (
@@ -627,11 +607,11 @@ export default function DeckBuilder() {
               </div>
 
               {/* Step 3: Scenes Section (Max 15) */}
-              <div>
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', fontWeight: 800, color: '#0284c7' }}>🎬 Step 3: Scenes ({selectedDeck?.scenes?.length || 0}/{MAX_SCENES_SIZE})</h4>
+              <div onClick={() => setBuilderStep('scenes')} style={{ cursor: 'pointer' }}>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', fontWeight: 800, color: '#0284c7' }}>🎬 Step 3: Scenes ({selectedDeck?.scenes?.length || 0}/{MAX_SCENES_SIZE}) {builderStep === 'scenes' && '⭐ (Active)'}</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '110px', overflowY: 'auto' }}>
                   {stackedSceneCards.length === 0 ? (
-                    <div style={{ color: '#a8a29e', fontSize: '0.7rem', textAlign: 'center', padding: '6px' }}>Select Scenes from catalog.</div>
+                    <div style={{ color: '#a8a29e', fontSize: '0.7rem', textAlign: 'center', padding: '6px' }}>Click here to add scenes.</div>
                   ) : (
                     stackedSceneCards.map(({ card, count }) => (
                       <div key={card.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#e0f2fe', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem' }}>
@@ -639,7 +619,7 @@ export default function DeckBuilder() {
                           <span style={{ backgroundColor: '#0284c7', color: 'white', fontWeight: 900, fontSize: '0.6rem', padding: '1px 4px', borderRadius: '3px' }}>{count}x</span>
                           <span style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>{card.name}</span>
                         </div>
-                        <button onClick={() => handleRemoveCard(card.id, 'scenes')} style={{ background: '#0284c7', color: 'white', border: 'none', width: '18px', height: '18px', borderRadius: '3px', cursor: 'pointer', fontSize: '0.65rem' }}>✕</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleRemoveCard(card.id, 'scenes'); }} style={{ background: '#0284c7', color: 'white', border: 'none', width: '18px', height: '18px', borderRadius: '3px', cursor: 'pointer', fontSize: '0.65rem' }}>✕</button>
                       </div>
                     ))
                   )}
@@ -647,11 +627,11 @@ export default function DeckBuilder() {
               </div>
 
               {/* Step 4: Main Deck Cards */}
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', fontWeight: 800 }}>📦 Step 4: Main Deck ({selectedDeck?.cards?.length || 0}/{MAX_DECK_SIZE})</h4>
-                <div style={{ flex: '1', maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div onClick={() => setBuilderStep('main')} style={{ display: 'flex', flexDirection: 'column', flex: 1, cursor: 'pointer' }}>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', fontWeight: 800 }}>📦 Step 4: Main Deck ({selectedDeck?.cards?.length || 0}/{MAX_DECK_SIZE}) {builderStep === 'main' && '⭐ (Active)'}</h4>
+                <div style={{ flex: '1', maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {stackedDeckCards.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '20px 0', color: '#a8a29e', fontSize: '0.75rem' }}>No main deck cards added yet.</div>
+                    <div style={{ textAlign: 'center', padding: '15px 0', color: '#a8a29e', fontSize: '0.75rem' }}>Click here to add main deck cards.</div>
                   ) : (
                     stackedDeckCards.map(({ card, count }) => (
                       <div key={card.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fdf2f8', padding: '6px 10px', borderRadius: '8px', border: '1px solid #fce7f3' }}>
@@ -659,7 +639,7 @@ export default function DeckBuilder() {
                           <span style={{ backgroundColor: '#db2777', color: 'white', fontWeight: 900, fontSize: '0.65rem', padding: '2px 5px', borderRadius: '4px' }}>{count}x</span>
                           <span style={{ fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>{card.name}</span>
                         </div>
-                        <button onClick={() => handleRemoveCard(card.id, 'cards')} style={{ background: '#ef4444', color: 'white', border: 'none', width: '20px', height: '20px', borderRadius: '4px', cursor: 'pointer', fontWeight: 900, fontSize: '0.75rem' }}>−</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleRemoveCard(card.id, 'cards'); }} style={{ background: '#ef4444', color: 'white', border: 'none', width: '20px', height: '20px', borderRadius: '4px', cursor: 'pointer', fontWeight: 900, fontSize: '0.75rem' }}>−</button>
                       </div>
                     ))
                   )}
