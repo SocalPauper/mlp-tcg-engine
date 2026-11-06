@@ -1,0 +1,6375 @@
+[
+  {
+    "id": "SD01A-001",
+    "name": "Twilight Sparkle, Faithful Student",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 3,
+    "traits": [
+      "Unicorn",
+      "Mane6",
+      "Magic"
+    ],
+    "ability_text": "When summoned: Search the top 3 cards of your library for a Spell or Magic character and add it to your hand.",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/SD01A-001.png"
+  },
+  {
+    "id": "SD01A-002",
+    "name": "Spike, Loyal Assistant",
+    "set_code": "SD01",
+    "card_type": "Support",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 1,
+    "defense": 2,
+    "traits": [
+      "Dragon",
+      "Companion"
+    ],
+    "ability_text": "Exhaust: Draw 1 card, then discard 1 card from your hand.",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/SD01A-002.png"
+  },
+  {
+    "id": "SD01B-001",
+    "name": "Rainbow Dash, Sonic Rainboom",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 3,
+    "power": 4,
+    "defense": 2,
+    "traits": [
+      "Pegasus",
+      "Mane6",
+      "Loyalty"
+    ],
+    "ability_text": "Rush. Deal 1 damage to an enemy backrow unit on combat trigger.",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/SD01B-001.png"
+  },
+  {
+    "id": "SD01C-001",
+    "name": "Pinkie Pie, Party Cannon",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 2,
+    "power": 3,
+    "defense": 2,
+    "traits": [
+      "EarthPony",
+      "Mane6",
+      "Laughter"
+    ],
+    "ability_text": "Whenever an opponent declares an attack, flip a coin. If heads, redirect the attack to a target of your choice.",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/SD01C-001.png"
+  },
+  {
+    "id": "SD01D-001",
+    "name": "Applejack, Sweet Apple Acres",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 2,
+    "power": 3,
+    "defense": 4,
+    "traits": [
+      "EarthPony",
+      "Mane6",
+      "Honesty"
+    ],
+    "ability_text": "Harvest: At the start of your turn, add 1 extra resource point to your pool.",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/SD01D-001.png"
+  },
+  {
+    "id": "SD01E-001",
+    "name": "Rarity, Carousel Boutique",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 2,
+    "power": 2,
+    "defense": 3,
+    "traits": [
+      "Unicorn",
+      "Mane6",
+      "Generosity"
+    ],
+    "ability_text": "When entering play, equip an attachment without paying its cost.",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/SD01E-001.png"
+  },
+  {
+    "id": "SD01F-001",
+    "name": "Fluttershy, Gentle Soul",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 2,
+    "power": 1,
+    "defense": 4,
+    "traits": [
+      "Pegasus",
+      "Mane6",
+      "Kindness"
+    ],
+    "ability_text": "The Stare: Exhaust Fluttershy to prevent an enemy unit from attacking this turn.",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/SD01F-001.png"
+  },
+  {
+    "id": "SD01-CR01",
+    "name": "Twilight Sparkle|SD01-CR01 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/71/SD01-CR01.png"
+  },
+  {
+    "id": "SD01-CR02",
+    "name": "Fluttershy|SD01-CR02 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b5/SD01-CR02.png"
+  },
+  {
+    "id": "SD01-CR03",
+    "name": "Pinkie Pie|SD01-CR03 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8b/SD01-CR03.png"
+  },
+  {
+    "id": "SD01-CR04",
+    "name": "Applejack|SD01-CR04 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/32/SD01-CR04.png"
+  },
+  {
+    "id": "SD01-CR05",
+    "name": "Rainbow Dash|SD01-CR05 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8d/SD01-CR05.png"
+  },
+  {
+    "id": "SD01-CR06",
+    "name": "Rarity|SD01-CR06 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/73/SD01-CR06.png"
+  },
+  {
+    "id": "SD01-GR01",
+    "name": "Twilight Sparkle|SD01-GR01 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/00/SD01-GR01.png"
+  },
+  {
+    "id": "SD01-GR02",
+    "name": "Fluttershy|SD01-GR02 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/be/SD01-GR02.png"
+  },
+  {
+    "id": "SD01-GR03",
+    "name": "Pinkie Pie|SD01-GR03 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/65/SD01-GR03.png"
+  },
+  {
+    "id": "SD01-GR04",
+    "name": "Applejack|SD01-GR04 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/ee/SD01-GR04.png"
+  },
+  {
+    "id": "SD01-GR05",
+    "name": "Rainbow Dash|SD01-GR05 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f3/SD01-GR05.png"
+  },
+  {
+    "id": "SD01-GR06",
+    "name": "Rarity|SD01-GR06 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b9/SD01-GR06.png"
+  },
+  {
+    "id": "SD01-SR01",
+    "name": "Twilight Sparkle|SD01-SR01 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f4/SD01-SR01.png"
+  },
+  {
+    "id": "SD01-SR02",
+    "name": "Fluttershy|SD01-SR02 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5b/SD01-SR02.png"
+  },
+  {
+    "id": "SD01-SR03",
+    "name": "Pinkie Pie|SD01-SR03 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/05/SD01-SR03.png"
+  },
+  {
+    "id": "SD01-SR04",
+    "name": "Applejack|SD01-SR04 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d0/SD01-SR04.png"
+  },
+  {
+    "id": "SD01-SR05",
+    "name": "Rainbow Dash|SD01-SR05 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b3/SD01-SR05.png"
+  },
+  {
+    "id": "SD01-SR06",
+    "name": "Rarity|SD01-SR06 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/1a/SD01-SR06.png"
+  },
+  {
+    "id": "SD01-U01",
+    "name": "Twilight Sparkle|SD01-U01 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8a/SD01-U01.png"
+  },
+  {
+    "id": "SD01-U02",
+    "name": "Fluttershy|SD01-U02 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b2/SD01-U02.png"
+  },
+  {
+    "id": "SD01-U03",
+    "name": "Pinkie Pie|SD01-U03 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5d/SD01-U03.png"
+  },
+  {
+    "id": "SD01-U04",
+    "name": "Applejack|SD01-U04 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/0f/SD01-U04.png"
+  },
+  {
+    "id": "SD01-U05",
+    "name": "Rainbow Dash|SD01-U05 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/14/SD01-U05.png"
+  },
+  {
+    "id": "SD01-U06",
+    "name": "Rarity|SD01-U06 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b1/SD01-U06.png"
+  },
+  {
+    "id": "SD01-U07",
+    "name": "Zecora|SD01-U07 Zecora",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/47/SD01-U07.png"
+  },
+  {
+    "id": "SD01-C01",
+    "name": "Twilight Sparkle|SD01-C01 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/98/SD01-C01.png"
+  },
+  {
+    "id": "SD01-C02",
+    "name": "Fluttershy|SD01-C02 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/a1/SD01-C02.png"
+  },
+  {
+    "id": "SD01-C03",
+    "name": "Pinkie Pie|SD01-C03 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/34/SD01-C03.png"
+  },
+  {
+    "id": "SD01-C04",
+    "name": "Applejack|SD01-C04 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/fa/SD01-C04.png"
+  },
+  {
+    "id": "SD01-C05",
+    "name": "Rainbow Dash|SD01-C05 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/83/SD01-C05.png"
+  },
+  {
+    "id": "SD01-C06",
+    "name": "Rarity|SD01-C06 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/44/SD01-C06.png"
+  },
+  {
+    "id": "SD01-C07",
+    "name": "Apple Bloom|SD01-C07 Apple Bloom",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/6b/SD01-C07.png"
+  },
+  {
+    "id": "SD01-C08",
+    "name": "Sweetie Belle|SD01-C08 Sweetie Belle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8d/SD01-C08.png"
+  },
+  {
+    "id": "SD01-C09",
+    "name": "Scootaloo|SD01-C09 Scootaloo",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/ec/SD01-C09.png"
+  },
+  {
+    "id": "SD01-SPR01",
+    "name": "Friends from other Side|SD01-SPR01 Friends from other Side",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b8/SD01-SPR01.png"
+  },
+  {
+    "id": "SD01-SPR02",
+    "name": "Friendly Rabbits|SD01-SPR02 Friendly Rabbits",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b3/SD01-SPR02.png"
+  },
+  {
+    "id": "SD01-SPR03",
+    "name": "Friendship Report|SD01-SPR03 Friendship Report",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f3/SD01-SPR03.png"
+  },
+  {
+    "id": "SD01-SPR04",
+    "name": "Way to the Top|SD01-SPR04 Way to the Top",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/6d/SD01-SPR04.png"
+  },
+  {
+    "id": "SD01-SPR05",
+    "name": "Time for Class|SD01-SPR05 Time for Class",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f1/SD01-SPR05.png"
+  },
+  {
+    "id": "SD01-SPR06",
+    "name": "Meteor Shower|SD01-SPR06 Meteor Shower",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/1e/SD01-SPR06.png"
+  },
+  {
+    "id": "SD01-SPR07",
+    "name": "Funny Glasses|SD01-SPR07 Funny Glasses",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/68/SD01-SPR07.png"
+  },
+  {
+    "id": "SD01-SPR08",
+    "name": "Today's Homework|SD01-SPR08 Today's Homework",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/58/SD01-SPR08.png"
+  },
+  {
+    "id": "SD01-SPR09",
+    "name": "Delivered Letter|SD01-SPR09 Delivered Letter",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/c/c9/SD01-SPR09.png"
+  },
+  {
+    "id": "SD01-SPR10",
+    "name": "Cure for Poison Joke|SD01-SPR10 Cure for Poison Joke",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/46/SD01-SPR10.png"
+  },
+  {
+    "id": "SD01-ER01",
+    "name": "Golden Oak Library|SD01-ER01 Golden Oak Library",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/09/SD01-ER01.png"
+  },
+  {
+    "id": "SD01-ER02",
+    "name": "Fluttershy's Cottage|SD01-ER02 Fluttershy's Cottage",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/bd/SD01-ER02.png"
+  },
+  {
+    "id": "SD01-ER03",
+    "name": "Sugarcube Corner|SD01-ER03 Sugarcube Corner",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f7/SD01-ER03.png"
+  },
+  {
+    "id": "SD01-ER04",
+    "name": "Sweet Apple Acres|SD01-ER04 Sweet Apple Acres",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/7a/SD01-ER04.png"
+  },
+  {
+    "id": "SD01-ER05",
+    "name": "Cloudominium|SD01-ER05 Cloudominium",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/39/SD01-ER05.png"
+  },
+  {
+    "id": "SD01-ER06",
+    "name": "Carousel Boutique|SD01-ER06 Carousel Boutique",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/50/SD01-ER06.png"
+  },
+  {
+    "id": "※SD01-RR01",
+    "name": "Twilight Sparkle|※SD01-RR01 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/42/SD01-RR01.png"
+  },
+  {
+    "id": "※SD01-RR02",
+    "name": "Fluttershy|※SD01-RR02 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/87/SD01-RR02.png"
+  },
+  {
+    "id": "※SD01-RR03",
+    "name": "Pinkie Pie|※SD01-RR03 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/99/SD01-RR03.png"
+  },
+  {
+    "id": "※SD01-RR04",
+    "name": "Applejack|※SD01-RR04 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/6d/SD01-RR04.png"
+  },
+  {
+    "id": "※SD01-RR05",
+    "name": "Rainbow Dash|※SD01-RR05 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/78/SD01-RR05.png"
+  },
+  {
+    "id": "※SD01-RR06",
+    "name": "Rarity|※SD01-RR06 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5a/SD01-RR06.png"
+  },
+  {
+    "id": "※SD01-ER07",
+    "name": "Canterlot Tower (Day)|※SD01-ER07 Canterlot Tower (Day)",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/7a/SD01-ER07.png"
+  },
+  {
+    "id": "※SD01-ER08",
+    "name": "Ponyville Suburb (Day)|※SD01-ER08 Ponyville Suburb (Day)",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/34/SD01-ER08.png"
+  },
+  {
+    "id": "※SD01-ER09",
+    "name": "Ponyville Street (Day)|※SD01-ER09 Ponyville Street (Day)",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/ec/SD01-ER09.png"
+  },
+  {
+    "id": "※SD01-ER10",
+    "name": "Road at Sweet Apple Acres (Day)|※SD01-ER10 Road at Sweet Apple Acres (Day)",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/40/SD01-ER10.png"
+  },
+  {
+    "id": "※SD01-ER11",
+    "name": "Stairs of Cloudsdale (Day)|※SD01-ER11 Stairs of Cloudsdale (Day)",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d1/SD01-ER11.png"
+  },
+  {
+    "id": "※SD01-ER12",
+    "name": "Manehattan Streets (Day)|※SD01-ER12 Manehattan Streets (Day)",
+    "set_code": "SD01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8d/SD01-ER12.png"
+  },
+  {
+    "id": "SD01A-SR01",
+    "name": "Twilight Sparkle|SD01A-SR01 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/da/SD01A-SR01.png"
+  },
+  {
+    "id": "SD01A-SR02",
+    "name": "Owlowiscious|SD01A-SR02 Owlowiscious",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/ff/SD01A-SR02.png"
+  },
+  {
+    "id": "SD01A-U01",
+    "name": "Twilight Sparkle|SD01A-U01 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/84/SD01A-U01.png"
+  },
+  {
+    "id": "SD01A-U02",
+    "name": "Twilight Sparkle|SD01A-U02 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/83/SD01A-U02.png"
+  },
+  {
+    "id": "SD01A-U03",
+    "name": "Spike|SD01A-U03 Spike",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/a8/SD01A-U03.png"
+  },
+  {
+    "id": "SD01A-U04",
+    "name": "Spike|SD01A-U04 Spike",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d7/SD01A-U04.png"
+  },
+  {
+    "id": "SD01A-C01",
+    "name": "Twilight Sparkle|SD01A-C01 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/06/SD01A-C01.png"
+  },
+  {
+    "id": "SD01A-C02",
+    "name": "Twilight Sparkle|SD01A-C02 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/2/20/SD01A-C02.png"
+  },
+  {
+    "id": "SD01A-C03",
+    "name": "Spike|SD01A-C03 Spike",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/51/SD01A-C03.png"
+  },
+  {
+    "id": "SD01A-C04",
+    "name": "Spike|SD01A-C04 Spike",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/3c/SD01A-C04.png"
+  },
+  {
+    "id": "SD01A-C05",
+    "name": "Owlowiscious|SD01A-C05 Owlowiscious",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/6a/SD01A-C05.png"
+  },
+  {
+    "id": "SD01A-C06",
+    "name": "Searching for Elements of Harmony – Consulting the Guide|SD01A-C06 Searching for Elements of Harmony – Consulting the Guide",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f0/SD01A-C06.png"
+  },
+  {
+    "id": "SD01A-C07",
+    "name": "Searching for Elements of Harmony – Through the Everfree Forest|SD01A-C07 Searching for Elements of Harmony – Through the Everfree Forest",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e5/SD01A-C07.png"
+  },
+  {
+    "id": "SD01A-C08",
+    "name": "Searching for Elements of Harmony – Facing Nightmare Moon|SD01A-C08 Searching for Elements of Harmony – Facing Nightmare Moon",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8a/SD01A-C08.png"
+  },
+  {
+    "id": "SD01A-C09",
+    "name": "Searching for Elements of Harmony – Igniting the Sixth Element|SD01A-C09 Searching for Elements of Harmony – Igniting the Sixth Element",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/66/SD01A-C09.png"
+  },
+  {
+    "id": "SD01A-SPR01",
+    "name": "Field Reference|SD01A-SPR01 Field Reference",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f0/SD01A-SPR01.png"
+  },
+  {
+    "id": "SD01A-SPR02",
+    "name": "Search the Library|SD01A-SPR02 Search the Library",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/2/2a/SD01A-SPR02.png"
+  },
+  {
+    "id": "SD01A-SPR03",
+    "name": "Experience Report|SD01A-SPR03 Experience Report",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/7c/SD01A-SPR03.png"
+  },
+  {
+    "id": "SD01A-SPR04",
+    "name": "Guiding Tome|SD01A-SPR04 Guiding Tome",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8b/SD01A-SPR04.png"
+  },
+  {
+    "id": "SD01-RR01",
+    "name": "Twilight Sparkle|SD01-RR01 Twilight Sparkle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/42/SD01-RR01.png"
+  },
+  {
+    "id": "SD01B-SR01",
+    "name": "Fluttershy|SD01B-SR01 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d7/SD01B-SR01.png"
+  },
+  {
+    "id": "SD01B-SR02",
+    "name": "Angel|SD01B-SR02 Angel",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8e/SD01B-SR02.png"
+  },
+  {
+    "id": "SD01B-U01",
+    "name": "Fluttershy|SD01B-U01 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/34/SD01B-U01.png"
+  },
+  {
+    "id": "SD01B-U02",
+    "name": "Fluttershy|SD01B-U02 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/aa/SD01B-U02.png"
+  },
+  {
+    "id": "SD01B-U03",
+    "name": "Philomena|SD01B-U03 Philomena",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/87/SD01B-U03.png"
+  },
+  {
+    "id": "SD01B-U04",
+    "name": "Angel|SD01B-U04 Angel",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/13/SD01B-U04.png"
+  },
+  {
+    "id": "SD01B-C01",
+    "name": "Fluttershy|SD01B-C01 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/3d/SD01B-C01.png"
+  },
+  {
+    "id": "SD01B-C02",
+    "name": "Fluttershy|SD01B-C02 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/da/SD01B-C02.png"
+  },
+  {
+    "id": "SD01B-C03",
+    "name": "Fluttershy|SD01B-C03 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d9/SD01B-C03.png"
+  },
+  {
+    "id": "SD01B-C04",
+    "name": "Turtle|SD01B-C04 Turtle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/97/SD01B-C04.png"
+  },
+  {
+    "id": "SD01B-C05",
+    "name": "Angel|SD01B-C05 Angel",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/09/SD01B-C05.png"
+  },
+  {
+    "id": "SD01B-C06",
+    "name": "Dragonshy – Ominous Black Smoke|SD01B-C06 Dragonshy – Ominous Black Smoke",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/ed/SD01B-C06.png"
+  },
+  {
+    "id": "SD01B-C07",
+    "name": "Dragonshy – Towards the Cliff|SD01B-C07 Dragonshy – Towards the Cliff",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/45/SD01B-C07.png"
+  },
+  {
+    "id": "SD01B-C08",
+    "name": "Dragonshy – Over the Gorge|SD01B-C08 Dragonshy – Over the Gorge",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e2/SD01B-C08.png"
+  },
+  {
+    "id": "SD01B-C09",
+    "name": "Dragonshy – Facing the Dragon|SD01B-C09 Dragonshy – Facing the Dragon",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/2/21/SD01B-C09.png"
+  },
+  {
+    "id": "SD01B-SPR01",
+    "name": "Aid for Moving Frogs Out|SD01B-SPR01 Aid for Moving Frogs Out",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/51/SD01B-SPR01.png"
+  },
+  {
+    "id": "SD01B-SPR02",
+    "name": "Flower Picking Day|SD01B-SPR02 Flower Picking Day",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/fb/SD01B-SPR02.png"
+  },
+  {
+    "id": "SD01B-SPR03",
+    "name": "Healthy Salad|SD01B-SPR03 Healthy Salad",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/01/SD01B-SPR03.png"
+  },
+  {
+    "id": "SD01B-SPR04",
+    "name": "Rabbit Pocket Watch|SD01B-SPR04 Rabbit Pocket Watch",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/3d/SD01B-SPR04.png"
+  },
+  {
+    "id": "SD01-RR02",
+    "name": "Fluttershy|SD01-RR02 Fluttershy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/87/SD01-RR02.png"
+  },
+  {
+    "id": "SD01C-SR01",
+    "name": "Pinkie Pie|SD01C-SR01 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/1c/SD01C-SR01.png"
+  },
+  {
+    "id": "SD01C-SR02",
+    "name": "Gummy|SD01C-SR02 Gummy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/6f/SD01C-SR02.png"
+  },
+  {
+    "id": "SD01C-U01",
+    "name": "Pinkie Pie|SD01C-U01 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/72/SD01C-U01.png"
+  },
+  {
+    "id": "SD01C-U02",
+    "name": "Pinkie Pie|SD01C-U02 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/59/SD01C-U02.png"
+  },
+  {
+    "id": "SD01C-U03",
+    "name": "Mrs. Cake|SD01C-U03 Mrs. Cake",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/74/SD01C-U03.png"
+  },
+  {
+    "id": "SD01C-U04",
+    "name": "Gummy|SD01C-U04 Gummy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e6/SD01C-U04.png"
+  },
+  {
+    "id": "SD01C-C01",
+    "name": "Pinkie Pie|SD01C-C01 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/2/26/SD01C-C01.png"
+  },
+  {
+    "id": "SD01C-C02",
+    "name": "Pinkie Pie|SD01C-C02 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/06/SD01C-C02.png"
+  },
+  {
+    "id": "SD01C-C03",
+    "name": "Mrs. Cake|SD01C-C03 Mrs. Cake",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/16/SD01C-C03.png"
+  },
+  {
+    "id": "SD01C-C04",
+    "name": "Gummy|SD01C-C04 Gummy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/a5/SD01C-C04.png"
+  },
+  {
+    "id": "SD01C-C05",
+    "name": "Gummy|SD01C-C05 Gummy",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5d/SD01C-C05.png"
+  },
+  {
+    "id": "SD01C-C06",
+    "name": "Feeling Pinkie Keen – The Prediction|SD01C-C06 Feeling Pinkie Keen – The Prediction",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/7b/SD01C-C06.png"
+  },
+  {
+    "id": "SD01C-C07",
+    "name": "Feeling Pinkie Keen – The Giant Hydra|SD01C-C07 Feeling Pinkie Keen – The Giant Hydra",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b7/SD01C-C07.png"
+  },
+  {
+    "id": "SD01C-C08",
+    "name": "Feeling Pinkie Keen – Crisis Averted|SD01C-C08 Feeling Pinkie Keen – Crisis Averted",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d8/SD01C-C08.png"
+  },
+  {
+    "id": "SD01C-C09",
+    "name": "Feeling Pinkie Keen – The Real Doozy|SD01C-C09 Feeling Pinkie Keen – The Real Doozy",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e9/SD01C-C09.png"
+  },
+  {
+    "id": "SD01C-SPR01",
+    "name": "\"Blue Curse\"|SD01C-SPR01 \"Blue Curse\"",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/06/SD01C-SPR01.png"
+  },
+  {
+    "id": "SD01C-SPR02",
+    "name": "Instrument Set|SD01C-SPR02 Instrument Set",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/a2/SD01C-SPR02.png"
+  },
+  {
+    "id": "SD01C-SPR03",
+    "name": "Head Umbrella|SD01C-SPR03 Head Umbrella",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/a1/SD01C-SPR03.png"
+  },
+  {
+    "id": "SD01C-SPR04",
+    "name": "Pinkie's Flying Balloon|SD01C-SPR04 Pinkie's Flying Balloon",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8e/SD01C-SPR04.png"
+  },
+  {
+    "id": "SD01-RR03",
+    "name": "Pinkie Pie|SD01-RR03 Pinkie Pie",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/99/SD01-RR03.png"
+  },
+  {
+    "id": "SD01D-SR01",
+    "name": "Applejack|SD01D-SR01 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/2/2d/SD01D-SR01.png"
+  },
+  {
+    "id": "SD01D-SR02",
+    "name": "Winona|SD01D-SR02 Winona",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/57/SD01D-SR02.png"
+  },
+  {
+    "id": "SD01D-U01",
+    "name": "Applejack|SD01D-U01 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/ef/SD01D-U01.png"
+  },
+  {
+    "id": "SD01D-U02",
+    "name": "Applejack|SD01D-U02 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/16/SD01D-U02.png"
+  },
+  {
+    "id": "SD01D-U03",
+    "name": "Apple Bloom|SD01D-U03 Apple Bloom",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/03/SD01D-U03.png"
+  },
+  {
+    "id": "SD01D-U04",
+    "name": "Winona|SD01D-U04 Winona",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/60/SD01D-U04.png"
+  },
+  {
+    "id": "SD01D-C01",
+    "name": "Applejack|SD01D-C01 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/70/SD01D-C01.png"
+  },
+  {
+    "id": "SD01D-C02",
+    "name": "Applejack|SD01D-C02 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5d/SD01D-C02.png"
+  },
+  {
+    "id": "SD01D-C03",
+    "name": "Apple Bloom|SD01D-C03 Apple Bloom",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4a/SD01D-C03.png"
+  },
+  {
+    "id": "SD01D-C04",
+    "name": "Big McIntosh|SD01D-C04 Big McIntosh",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/c/c2/SD01D-C04.png"
+  },
+  {
+    "id": "SD01D-C05",
+    "name": "Winona|SD01D-C05 Winona",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/fa/SD01D-C05.png"
+  },
+  {
+    "id": "SD01D-C06",
+    "name": "Applebuck Season – Harvest of One|SD01D-C06 Applebuck Season – Harvest of One",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/60/SD01D-C06.png"
+  },
+  {
+    "id": "SD01D-C07",
+    "name": "Applebuck Season – Stubborn Applejack|SD01D-C07 Applebuck Season – Stubborn Applejack",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/41/SD01D-C07.png"
+  },
+  {
+    "id": "SD01D-C08",
+    "name": "Applebuck Season – Asking for Help|SD01D-C08 Applebuck Season – Asking for Help",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/75/SD01D-C08.png"
+  },
+  {
+    "id": "SD01D-C09",
+    "name": "Applebuck Season – Appreciation and Apology|SD01D-C09 Applebuck Season – Appreciation and Apology",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f6/SD01D-C09.png"
+  },
+  {
+    "id": "SD01D-SPR01",
+    "name": "Dye Advertisement|SD01D-SPR01 Dye Advertisement",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/3c/SD01D-SPR01.png"
+  },
+  {
+    "id": "SD01D-SPR02",
+    "name": "Rope Trick|SD01D-SPR02 Rope Trick",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4c/SD01D-SPR02.png"
+  },
+  {
+    "id": "SD01D-SPR03",
+    "name": "Lullaby for Apple Tree|SD01D-SPR03 Lullaby for Apple Tree",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/91/SD01D-SPR03.png"
+  },
+  {
+    "id": "SD01D-SPR04",
+    "name": "Apple Bucket|SD01D-SPR04 Apple Bucket",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e3/SD01D-SPR04.png"
+  },
+  {
+    "id": "SD01-RR04",
+    "name": "Applejack|SD01-RR04 Applejack",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/6d/SD01-RR04.png"
+  },
+  {
+    "id": "SD01E-SR01",
+    "name": "Rainbow Dash|SD01E-SR01 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/47/SD01E-SR01.png"
+  },
+  {
+    "id": "SD01E-SR02",
+    "name": "Tank|SD01E-SR02 Tank",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/c/cb/SD01E-SR02.png"
+  },
+  {
+    "id": "SD01E-U01",
+    "name": "Rainbow Dash|SD01E-U01 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/ab/SD01E-U01.png"
+  },
+  {
+    "id": "SD01E-U02",
+    "name": "Rainbow Dash|SD01E-U02 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e6/SD01E-U02.png"
+  },
+  {
+    "id": "SD01E-U03",
+    "name": "Scootaloo|SD01E-U03 Scootaloo",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/46/SD01E-U03.png"
+  },
+  {
+    "id": "SD01E-U04",
+    "name": "Tank|SD01E-U04 Tank",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/2/2d/SD01E-U04.png"
+  },
+  {
+    "id": "SD01E-C01",
+    "name": "Rainbow Dash|SD01E-C01 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/ec/SD01E-C01.png"
+  },
+  {
+    "id": "SD01E-C02",
+    "name": "Rainbow Dash|SD01E-C02 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4b/SD01E-C02.png"
+  },
+  {
+    "id": "SD01E-C03",
+    "name": "Rainbow Dash|SD01E-C03 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/56/SD01E-C03.png"
+  },
+  {
+    "id": "SD01E-C04",
+    "name": "Scootaloo|SD01E-C04 Scootaloo",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4b/SD01E-C04.png"
+  },
+  {
+    "id": "SD01E-C05",
+    "name": "Tank|SD01E-C05 Tank",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8d/SD01E-C05.png"
+  },
+  {
+    "id": "SD01E-C06",
+    "name": "The Best Young Flyer – Anxious Rainbow Dash|SD01E-C06 The Best Young Flyer – Anxious Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/49/SD01E-C06.png"
+  },
+  {
+    "id": "SD01E-C07",
+    "name": "The Best Young Flyer – The Competition|SD01E-C07 The Best Young Flyer – The Competition",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/c/ca/SD01E-C07.png"
+  },
+  {
+    "id": "SD01E-C08",
+    "name": "The Best Young Flyer – Sonic RainBoom|SD01E-C08 The Best Young Flyer – Sonic RainBoom",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/c/cd/SD01E-C08.png"
+  },
+  {
+    "id": "SD01E-C09",
+    "name": "The Best Young Flyer – Grand Prize|SD01E-C09 The Best Young Flyer – Grand Prize",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/6f/SD01E-C09.png"
+  },
+  {
+    "id": "SD01E-SPR01",
+    "name": "Hoofshake Buzzer!|SD01E-SPR01 Hoofshake Buzzer!",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5f/SD01E-SPR01.png"
+  },
+  {
+    "id": "SD01E-SPR02",
+    "name": "Rushing Rescue|SD01E-SPR02 Rushing Rescue",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/eb/SD01E-SPR02.png"
+  },
+  {
+    "id": "SD01E-SPR03",
+    "name": "Training Accident|SD01E-SPR03 Training Accident",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/99/SD01E-SPR03.png"
+  },
+  {
+    "id": "SD01E-SPR04",
+    "name": "Prank Sneeze Powder|SD01E-SPR04 Prank Sneeze Powder",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4c/SD01E-SPR04.png"
+  },
+  {
+    "id": "SD01-RR05",
+    "name": "Rainbow Dash|SD01-RR05 Rainbow Dash",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/78/SD01-RR05.png"
+  },
+  {
+    "id": "SD01F-SR01",
+    "name": "Rarity|SD01F-SR01 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/a2/SD01F-SR01.png"
+  },
+  {
+    "id": "SD01F-SR02",
+    "name": "Opal|SD01F-SR02 Opal",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e3/SD01F-SR02.png"
+  },
+  {
+    "id": "SD01F-U01",
+    "name": "Rarity|SD01F-U01 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/2/2d/SD01F-U01.png"
+  },
+  {
+    "id": "SD01F-U02",
+    "name": "Rarity|SD01F-U02 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/91/SD01F-U02.png"
+  },
+  {
+    "id": "SD01F-U03",
+    "name": "Sweetie Belle|SD01F-U03 Sweetie Belle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/06/SD01F-U03.png"
+  },
+  {
+    "id": "SD01F-U04",
+    "name": "Opal|SD01F-U04 Opal",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/98/SD01F-U04.png"
+  },
+  {
+    "id": "SD01F-C01",
+    "name": "Rarity|SD01F-C01 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/ff/SD01F-C01.png"
+  },
+  {
+    "id": "SD01F-C02",
+    "name": "Rarity|SD01F-C02 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/08/SD01F-C02.png"
+  },
+  {
+    "id": "SD01F-C03",
+    "name": "Rarity|SD01F-C03 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d1/SD01F-C03.png"
+  },
+  {
+    "id": "SD01F-C04",
+    "name": "Sweetie Belle|SD01F-C04 Sweetie Belle",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/91/SD01F-C04.png"
+  },
+  {
+    "id": "SD01F-C05",
+    "name": "Opal|SD01F-C05 Opal",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f2/SD01F-C05.png"
+  },
+  {
+    "id": "SD01F-C06",
+    "name": "A Dog and Pony Show – Hunt for Gems|SD01F-C06 A Dog and Pony Show – Hunt for Gems",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/9e/SD01F-C06.png"
+  },
+  {
+    "id": "SD01F-C07",
+    "name": "A Dog and Pony Show – Rarity Gets Ponynapped|SD01F-C07 A Dog and Pony Show – Rarity Gets Ponynapped",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/52/SD01F-C07.png"
+  },
+  {
+    "id": "SD01F-C08",
+    "name": "A Dog and Pony Show – Outwitting the Hounds|SD01F-C08 A Dog and Pony Show – Outwitting the Hounds",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/90/SD01F-C08.png"
+  },
+  {
+    "id": "SD01F-C09",
+    "name": "A Dog and Pony Show – Back with Full Load|SD01F-C09 A Dog and Pony Show – Back with Full Load",
+    "set_code": "SD01",
+    "card_type": "Story",
+    "rarity": "C",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/c/c8/SD01F-C09.png"
+  },
+  {
+    "id": "SD01F-SPR01",
+    "name": "Tailor-made|SD01F-SPR01 Tailor-made",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f4/SD01F-SPR01.png"
+  },
+  {
+    "id": "SD01F-SPR02",
+    "name": "Dress for Competition|SD01F-SPR02 Dress for Competition",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/50/SD01F-SPR02.png"
+  },
+  {
+    "id": "SD01F-SPR03",
+    "name": "Steam Therapy|SD01F-SPR03 Steam Therapy",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/7e/SD01F-SPR03.png"
+  },
+  {
+    "id": "SD01F-SPR04",
+    "name": "Dress Form|SD01F-SPR04 Dress Form",
+    "set_code": "SD01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/39/SD01F-SPR04.png"
+  },
+  {
+    "id": "SD01-RR06",
+    "name": "Rarity|SD01-RR06 Rarity",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5a/SD01-RR06.png"
+  },
+  {
+    "id": "BP01-CR07",
+    "name": "through 12]]",
+    "set_code": "SD01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/30/BP01-CR07.png"
+  },
+  {
+    "id": "BP01-CR01",
+    "name": "Twilight Sparkle|BP01-CR01 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4d/BP01-CR01.png"
+  },
+  {
+    "id": "BP01-CR02",
+    "name": "Fluttershy|BP01-CR02 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5c/BP01-CR02.png"
+  },
+  {
+    "id": "BP01-CR03",
+    "name": "Pinkie Pie|BP01-CR03 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/40/BP01-CR03.png"
+  },
+  {
+    "id": "BP01-CR04",
+    "name": "Applejack|BP01-CR04 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/c/cd/BP01-CR04.png"
+  },
+  {
+    "id": "BP01-CR05",
+    "name": "Rainbow Dash|BP01-CR05 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/ac/BP01-CR05.png"
+  },
+  {
+    "id": "BP01-CR06",
+    "name": "Rarity|BP01-CR06 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/ee/BP01-CR06.png"
+  },
+  {
+    "id": "BP01-CR08",
+    "name": "Fluttershy|BP01-CR08 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b3/BP01-CR08.png"
+  },
+  {
+    "id": "BP01-CR09",
+    "name": "Pinkie Pie|BP01-CR09 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/32/BP01-CR09.png"
+  },
+  {
+    "id": "BP01-CR10",
+    "name": "Applejack|BP01-CR10 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d0/BP01-CR10.png"
+  },
+  {
+    "id": "BP01-CR11",
+    "name": "Rainbow Dash|BP01-CR11 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5b/BP01-CR11.png"
+  },
+  {
+    "id": "BP01-CR12",
+    "name": "Rarity|BP01-CR12 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/18/BP01-CR12.png"
+  },
+  {
+    "id": "BP01-GR01",
+    "name": "Twilight Sparkle|BP01-GR01 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/3c/BP01-GR01.png"
+  },
+  {
+    "id": "BP01-GR02",
+    "name": "Fluttershy|BP01-GR02 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/70/BP01-GR02.png"
+  },
+  {
+    "id": "BP01-GR03",
+    "name": "Pinkie Pie|BP01-GR03 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f0/BP01-GR03.png"
+  },
+  {
+    "id": "BP01-GR04",
+    "name": "Applejack|BP01-GR04 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/09/BP01-GR04.png"
+  },
+  {
+    "id": "BP01-GR05",
+    "name": "Rainbow Dash|BP01-GR05 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/30/BP01-GR05.png"
+  },
+  {
+    "id": "BP01-GR06",
+    "name": "Rarity|BP01-GR06 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/37/BP01-GR06.png"
+  },
+  {
+    "id": "BP01-GR07",
+    "name": "Twilight Sparkle|BP01-GR07 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/a1/BP01-GR07.png"
+  },
+  {
+    "id": "BP01-GR08",
+    "name": "Fluttershy|BP01-GR08 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/90/BP01-GR08.png"
+  },
+  {
+    "id": "BP01-GR09",
+    "name": "Pinkie Pie|BP01-GR09 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8f/BP01-GR09.png"
+  },
+  {
+    "id": "BP01-GR10",
+    "name": "Applejack|BP01-GR10 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/57/BP01-GR10.png"
+  },
+  {
+    "id": "BP01-GR11",
+    "name": "Rainbow Dash|BP01-GR11 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4a/BP01-GR11.png"
+  },
+  {
+    "id": "BP01-GR12",
+    "name": "Rarity|BP01-GR12 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/0d/BP01-GR12.png"
+  },
+  {
+    "id": "BP01-SR01",
+    "name": "Twilight Sparkle|BP01-SR01 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/85/BP01-SR01.png"
+  },
+  {
+    "id": "BP01-SR02",
+    "name": "Fluttershy|BP01-SR02 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f3/BP01-SR02.png"
+  },
+  {
+    "id": "BP01-SR03",
+    "name": "Pinkie Pie|BP01-SR03 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/dd/BP01-SR03.png"
+  },
+  {
+    "id": "BP01-SR04",
+    "name": "Applejack|BP01-SR04 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/52/BP01-SR04.png"
+  },
+  {
+    "id": "BP01-SR05",
+    "name": "Rainbow Dash|BP01-SR05 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5d/BP01-SR05.png"
+  },
+  {
+    "id": "BP01-SR06",
+    "name": "Rarity|BP01-SR06 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/bf/BP01-SR06.png"
+  },
+  {
+    "id": "BP01-SR07",
+    "name": "Owlowiscious|BP01-SR07 Owlowiscious",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8a/BP01-SR07.png"
+  },
+  {
+    "id": "BP01-SR08",
+    "name": "Angel|BP01-SR08 Angel",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/88/BP01-SR08.png"
+  },
+  {
+    "id": "BP01-SR09",
+    "name": "Gummy|BP01-SR09 Gummy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f8/BP01-SR09.png"
+  },
+  {
+    "id": "BP01-SR10",
+    "name": "Winona|BP01-SR10 Winona",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/1e/BP01-SR10.png"
+  },
+  {
+    "id": "BP01-SR11",
+    "name": "Tank|BP01-SR11 Tank",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/46/BP01-SR11.png"
+  },
+  {
+    "id": "BP01-SR12",
+    "name": "Opal|BP01-SR12 Opal",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/1b/BP01-SR12.png"
+  },
+  {
+    "id": "BP01-SR13",
+    "name": "Zecora|BP01-SR13 Zecora",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/7f/BP01-SR13.png"
+  },
+  {
+    "id": "BP01-SR14",
+    "name": "Trixie|BP01-SR14 Trixie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/3f/BP01-SR14.png"
+  },
+  {
+    "id": "BP01-U01",
+    "name": "Twilight Sparkle|BP01-U01 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b6/BP01-U01.png"
+  },
+  {
+    "id": "BP01-U02",
+    "name": "Twilight Sparkle|BP01-U02 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/c/c6/BP01-U02.png"
+  },
+  {
+    "id": "BP01-U03",
+    "name": "Fluttershy|BP01-U03 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/92/BP01-U03.png"
+  },
+  {
+    "id": "BP01-U04",
+    "name": "Fluttershy|BP01-U04 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b3/BP01-U04.png"
+  },
+  {
+    "id": "BP01-U05",
+    "name": "Pinkie Pie|BP01-U05 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/45/BP01-U05.png"
+  },
+  {
+    "id": "BP01-U06",
+    "name": "Pinkie Pie|BP01-U06 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/c/cd/BP01-U06.png"
+  },
+  {
+    "id": "BP01-U07",
+    "name": "Applejack|BP01-U07 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/05/BP01-U07.png"
+  },
+  {
+    "id": "BP01-U08",
+    "name": "Applejack|BP01-U08 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4b/BP01-U08.png"
+  },
+  {
+    "id": "BP01-U09",
+    "name": "Rainbow Dash|BP01-U09 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4f/BP01-U09.png"
+  },
+  {
+    "id": "BP01-U10",
+    "name": "Rainbow Dash|BP01-U10 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d9/BP01-U10.png"
+  },
+  {
+    "id": "BP01-U11",
+    "name": "Rarity|BP01-U11 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/67/BP01-U11.png"
+  },
+  {
+    "id": "BP01-U12",
+    "name": "Rarity|BP01-U12 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/ba/BP01-U12.png"
+  },
+  {
+    "id": "BP01-U13",
+    "name": "Spike|BP01-U13 Spike",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/46/BP01-U13.png"
+  },
+  {
+    "id": "BP01-U14",
+    "name": "Spike|BP01-U14 Spike",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5b/BP01-U14.png"
+  },
+  {
+    "id": "BP01-U15",
+    "name": "Apple Bloom|BP01-U15 Apple Bloom",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/7c/BP01-U15.png"
+  },
+  {
+    "id": "BP01-U16",
+    "name": "Sweetie Belle|BP01-U16 Sweetie Belle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/ff/BP01-U16.png"
+  },
+  {
+    "id": "BP01-U17",
+    "name": "Scootaloo|BP01-U17 Scootaloo",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/fb/BP01-U17.png"
+  },
+  {
+    "id": "BP01-U18",
+    "name": "Trixie|BP01-U18 Trixie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e2/BP01-U18.png"
+  },
+  {
+    "id": "BP01-C01",
+    "name": "Twilight Sparkle|BP01-C01 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/48/BP01-C01.png"
+  },
+  {
+    "id": "BP01-C02",
+    "name": "Twilight Sparkle|BP01-C02 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/3e/BP01-C02.png"
+  },
+  {
+    "id": "BP01-C03",
+    "name": "Twilight Sparkle|BP01-C03 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8b/BP01-C03.png"
+  },
+  {
+    "id": "BP01-C04",
+    "name": "Fluttershy|BP01-C04 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/62/BP01-C04.png"
+  },
+  {
+    "id": "BP01-C05",
+    "name": "Fluttershy|BP01-C05 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/54/BP01-C05.png"
+  },
+  {
+    "id": "BP01-C06",
+    "name": "Pinkie Pie|BP01-C06 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/67/BP01-C06.png"
+  },
+  {
+    "id": "BP01-C07",
+    "name": "Pinkie Pie|BP01-C07 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/69/BP01-C07.png"
+  },
+  {
+    "id": "BP01-C08",
+    "name": "Applejack|BP01-C08 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/7c/BP01-C08.png"
+  },
+  {
+    "id": "BP01-C09",
+    "name": "Applejack|BP01-C09 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/54/BP01-C09.png"
+  },
+  {
+    "id": "BP01-C10",
+    "name": "Rainbow Dash|BP01-C10 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/bb/BP01-C10.png"
+  },
+  {
+    "id": "BP01-C11",
+    "name": "Rainbow Dash|BP01-C11 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/3b/BP01-C11.png"
+  },
+  {
+    "id": "BP01-C12",
+    "name": "Rarity|BP01-C12 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/6a/BP01-C12.png"
+  },
+  {
+    "id": "BP01-C13",
+    "name": "Rarity|BP01-C13 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/01/BP01-C13.png"
+  },
+  {
+    "id": "BP01-C14",
+    "name": "Spike|BP01-C14 Spike",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b1/BP01-C14.png"
+  },
+  {
+    "id": "BP01-C15",
+    "name": "Apple Bloom|BP01-C15 Apple Bloom",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/48/BP01-C15.png"
+  },
+  {
+    "id": "BP01-C16",
+    "name": "Sweetie Belle|BP01-C16 Sweetie Belle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/76/BP01-C16.png"
+  },
+  {
+    "id": "BP01-C17",
+    "name": "Scootaloo|BP01-C17 Scootaloo",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/99/BP01-C17.png"
+  },
+  {
+    "id": "BP01-C18",
+    "name": "Big McIntosh|BP01-C18 Big McIntosh",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/68/BP01-C18.png"
+  },
+  {
+    "id": "BP01-C19",
+    "name": "Granny Smith|BP01-C19 Granny Smith",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/12/BP01-C19.png"
+  },
+  {
+    "id": "BP01-C20",
+    "name": "Trixie|BP01-C20 Trixie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b9/BP01-C20.png"
+  },
+  {
+    "id": "BP01-C21",
+    "name": "Gilda|BP01-C21 Gilda",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/45/BP01-C21.png"
+  },
+  {
+    "id": "BP01-C22",
+    "name": "Diamond Tiara|BP01-C22 Diamond Tiara",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/99/BP01-C22.png"
+  },
+  {
+    "id": "BP01-C23",
+    "name": "Silver Spoon|BP01-C23 Silver Spoon",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f2/BP01-C23.png"
+  },
+  {
+    "id": "BP01-C24",
+    "name": "Mayor Mare|BP01-C24 Mayor Mare",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/63/BP01-C24.png"
+  },
+  {
+    "id": "BP01-RR01",
+    "name": "Twilight Sparkle|BP01-RR01 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/75/BP01-RR01.png"
+  },
+  {
+    "id": "BP01-RR02",
+    "name": "Fluttershy|BP01-RR02 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f5/BP01-RR02.png"
+  },
+  {
+    "id": "BP01-RR03",
+    "name": "Pinkie Pie|BP01-RR03 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/30/BP01-RR03.png"
+  },
+  {
+    "id": "BP01-RR04",
+    "name": "Applejack|BP01-RR04 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8c/BP01-RR04.png"
+  },
+  {
+    "id": "BP01-RR05",
+    "name": "Rainbow Dash|BP01-RR05 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4e/BP01-RR05.png"
+  },
+  {
+    "id": "BP01-RR06",
+    "name": "Rarity|BP01-RR06 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/af/BP01-RR06.png"
+  },
+  {
+    "id": "SD01-ER07",
+    "name": "Canterlot Tower|SD01-ER07 Canterlot Tower",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/7a/SD01-ER07.png"
+  },
+  {
+    "id": "SD01-ER08",
+    "name": "Ponyville Suburb|SD01-ER08 Ponyville Suburb",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/34/SD01-ER08.png"
+  },
+  {
+    "id": "SD01-ER09",
+    "name": "Ponyville Street|SD01-ER09 Ponyville Street",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/ec/SD01-ER09.png"
+  },
+  {
+    "id": "SD01-ER10",
+    "name": "Road at Sweet Apple Acres|SD01-ER10 Road at Sweet Apple Acres",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/40/SD01-ER10.png"
+  },
+  {
+    "id": "SD01-ER11",
+    "name": "Stairs of Cloudsdale|SD01-ER11 Stairs of Cloudsdale",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d1/SD01-ER11.png"
+  },
+  {
+    "id": "SD01-ER12",
+    "name": "Manehattan Streets|SD01-ER12 Manehattan Streets",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8d/SD01-ER12.png"
+  },
+  {
+    "id": "BP01-SPR01",
+    "name": "Sunlight in the Rain|BP01-SPR01 Sunlight in the Rain",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/77/BP01-SPR01.png"
+  },
+  {
+    "id": "BP01-SPR02",
+    "name": "Time for Clean-up!|BP01-SPR02 Time for Clean-up!",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/03/BP01-SPR02.png"
+  },
+  {
+    "id": "BP01-SPR03",
+    "name": "Deliver letters|BP01-SPR03 Deliver letters",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e9/BP01-SPR03.png"
+  },
+  {
+    "id": "BP01-SPR04",
+    "name": "Award Ceremony|BP01-SPR04 Award Ceremony",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/94/BP01-SPR04.png"
+  },
+  {
+    "id": "BP01-SPR05",
+    "name": "Prepared to Go|BP01-SPR05 Prepared to Go",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/73/BP01-SPR05.png"
+  },
+  {
+    "id": "BP01-SPR06",
+    "name": "Overspeed Warning!|BP01-SPR06 Overspeed Warning!",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/65/BP01-SPR06.png"
+  },
+  {
+    "id": "BP01-SPR07",
+    "name": "Hair Curling|BP01-SPR07 Hair Curling",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d2/BP01-SPR07.png"
+  },
+  {
+    "id": "BP01-SPR08",
+    "name": "Pillow Fight|BP01-SPR08 Pillow Fight",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/88/BP01-SPR08.png"
+  },
+  {
+    "id": "BP01-SPR09",
+    "name": "Rain Under the Roof|BP01-SPR09 Rain Under the Roof",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/be/BP01-SPR09.png"
+  },
+  {
+    "id": "BP01-SPR10",
+    "name": "Wire Accident|BP01-SPR10 Wire Accident",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/dc/BP01-SPR10.png"
+  },
+  {
+    "id": "BP01-SPR11",
+    "name": "Make a Cake|BP01-SPR11 Make a Cake",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/81/BP01-SPR11.png"
+  },
+  {
+    "id": "BP01-SPR12",
+    "name": "Hoof Power Test|BP01-SPR12 Hoof Power Test",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5e/BP01-SPR12.png"
+  },
+  {
+    "id": "BP01-SPR13",
+    "name": "Tense Competition|BP01-SPR13 Tense Competition",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e7/BP01-SPR13.png"
+  },
+  {
+    "id": "BP01-SPR14",
+    "name": "Messy Henhouse|BP01-SPR14 Messy Henhouse",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b0/BP01-SPR14.png"
+  },
+  {
+    "id": "BP01-SPR15",
+    "name": "Washing Day|BP01-SPR15 Washing Day",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5a/BP01-SPR15.png"
+  },
+  {
+    "id": "BP01-SPR16",
+    "name": "Dig for Gems|BP01-SPR16 Dig for Gems",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/9e/BP01-SPR16.png"
+  },
+  {
+    "id": "BP01-SPR17",
+    "name": "Attend to Cure|BP01-SPR17 Attend to Cure",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e1/BP01-SPR17.png"
+  },
+  {
+    "id": "BP01-SPR18",
+    "name": "Accidentally Burnt Book|BP01-SPR18 Accidentally Burnt Book",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/af/BP01-SPR18.png"
+  },
+  {
+    "id": "BP01-SPR19",
+    "name": "Cycling for Friends|BP01-SPR19 Cycling for Friends",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5f/BP01-SPR19.png"
+  },
+  {
+    "id": "BP01-SPR20",
+    "name": "Head Up to the Night Sky|BP01-SPR20 Head Up to the Night Sky",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/0e/BP01-SPR20.png"
+  },
+  {
+    "id": "BP01-SPR21",
+    "name": "Found Scroll|BP01-SPR21 Found Scroll",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/67/BP01-SPR21.png"
+  },
+  {
+    "id": "BP01-SPR22",
+    "name": "Super Spicy Sauce|BP01-SPR22 Super Spicy Sauce",
+    "set_code": "BP01",
+    "card_type": "Item",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/c/ce/BP01-SPR22.png"
+  },
+  {
+    "id": "BP01-SPR23",
+    "name": "Soda|BP01-SPR23 Soda",
+    "set_code": "BP01",
+    "card_type": "Item",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/67/BP01-SPR23.png"
+  },
+  {
+    "id": "BP01-SPR24",
+    "name": "Horseshoe|BP01-SPR24 Horseshoe",
+    "set_code": "BP01",
+    "card_type": "Item",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/63/BP01-SPR24.png"
+  },
+  {
+    "id": "BP01-SPR25",
+    "name": "Pinkie Pie's Flying Device|BP01-SPR25 Pinkie Pie's Flying Device",
+    "set_code": "BP01",
+    "card_type": "Item",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/fe/BP01-SPR25.png"
+  },
+  {
+    "id": "BP01-SPR26",
+    "name": "Thimble Pack|BP01-SPR26 Thimble Pack",
+    "set_code": "BP01",
+    "card_type": "Item",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/05/BP01-SPR26.png"
+  },
+  {
+    "id": "BP01-SPR27",
+    "name": "Fluttershy's Bell|BP01-SPR27 Fluttershy's Bell",
+    "set_code": "BP01",
+    "card_type": "Item",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/0e/BP01-SPR27.png"
+  },
+  {
+    "id": "BP01-SPR28",
+    "name": "Recorder|BP01-SPR28 Recorder",
+    "set_code": "BP01",
+    "card_type": "Item",
+    "rarity": "SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e4/BP01-SPR28.png"
+  },
+  {
+    "id": "※BP01-CR01",
+    "name": "Twilight Sparkle|※BP01-CR01 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4d/BP01-CR01.png"
+  },
+  {
+    "id": "※BP01-CR02",
+    "name": "Fluttershy|※BP01-CR02 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5c/BP01-CR02.png"
+  },
+  {
+    "id": "※BP01-CR03",
+    "name": "Pinkie Pie|※BP01-CR03 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/40/BP01-CR03.png"
+  },
+  {
+    "id": "※BP01-CR04",
+    "name": "Applejack|※BP01-CR04 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/c/cd/BP01-CR04.png"
+  },
+  {
+    "id": "※BP01-CR05",
+    "name": "Rainbow Dash|※BP01-CR05 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/ac/BP01-CR05.png"
+  },
+  {
+    "id": "※BP01-CR06",
+    "name": "Rarity|※BP01-CR06 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/ee/BP01-CR06.png"
+  },
+  {
+    "id": "※BP01-CR07",
+    "name": "Twilight Sparkle|※BP01-CR07 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/30/BP01-CR07.png"
+  },
+  {
+    "id": "※BP01-CR08",
+    "name": "Fluttershy|※BP01-CR08 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b3/BP01-CR08.png"
+  },
+  {
+    "id": "※BP01-CR09",
+    "name": "Pinkie Pie|※BP01-CR09 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/32/BP01-CR09.png"
+  },
+  {
+    "id": "※BP01-CR10",
+    "name": "Applejack|※BP01-CR10 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d0/BP01-CR10.png"
+  },
+  {
+    "id": "※BP01-CR11",
+    "name": "Rainbow Dash|※BP01-CR11 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5b/BP01-CR11.png"
+  },
+  {
+    "id": "※BP01-CR12",
+    "name": "Rarity|※BP01-CR12 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/1/18/BP01-CR12.png"
+  },
+  {
+    "id": "※BP01-GR01",
+    "name": "Twilight Sparkle|※BP01-GR01 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/3c/BP01-GR01.png"
+  },
+  {
+    "id": "※BP01-GR02",
+    "name": "Fluttershy|※BP01-GR02 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/70/BP01-GR02.png"
+  },
+  {
+    "id": "※BP01-GR03",
+    "name": "Pinkie Pie|※BP01-GR03 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f0/BP01-GR03.png"
+  },
+  {
+    "id": "※BP01-GR04",
+    "name": "Applejack|※BP01-GR04 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/09/BP01-GR04.png"
+  },
+  {
+    "id": "※BP01-GR05",
+    "name": "Rainbow Dash|※BP01-GR05 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/30/BP01-GR05.png"
+  },
+  {
+    "id": "※BP01-GR06",
+    "name": "Rarity|※BP01-GR06 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/37/BP01-GR06.png"
+  },
+  {
+    "id": "※BP01-RR01",
+    "name": "Twilight Sparkle|※BP01-RR01 Twilight Sparkle",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/75/BP01-RR01.png"
+  },
+  {
+    "id": "※BP01-RR02",
+    "name": "Fluttershy|※BP01-RR02 Fluttershy",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f5/BP01-RR02.png"
+  },
+  {
+    "id": "※BP01-RR03",
+    "name": "Pinkie Pie|※BP01-RR03 Pinkie Pie",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/30/BP01-RR03.png"
+  },
+  {
+    "id": "※BP01-RR04",
+    "name": "Applejack|※BP01-RR04 Applejack",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/8c/BP01-RR04.png"
+  },
+  {
+    "id": "※BP01-RR05",
+    "name": "Rainbow Dash|※BP01-RR05 Rainbow Dash",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/4/4e/BP01-RR05.png"
+  },
+  {
+    "id": "※BP01-RR06",
+    "name": "Rarity|※BP01-RR06 Rarity",
+    "set_code": "BP01",
+    "card_type": "Character",
+    "rarity": "※RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/af/BP01-RR06.png"
+  },
+  {
+    "id": "※SD01-ER01",
+    "name": "Golden Oak Library (Day)|※SD01-ER01 Golden Oak Library (Day)",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/09/SD01-ER01.png"
+  },
+  {
+    "id": "※SD01-ER02",
+    "name": "Fluttershy's Cottage (Day)|※SD01-ER02 Fluttershy's Cottage (Day)",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/bd/SD01-ER02.png"
+  },
+  {
+    "id": "※SD01-ER03",
+    "name": "Sugarcube Corner (Day)|※SD01-ER03 Sugarcube Corner (Day)",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/f/f7/SD01-ER03.png"
+  },
+  {
+    "id": "※SD01-ER04",
+    "name": "Sweet Apple Acres (Day)|※SD01-ER04 Sweet Apple Acres (Day)",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/7a/SD01-ER04.png"
+  },
+  {
+    "id": "※SD01-ER05",
+    "name": "Cloudominium (Day)|※SD01-ER05 Cloudominium (Day)",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/3/39/SD01-ER05.png"
+  },
+  {
+    "id": "※SD01-ER06",
+    "name": "Carousel Boutique (Day)|※SD01-ER06 Carousel Boutique (Day)",
+    "set_code": "BP01",
+    "card_type": "Scene",
+    "rarity": "※ER",
+    "cost": 0,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/50/SD01-ER06.png"
+  },
+  {
+    "id": "※BP01-SPR01",
+    "name": "Sunlight in the Rain|※BP01-SPR01 Sunlight in the Rain",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "※SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/77/BP01-SPR01.png"
+  },
+  {
+    "id": "※BP01-SPR02",
+    "name": "Time for Clean-up!|※BP01-SPR02 Time for Clean-up!",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "※SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/0/03/BP01-SPR02.png"
+  },
+  {
+    "id": "※BP01-SPR03",
+    "name": "Deliver letters|※BP01-SPR03 Deliver letters",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "※SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e9/BP01-SPR03.png"
+  },
+  {
+    "id": "※BP01-SPR05",
+    "name": "Prepared to Go|※BP01-SPR05 Prepared to Go",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "※SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/7/73/BP01-SPR05.png"
+  },
+  {
+    "id": "※BP01-SPR07",
+    "name": "Hair Curling|※BP01-SPR07 Hair Curling",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "※SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/d2/BP01-SPR07.png"
+  },
+  {
+    "id": "※BP01-SPR08",
+    "name": "Pillow Fight|※BP01-SPR08 Pillow Fight",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "※SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/8/88/BP01-SPR08.png"
+  },
+  {
+    "id": "※BP01-SPR09",
+    "name": "Rain Under the Roof|※BP01-SPR09 Rain Under the Roof",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "※SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/be/BP01-SPR09.png"
+  },
+  {
+    "id": "※BP01-SPR12",
+    "name": "Hoof Power Test|※BP01-SPR12 Hoof Power Test",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "※SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/5e/BP01-SPR12.png"
+  },
+  {
+    "id": "※BP01-SPR13",
+    "name": "Tense Competition|※BP01-SPR13 Tense Competition",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "※SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e7/BP01-SPR13.png"
+  },
+  {
+    "id": "※BP01-SPR18",
+    "name": "Accidentally Burnt Book|※BP01-SPR18 Accidentally Burnt Book",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "※SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/a/af/BP01-SPR18.png"
+  },
+  {
+    "id": "※BP01-SPR21",
+    "name": "Found Scroll|※BP01-SPR21 Found Scroll",
+    "set_code": "BP01",
+    "card_type": "Event",
+    "rarity": "※SPR",
+    "cost": 1,
+    "power": 0,
+    "defense": 0,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/67/BP01-SPR21.png"
+  },
+  {
+    "id": "※BP02-CR01",
+    "name": "Twilight Sparkle (Wave 2 promo)|※BP02-CR01 Twilight Sparkle",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/e/e0/BP02-CR01.png"
+  },
+  {
+    "id": "※BP02-CR02",
+    "name": "Fluttershy (Wave 2 promo)|※BP02-CR02 Fluttershy",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/b/b4/BP02-CR02.png"
+  },
+  {
+    "id": "※BP02-CR03",
+    "name": "Pinkie Pie (Wave 2 promo)|※BP02-CR03 Pinkie Pie",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/9/97/BP02-CR03.png"
+  },
+  {
+    "id": "※BP02-CR04",
+    "name": "Applejack (Wave 2 promo)|※BP02-CR04 Applejack",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/5/59/BP02-CR04.png"
+  },
+  {
+    "id": "※BP02-CR05",
+    "name": "Rainbow Dash (Wave 2 promo)|※BP02-CR05 Rainbow Dash",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/d/da/BP02-CR05.png"
+  },
+  {
+    "id": "※BP02-CR06",
+    "name": "Rarity (Wave 2 promo)|※BP02-CR06 Rarity",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "※CR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://static.wikitide.net/kayoumylittleponycardgamewiki/6/6c/BP02-CR06.png"
+  },
+  {
+    "id": "※BP03-GR10",
+    "name": "Nightmare Moon]]",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "※GR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/BP03-GR10.png"
+  },
+  {
+    "id": "※BP03-SR13",
+    "name": "Queen Chrysalis]]",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "※SR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/BP03-SR13.png"
+  },
+  {
+    "id": "TR01A-U01",
+    "name": "Twilight Sparkle|TR01A-U01 Twilight Sparkle",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01A-U01.png"
+  },
+  {
+    "id": "TR01A-U02",
+    "name": "Spike|TR01A-U02 Spike",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01A-U02.png"
+  },
+  {
+    "id": "TR01A-U03",
+    "name": "Spike|TR01A-U03 Spike",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01A-U03.png"
+  },
+  {
+    "id": "TR01A-U04",
+    "name": "Owlowiscious|TR01A-U04 Owlowiscious",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01A-U04.png"
+  },
+  {
+    "id": "TR01A-C01",
+    "name": "Owlowiscious|TR01A-C01 Owlowiscious",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01A-C01.png"
+  },
+  {
+    "id": "TR01A-C02",
+    "name": "Owlowiscious|TR01A-C02 Owlowiscious",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01A-C02.png"
+  },
+  {
+    "id": "TR01A-C03",
+    "name": "Twilight Sparkle Story I|TR01A-C03 Twilight Sparkle Story I",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01A-C03.png"
+  },
+  {
+    "id": "TR01A-C04",
+    "name": "Twilight Sparkle Story II|TR01A-C04 Twilight Sparkle Story II",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01A-C04.png"
+  },
+  {
+    "id": "TR01A-C05",
+    "name": "Twilight Sparkle Story III|TR01A-C05 Twilight Sparkle Story III",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01A-C05.png"
+  },
+  {
+    "id": "TR01A-C06",
+    "name": "Twilight Sparkle Story IV|TR01A-C06 Twilight Sparkle Story IV",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01A-C06.png"
+  },
+  {
+    "id": "TR01A-RR01",
+    "name": "Twilight Sparkle|TR01A-RR01 Twilight Sparkle",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01A-RR01.png"
+  },
+  {
+    "id": "TR01B-U01",
+    "name": "Fluttershy|TR01B-U01 Fluttershy",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01B-U01.png"
+  },
+  {
+    "id": "TR01B-U02",
+    "name": "Angel|TR01B-U02 Angel",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01B-U02.png"
+  },
+  {
+    "id": "TR01B-U03",
+    "name": "Philomena|TR01B-U03 Philomena",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01B-U03.png"
+  },
+  {
+    "id": "TR01B-C01",
+    "name": "Fluttershy|TR01B-C01 Fluttershy",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01B-C01.png"
+  },
+  {
+    "id": "TR01B-C02",
+    "name": "Angel|TR01B-C02 Angel",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01B-C02.png"
+  },
+  {
+    "id": "TR01B-C03",
+    "name": "Philomena|TR01B-C03 Philomena",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01B-C03.png"
+  },
+  {
+    "id": "TR01B-C04",
+    "name": "Fluttershy Story I|TR01B-C04 Fluttershy Story I",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01B-C04.png"
+  },
+  {
+    "id": "TR01B-C05",
+    "name": "Fluttershy Story II|TR01B-C05 Fluttershy Story II",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01B-C05.png"
+  },
+  {
+    "id": "TR01B-C06",
+    "name": "Fluttershy Story III|TR01B-C06 Fluttershy Story III",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01B-C06.png"
+  },
+  {
+    "id": "TR01B-C07",
+    "name": "Fluttershy Story IV|TR01B-C07 Fluttershy Story IV",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01B-C07.png"
+  },
+  {
+    "id": "TR01B-RR01",
+    "name": "Fluttershy|TR01B-RR01 Fluttershy",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01B-RR01.png"
+  },
+  {
+    "id": "TR01C-U01",
+    "name": "Pinkie Pie|TR01C-U01 Pinkie Pie",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01C-U01.png"
+  },
+  {
+    "id": "TR01C-U02",
+    "name": "Gummy|TR01C-U02 Gummy",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01C-U02.png"
+  },
+  {
+    "id": "TR01C-U03",
+    "name": "Philomena|TR01C-U03 Philomena",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01C-U03.png"
+  },
+  {
+    "id": "TR01C-U04",
+    "name": "Philomena|TR01C-U04 Philomena",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01C-U04.png"
+  },
+  {
+    "id": "TR01C-C01",
+    "name": "Pinkie Pie|TR01C-C01 Pinkie Pie",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01C-C01.png"
+  },
+  {
+    "id": "TR01C-C02",
+    "name": "Mrs. Cake|TR01C-C02 Mrs. Cake",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01C-C02.png"
+  },
+  {
+    "id": "TR01C-C03",
+    "name": "Pinkie Pie Story I|TR01C-C03 Pinkie Pie Story I",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01C-C03.png"
+  },
+  {
+    "id": "TR01C-C04",
+    "name": "Pinkie Pie Story II|TR01C-C04 Pinkie Pie Story II",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01C-C04.png"
+  },
+  {
+    "id": "TR01C-C05",
+    "name": "Pinkie Pie Story III|TR01C-C05 Pinkie Pie Story III",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01C-C05.png"
+  },
+  {
+    "id": "TR01C-C06",
+    "name": "Pinkie Pie Story IV|TR01C-C06 Pinkie Pie Story IV",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01C-C06.png"
+  },
+  {
+    "id": "TR01C-RR01",
+    "name": "Pinkie Pie|TR01C-RR01 Pinkie Pie",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01C-RR01.png"
+  },
+  {
+    "id": "TR01D-U01",
+    "name": "Applejack|TR01D-U01 Applejack",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01D-U01.png"
+  },
+  {
+    "id": "TR01D-U02",
+    "name": "Apple Bloom|TR01D-U02 Apple Bloom",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01D-U02.png"
+  },
+  {
+    "id": "TR01D-U03",
+    "name": "Winona|TR01D-U03 Winona",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01D-U03.png"
+  },
+  {
+    "id": "TR01D-U04",
+    "name": "Winona|TR01D-U04 Winona",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01D-U04.png"
+  },
+  {
+    "id": "TR01D-C01",
+    "name": "Applejack|TR01D-C01 Applejack",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01D-C01.png"
+  },
+  {
+    "id": "TR01D-C02",
+    "name": "Apple Bloom|TR01D-C02 Apple Bloom",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01D-C02.png"
+  },
+  {
+    "id": "TR01D-C03",
+    "name": "Applejack Story I|TR01D-C03 Applejack Story I",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01D-C03.png"
+  },
+  {
+    "id": "TR01D-C04",
+    "name": "Applejack Story II|TR01D-C04 Applejack Story II",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01D-C04.png"
+  },
+  {
+    "id": "TR01D-C05",
+    "name": "Applejack Story III|TR01D-C05 Applejack Story III",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01D-C05.png"
+  },
+  {
+    "id": "TR01D-C06",
+    "name": "Applejack Story IV|TR01D-C06 Applejack Story IV",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01D-C06.png"
+  },
+  {
+    "id": "TR01D-RR01",
+    "name": "Applejack|TR01D-RR01 Applejack",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01D-RR01.png"
+  },
+  {
+    "id": "TR01E-U01",
+    "name": "Rainbow Dash|TR01E-U01 Rainbow Dash",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01E-U01.png"
+  },
+  {
+    "id": "TR01E-U02",
+    "name": "Scootaloo|TR01E-U02 Scootaloo",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01E-U02.png"
+  },
+  {
+    "id": "TR01E-U03",
+    "name": "Tank|TR01E-U03 Tank",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01E-U03.png"
+  },
+  {
+    "id": "TR01E-U04",
+    "name": "Tank|TR01E-U04 Tank",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01E-U04.png"
+  },
+  {
+    "id": "TR01E-C01",
+    "name": "Rainbow Dash|TR01E-C01 Rainbow Dash",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01E-C01.png"
+  },
+  {
+    "id": "TR01E-C02",
+    "name": "Scootaloo|TR01E-C02 Scootaloo",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01E-C02.png"
+  },
+  {
+    "id": "TR01E-C03",
+    "name": "Rainbow Dash Story I|TR01E-C03 Rainbow Dash Story I",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01E-C03.png"
+  },
+  {
+    "id": "TR01E-C04",
+    "name": "Rainbow Dash Story II|TR01E-C04 Rainbow Dash Story II",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01E-C04.png"
+  },
+  {
+    "id": "TR01E-C05",
+    "name": "Rainbow Dash Story III|TR01E-C05 Rainbow Dash Story III",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01E-C05.png"
+  },
+  {
+    "id": "TR01E-C06",
+    "name": "Rainbow Dash Story IV|TR01E-C06 Rainbow Dash Story IV",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01E-C06.png"
+  },
+  {
+    "id": "TR01E-RR01",
+    "name": "Rainbow Dash|TR01E-RR01 Rainbow Dash",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01E-RR01.png"
+  },
+  {
+    "id": "TR01F-U01",
+    "name": "Rarity|TR01F-U01 Rarity",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01F-U01.png"
+  },
+  {
+    "id": "TR01F-U02",
+    "name": "Sweetie Belle|TR01F-U02 Sweetie Belle",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01F-U02.png"
+  },
+  {
+    "id": "TR01F-U03",
+    "name": "Opal|TR01F-U03 Opal",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01F-U03.png"
+  },
+  {
+    "id": "TR01F-U04",
+    "name": "Opal|TR01F-U04 Opal",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "U",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01F-U04.png"
+  },
+  {
+    "id": "TR01F-C01",
+    "name": "Rarity|TR01F-C01 Rarity",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01F-C01.png"
+  },
+  {
+    "id": "TR01F-C02",
+    "name": "Sweetie Belle|TR01F-C02 Sweetie Belle",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01F-C02.png"
+  },
+  {
+    "id": "TR01F-C03",
+    "name": "Rarity Story I|TR01F-C03 Rarity Story I",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01F-C03.png"
+  },
+  {
+    "id": "TR01F-C04",
+    "name": "Rarity Story II|TR01F-C04 Rarity Story II",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01F-C04.png"
+  },
+  {
+    "id": "TR01F-C05",
+    "name": "Rarity Story III|TR01F-C05 Rarity Story III",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01F-C05.png"
+  },
+  {
+    "id": "TR01F-C06",
+    "name": "Rarity Story IV|TR01F-C06 Rarity Story IV",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "C",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01F-C06.png"
+  },
+  {
+    "id": "TR01F-RR01",
+    "name": "Rarity|TR01F-RR01 Rarity",
+    "set_code": "PR",
+    "card_type": "Character",
+    "rarity": "RR",
+    "cost": 1,
+    "power": 2,
+    "defense": 2,
+    "traits": [
+      "Kayou"
+    ],
+    "ability_text": "",
+    "image_url": "https://kayoumylittleponycardgame.miraheze.org/wiki/Special:FilePath/TR01F-RR01.png"
+  }
+]
