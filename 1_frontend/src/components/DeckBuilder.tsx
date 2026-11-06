@@ -8,11 +8,11 @@ const MAX_COPIES_PER_CARD = 3;
 interface Card {
   id: string | number;
   name: string;
-  type?: string; 
+  card_type?: string; 
   element?: string;
-  imageUrl?: string;
-  cardNumber?: string;
-  effect?: string;
+  image_url?: string;
+  card_number?: string;
+  effect_text?: string;
 }
 
 interface Deck {
@@ -37,7 +37,7 @@ export default function DeckBuilder() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Modal State for Story Confirmation & Selection Popup
+  // Modal State for Story Selection Popup
   const [pendingStories, setPendingStories] = useState<Card[]>([]);
   const [pendingLeader, setPendingLeader] = useState<Card | null>(null);
   const [showStoryModal, setShowStoryModal] = useState<boolean>(false);
@@ -45,65 +45,54 @@ export default function DeckBuilder() {
   const [selectedStoryKey, setSelectedStoryKey] = useState<string>('');
 
   const isLeaderCard = (card: Card) => {
-    const id = String(card.id || card.cardNumber || '').toUpperCase();
-    const isStarterFlagship = /-001$/.test(id);
-    const isLeaderRarity = id.includes('-RR') || id.includes('-CR') || id.includes('-GR');
-    const typeStr = (card.type || '').toLowerCase();
+    const cardNumber = String(card.card_number || card.id || '').toUpperCase();
+    const isStarterFlagship = /-001$/.test(cardNumber);
+    const isLeaderRarity = cardNumber.includes('-RR') || cardNumber.includes('-CR') || cardNumber.includes('-GR');
+    const typeStr = (card.card_type || '').toLowerCase();
     const explicitLeaderType = typeStr.includes('leader') || typeStr.includes('main character');
 
     return isStarterFlagship || isLeaderRarity || explicitLeaderType;
   };
 
   const isSceneCard = (card: Card) => {
-    const typeStr = (card.type || '').toLowerCase();
+    const typeStr = (card.card_type || '').toLowerCase();
     const nameStr = (card.name || '').toLowerCase();
-    const idStr = String(card.id || card.cardNumber || '').toLowerCase();
-    return typeStr.includes('scene') || typeStr.includes('stage') || typeStr.includes('location') || nameStr.includes('scene') || idStr.includes('scn');
+    const numStr = String(card.card_number || '').toLowerCase();
+    return typeStr.includes('scene') || typeStr.includes('stage') || typeStr.includes('location') || nameStr.includes('scene') || numStr.includes('scn');
   };
 
-  // Strict Story Card Validator: Filters out items (-SPR, -C, -R, etc.) and explicitly looks for story markers
   const isStoryCard = (card: Card) => {
-    const typeStr = (card.type || '').toLowerCase();
+    const typeStr = (card.card_type || '').toLowerCase();
     const nameStr = (card.name || '').toLowerCase();
-    const idStr = String(card.id || card.cardNumber || '').toUpperCase();
+    const numStr = String(card.card_number || '').toUpperCase();
 
-    // Exclude promo/special item cards like -SPR
-    if (idStr.includes('-SPR') || idStr.includes('-C') && !idStr.includes('ST')) {
-      return false;
-    }
+    // Exclude promo/item cards like -SPR
+    if (numStr.includes('-SPR')) return false;
 
     return (
       typeStr.includes('story') || 
       typeStr.includes('quest') || 
       typeStr.includes('chapter') || 
+      typeStr.includes('event') ||
       nameStr.includes('searching for elements') ||
       nameStr.includes('stage') ||
-      idStr.includes('ST') ||
-      idStr.includes('STORY')
+      numStr.includes('ST')
     );
   };
 
-  // Build Story Groups using strict validation and serial number sorting
+  // Step 2 Algorithm:
+  // 1. Find all story cards.
+  // 2. Find each unique story name with the lowest serial number (card_number).
+  // 3. Add that card and the 3 subsequent cards as a set.
   const buildStoryGroups = (allCards: Card[]) => {
-    let stories = allCards.filter(c => isStoryCard(c));
-    
-    // If strict filter is too aggressive and returns under 4 cards, fall back to cards explicitly containing Roman numerals or Stage labels
-    if (stories.length < 4) {
-      stories = allCards.filter(c => {
-        const name = (c.name || '').toLowerCase();
-        return name.includes('I') || name.includes('II') || name.includes('III') || name.includes('IV') || name.includes('stage');
-      });
-    }
+    const stories = allCards.filter(c => isStoryCard(c));
+    const sourcePool = stories.length >= 4 ? stories : allCards;
 
-    if (stories.length < 4) {
-      stories = allCards.slice(0, 4); // Ultimate fallback
-    }
-
-    // Sort pool by card ID / serial number ascending
-    const sortedPool = [...stories].sort((a, b) => {
-      const idA = String(a.id || a.cardNumber || '');
-      const idB = String(b.id || b.cardNumber || '');
-      return idA.localeCompare(idB);
+    // Sort pool by card_number ascending to find lowest serial numbers first
+    const sortedPool = [...sourcePool].sort((a, b) => {
+      const numA = String(a.card_number || a.id || '');
+      const numB = String(b.card_number || b.id || '');
+      return numA.localeCompare(numB);
     });
 
     const groups: Record<string, Card[]> = {};
@@ -363,7 +352,7 @@ export default function DeckBuilder() {
     }
   };
 
-  // Catalog filtering strictly driven by active step
+  // Catalog filtering driven by active step with reliable database-agnostic fallback for scenes
   const filteredCatalog = useMemo(() => {
     const result = catalogCards.filter(c => {
       const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -385,7 +374,7 @@ export default function DeckBuilder() {
       const cardElement = (c.element || '').toLowerCase();
       const matchesElement = !leaderElement || !cardElement || cardElement === 'neutral' || cardElement === leaderElement;
 
-      // Step 3: Scenes filtering.
+      // Step 3: Scenes filtering (with fallback if explicit scene tags are sparse in DB)
       if (builderStep === 'scenes') {
         const hasSceneCardsInDB = catalogCards.some(card => isSceneCard(card));
         if (hasSceneCardsInDB) {
@@ -474,7 +463,7 @@ export default function DeckBuilder() {
                 <div key={story.id} style={{ border: '1px solid #fbcfe8', borderRadius: '10px', padding: '8px', backgroundColor: '#fef3c7', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div style={{ height: '90px', backgroundColor: 'white', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                     <img 
-                      src={story.imageUrl ? (story.imageUrl.startsWith('http') ? story.imageUrl : `https://cards.equestria-clash.pages.dev/assets/${story.id}.webp`) : `https://cards.equestria-clash.pages.dev/assets/${story.id}.webp`} 
+                      src={story.image_url ? (story.image_url.startsWith('http') ? story.image_url : `https://cards.equestria-clash.pages.dev/assets/${story.id}.webp`) : `https://cards.equestria-clash.pages.dev/assets/${story.id}.webp`} 
                       alt={story.name} 
                       style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '6px' }} 
                       onError={(e) => {
@@ -484,7 +473,7 @@ export default function DeckBuilder() {
                     />
                   </div>
                   <h5 style={{ margin: 0, fontSize: '0.7rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{story.name}</h5>
-                  <span style={{ fontSize: '0.55rem', color: '#92400e', fontWeight: 700, lineHeight: 1.2 }}>{story.effect || 'Standard Story Card'}</span>
+                  <span style={{ fontSize: '0.55rem', color: '#92400e', fontWeight: 700, lineHeight: 1.2 }}>{story.effect_text || 'Standard Story Card'}</span>
                 </div>
               ))}
             </div>
@@ -620,7 +609,7 @@ export default function DeckBuilder() {
                       )}
                       <div style={{ height: '110px', backgroundColor: '#fdf2f8', borderRadius: '6px', marginBottom: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                         <img 
-                          src={card.imageUrl ? (card.imageUrl.startsWith('http') ? card.imageUrl : `https://cards.equestria-clash.pages.dev/assets/${card.id}.webp`) : `https://cards.equestria-clash.pages.dev/assets/${card.id}.webp`} 
+                          src={card.image_url ? (card.image_url.startsWith('http') ? card.image_url : `https://cards.equestria-clash.pages.dev/assets/${card.id}.webp`) : `https://cards.equestria-clash.pages.dev/assets/${card.id}.webp`} 
                           alt={card.name} 
                           style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '6px' }} 
                           onError={(e) => {
@@ -630,7 +619,7 @@ export default function DeckBuilder() {
                         />
                       </div>
                       <h5 style={{ margin: 0, fontSize: '0.75rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h5>
-                      <span style={{ fontSize: '0.6rem', color: '#78716c', textTransform: 'uppercase' }}>{card.type || 'Card'}</span>
+                      <span style={{ fontSize: '0.6rem', color: '#78716c', textTransform: 'uppercase' }}>{card.card_type || 'Card'}</span>
                     </div>
                   );
                 })}
