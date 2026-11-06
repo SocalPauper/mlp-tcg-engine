@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
-import { initDatabase, pool } from '../db.js';
+import { initDatabase, pool } from '../4_data/db.js';
 
 // Import modular backend routes
 import authRouter from './routes/auth.js';
