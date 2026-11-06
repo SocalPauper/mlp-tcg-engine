@@ -20,9 +20,28 @@ async function startServer() {
     // Initialize Database connection and core tables
     await initDatabase();
 
+    // Ensure auth schema and users table exist
+    await pool.query(`
+      CREATE SCHEMA IF NOT EXISTS auth;
+
+      CREATE TABLE IF NOT EXISTS auth.users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        display_name VARCHAR(100) NOT NULL,
+        email VARCHAR(255) UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        age INT NOT NULL,
+        is_safe_mode BOOLEAN DEFAULT TRUE,
+        is_verified_adult BOOLEAN DEFAULT FALSE,
+        is_admin BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('[DATABASE] Auth schema and users table verified successfully.');
+
     // Ensure the decks table exists for the Deck Builder feature
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS decks (
+      CREATE TABLE IF NOT EXISTS auth.decks (
         id VARCHAR(255) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         author VARCHAR(255),

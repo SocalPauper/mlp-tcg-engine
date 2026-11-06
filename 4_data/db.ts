@@ -7,9 +7,13 @@ export const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
+// Force schema search path on every client connection checkout
+pool.on('connect', (client) => {
+  client.query('SET search_path TO game, auth, public;');
+});
+
 export const initDatabase = async () => {
   try {
-    // We will run schema.sql contents through this pool in a migration script
     const client = await pool.connect();
     console.log('[DB] PostgreSQL connected successfully.');
     client.release();
