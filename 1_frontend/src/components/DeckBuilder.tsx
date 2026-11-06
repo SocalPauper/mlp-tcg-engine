@@ -61,22 +61,18 @@ export default function DeckBuilder() {
     return typeStr.toLowerCase().includes('story');
   };
 
-  const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
+const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
     const leaderIdStr = String(leaderCard.id || leaderCard.cardNumber || '').trim();
-    // Extract set prefix, e.g., "BP01" or "SD01" from "BP01-CR04"
     const setPrefix = leaderIdStr.split('-')[0].toUpperCase();
     
-    // 1. Try finding stories matching the exact set prefix (e.g., BP01 stories for BP01 leader)
     let matchingStories = allCards.filter(c => {
       const cType = (c.type || '').toLowerCase();
       const cId = String(c.id || c.cardNumber || '').toUpperCase();
       return isStoryCard(cType) && cId.startsWith(setPrefix);
     });
 
-    // 2. If not enough exact set stories, group by alternate numeric block or fallback to any unassigned story set
     if (matchingStories.length < 4) {
       const allStories = allCards.filter(c => isStoryCard(c.type));
-      // Group stories by their set prefixes
       const prefixGroups: Record<string, Card[]> = {};
       allStories.forEach(s => {
         const sId = String(s.id || s.cardNumber || '').toUpperCase();
@@ -85,9 +81,9 @@ export default function DeckBuilder() {
         prefixGroups[p].push(s);
       });
 
-      // Find a group with at least 4 stories
-      const validGroup = Object.values(prefixGroups.find(group => group.length >= 4) || {});
-      if (validGroup.length >= 4) {
+      // Fixed: converted Object.values() to an array before calling .find()
+      const validGroup = Object.values(prefixGroups).find(group => group.length >= 4);
+      if (validGroup && validGroup.length >= 4) {
         matchingStories = validGroup.slice(0, 4);
       } else {
         matchingStories = allStories.slice(0, 4);
