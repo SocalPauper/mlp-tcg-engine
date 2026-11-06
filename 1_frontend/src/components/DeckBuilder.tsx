@@ -62,17 +62,20 @@ export default function DeckBuilder() {
   };
 
 const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
-    const leaderIdStr = String(leaderCard.id || leaderCard.cardNumber || '').trim();
-    const setPrefix = leaderIdStr.split('-')[0].toUpperCase();
+    const leaderIdStr = String(leaderCard.id || leaderCard.cardNumber || '').trim().toUpperCase();
     
-    let matchingStories = allCards.filter(c => {
-      const cType = (c.type || '').toLowerCase();
-      const cId = String(c.id || c.cardNumber || '').toUpperCase();
-      return isStoryCard(cType) && cId.startsWith(setPrefix);
+    // Filter all story cards from catalog
+    const allStories = allCards.filter(c => isStoryCard(c.type));
+    
+    // 1. Try exact set prefix match (e.g., leader 'BP01-CR04' matches stories starting with 'BP01')
+    const setPrefix = leaderIdStr.split('-')[0];
+    let matchingStories = allStories.filter(s => {
+      const sId = String(s.id || s.cardNumber || '').toUpperCase();
+      return sId.startsWith(setPrefix);
     });
 
+    // 2. If not enough exact prefix matches, group by set code and find a distinct matching group
     if (matchingStories.length < 4) {
-      const allStories = allCards.filter(c => isStoryCard(c.type));
       const prefixGroups: Record<string, Card[]> = {};
       allStories.forEach(s => {
         const sId = String(s.id || s.cardNumber || '').toUpperCase();
@@ -81,10 +84,13 @@ const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
         prefixGroups[p].push(s);
       });
 
-      // Fixed: converted Object.values() to an array before calling .find()
-      const validGroup = Object.values(prefixGroups).find(group => group.length >= 4);
-      if (validGroup && validGroup.length >= 4) {
-        matchingStories = validGroup.slice(0, 4);
+      // Look for any group that isn't the default BP01 (or whatever default is first) if another exists
+      const availableGroups = Object.entries(prefixGroups).filter(([_, group]) => group.length >= 4);
+      
+      if (availableGroups.length > 0) {
+        // Try to pick a group that matches the leader's theme/set, or cycle based on leader ID hash
+        const targetGroup = availableGroups.find(([prefix]) => prefix === setPrefix) || availableGroups[0];
+        matchingStories = targetGroup[1].slice(0, 4);
       } else {
         matchingStories = allStories.slice(0, 4);
       }
