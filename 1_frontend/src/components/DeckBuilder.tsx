@@ -234,7 +234,7 @@ export default function DeckBuilder() {
       // Once leader is selected, hide leaders from general catalog view
       if (isLdr) return false;
 
-      // Color / Element matching rule adherence according to Kayou specifications
+      // Strict Kayou element/color matching rule for characters, items, actions, and events
       const leaderElement = (selectedDeck.maneCharacter.element || '').toLowerCase();
       const cardElement = (c.element || '').toLowerCase();
       const matchesElement = !leaderElement || !cardElement || cardElement === 'neutral' || cardElement === leaderElement;
@@ -363,7 +363,7 @@ export default function DeckBuilder() {
             </div>
 
             {/* Deck Editor Sidebar */}
-            <div style={{ backgroundColor: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #fde0e8', display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '620px', overflowY: 'auto' }}>
+            <div style={{ backgroundColor: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #fde0e8', display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '660px', overflowY: 'auto' }}>
               
               {/* Mane Leader Section */}
               <div>
@@ -413,10 +413,10 @@ export default function DeckBuilder() {
                 </div>
               </div>
 
-              {/* Main Deck Section */}
+              {/* Main Deck Section (Extended Vertically with Card Count) */}
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', fontWeight: 800 }}>📦 Main Deck Cards</h4>
-                <div style={{ flex: 1, maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', fontWeight: 800 }}>📦 Main Deck Cards ({selectedDeck?.cards?.length || 0}/{MAX_DECK_SIZE})</h4>
+                <div style={{ flex: 1, maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {stackedDeckCards.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '20px 0', color: '#a8a29e', fontSize: '0.75rem' }}>No main deck cards added yet.</div>
                   ) : (
@@ -424,7 +424,7 @@ export default function DeckBuilder() {
                       <div key={card.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fdf2f8', padding: '6px 10px', borderRadius: '8px', border: '1px solid #fce7f3' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
                           <span style={{ backgroundColor: '#db2777', color: 'white', fontWeight: 900, fontSize: '0.65rem', padding: '2px 5px', borderRadius: '4px' }}>{count}x</span>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>{card.name}</span>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }, card.name}></span>
                         </div>
                         <button onClick={() => handleRemoveCard(card.id, 'cards')} style={{ background: '#ef4444', color: 'white', border: 'none', width: '20px', height: '20px', borderRadius: '4px', cursor: 'pointer', fontWeight: 900, fontSize: '0.75rem' }}>−</button>
                       </div>
