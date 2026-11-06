@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { API_BASE_URL } from '../config';
 
 const MAX_DECK_SIZE = 50;
 const MAX_COPIES_PER_CARD = 3;
@@ -15,8 +16,6 @@ interface Card {
 interface Deck {
   id: string | number;
   name: string;
-  author: string;
-  authorId: string;
   maneCharacter: Card | null;
   cards: Card[];
   scenes: Card[];
@@ -24,7 +23,6 @@ interface Deck {
 }
 
 export default function DeckBuilder() {
-  const currentUser = 'Jesse Alvarez'; 
   const [viewMode, setViewMode] = useState<'hub' | 'editor'>('hub');
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
   const [decks, setDecks] = useState<Deck[]>([]);
@@ -55,7 +53,7 @@ export default function DeckBuilder() {
   };
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/decks')
+    fetch(`${API_BASE_URL}/api/decks`)
       .then(res => res.ok ? res.json() : Promise.reject())
       .then(data => {
         if (Array.isArray(data)) {
@@ -72,7 +70,7 @@ export default function DeckBuilder() {
         if (saved) setDecks(JSON.parse(saved));
       });
 
-    fetch('http://localhost:3001/api/cards')
+    fetch(`${API_BASE_URL}/api/cards`)
       .then(res => res.ok ? res.json() : Promise.reject())
       .then(data => {
         if (Array.isArray(data)) {
@@ -97,8 +95,6 @@ export default function DeckBuilder() {
     const newDeck: Deck = { 
       id: 'deck-' + Date.now(), 
       name: 'New Custom Deck', 
-      author: currentUser, 
-      authorId: currentUser, 
       maneCharacter: null,
       cards: [],
       scenes: [],
