@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import DeckBuilder from './components/DeckBuilder.tsx';
+import Signup from './components/Signup.tsx';
+import { AuthProvider, useAuth } from './context/AuthContext.tsx';
 import { API_BASE_URL } from './config';
 
-export default function App() {
+function AppContent() {
+  const { user, logout, isAuthenticated } = useAuth();
   const [currentTab, setCurrentTab] = useState<'lobby' | 'decks' | 'leaderboard' | 'community'>('decks');
   const [announcement, setAnnouncement] = useState<string | null>(null);
 
@@ -47,7 +50,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
+        {/* Navigation Tabs (Only interactive if authenticated) */}
         <nav style={{ display: 'flex', gap: '8px', backgroundColor: 'rgba(255, 255, 255, 0.08)', padding: '6px', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.12)' }}>
           {[
             { id: 'lobby', label: 'Lobby' },
@@ -79,18 +82,40 @@ export default function App() {
           })}
         </nav>
 
-        {/* User Profile Badge (Ready for auth integration) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'rgba(255, 255, 255, 0.08)', padding: '6px 14px', borderRadius: '50px', border: '1px solid rgba(255, 255, 255, 0.12)' }}>
-          <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#ec4899', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.75rem' }}>
-            👤
-          </div>
-          <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 700 }}>Not Logged In</span>
+        {/* User Profile Badge & Auth Status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {isAuthenticated && user ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'rgba(255, 255, 255, 0.08)', padding: '6px 14px', borderRadius: '50px', border: '1px solid rgba(255, 255, 255, 0.12)' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: user.isSafeMode ? '#f59e0b' : '#10b981', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.75rem' }}>
+                {user.isSafeMode ? '🛡️' : '🔓'}
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ color: 'white', fontSize: '0.8rem', fontWeight: 700 }}>{user.displayName}</div>
+                <div style={{ color: '#f0abfc', fontSize: '0.65rem' }}>{user.isSafeMode ? 'Safe Mode' : 'Full Access'}</div>
+              </div>
+              <button
+                onClick={logout}
+                style={{ background: '#374151', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', marginLeft: '6px' }}
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'rgba(255, 255, 255, 0.08)', padding: '6px 14px', borderRadius: '50px', border: '1px solid rgba(255, 255, 255, 0.12)' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#ec4899', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.75rem' }}>
+                👤
+              </div>
+              <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 700 }}>Not Logged In</span>
+            </div>
+          )}
         </div>
       </header>
 
       {/* Main Content Area */}
       <main style={{ flex: 1, padding: '24px 32px', maxWidth: '1400px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
-        {currentTab === 'decks' ? (
+        {!isAuthenticated ? (
+          <Signup />
+        ) : currentTab === 'decks' ? (
           <DeckBuilder />
         ) : (
           <div style={{ backgroundColor: 'white', padding: '48px', borderRadius: '24px', textAlign: 'center', border: '1px solid #fbcfe8', color: '#57534e' }}>
@@ -101,5 +126,13 @@ export default function App() {
       </main>
 
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
