@@ -79,15 +79,12 @@ export default function App() {
           })}
         </nav>
 
-        {/* User Profile Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'rgba(255, 255, 255, 0.08)', padding: '6px 14px 6px 6px', borderRadius: '50px', border: '1px solid rgba(255, 255, 255, 0.12)' }}>
-          <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#ec4899', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.8rem' }}>
-            JA
+        {/* User Profile Badge (Ready for auth integration) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'rgba(255, 255, 255, 0.08)', padding: '6px 14px', borderRadius: '50px', border: '1px solid rgba(255, 255, 255, 0.12)' }}>
+          <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#ec4899', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.75rem' }}>
+            👤
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 800, lineHeight: 1.1 }}>Jesse Alvarez</span>
-            <span style={{ color: '#f472b6', fontSize: '0.65rem', fontWeight: 700 }}>Administrator</span>
-          </div>
+          <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 700 }}>Not Logged In</span>
         </div>
       </header>
 
