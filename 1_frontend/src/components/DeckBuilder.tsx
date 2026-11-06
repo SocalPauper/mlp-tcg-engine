@@ -62,20 +62,39 @@ export default function DeckBuilder() {
   };
 
   const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
-    const leaderIdStr = String(leaderCard.id || leaderCard.cardNumber || '');
-    const setPrefix = leaderIdStr.split('-')[0];
+    const leaderIdStr = String(leaderCard.id || leaderCard.cardNumber || '').trim();
+    // Extract set prefix, e.g., "BP01" or "SD01" from "BP01-CR04"
+    const setPrefix = leaderIdStr.split('-')[0].toUpperCase();
     
-    const matchingStories = allCards.filter(c => {
+    // 1. Try finding stories matching the exact set prefix (e.g., BP01 stories for BP01 leader)
+    let matchingStories = allCards.filter(c => {
       const cType = (c.type || '').toLowerCase();
-      const cId = String(c.id || c.cardNumber || '');
+      const cId = String(c.id || c.cardNumber || '').toUpperCase();
       return isStoryCard(cType) && cId.startsWith(setPrefix);
     });
 
-    if (matchingStories.length >= 4) {
-      return matchingStories.slice(0, 4);
+    // 2. If not enough exact set stories, group by alternate numeric block or fallback to any unassigned story set
+    if (matchingStories.length < 4) {
+      const allStories = allCards.filter(c => isStoryCard(c.type));
+      // Group stories by their set prefixes
+      const prefixGroups: Record<string, Card[]> = {};
+      allStories.forEach(s => {
+        const sId = String(s.id || s.cardNumber || '').toUpperCase();
+        const p = sId.split('-')[0];
+        if (!prefixGroups[p]) prefixGroups[p] = [];
+        prefixGroups[p].push(s);
+      });
+
+      // Find a group with at least 4 stories
+      const validGroup = Object.values(prefixGroups.find(group => group.length >= 4) || {});
+      if (validGroup.length >= 4) {
+        matchingStories = validGroup.slice(0, 4);
+      } else {
+        matchingStories = allStories.slice(0, 4);
+      }
     }
-    const anyStories = allCards.filter(c => isStoryCard(c.type));
-    return anyStories.slice(0, 4);
+
+    return matchingStories.slice(0, 4);
   };
 
   useEffect(() => {
@@ -194,7 +213,6 @@ export default function DeckBuilder() {
       if (!isLeaderCard(card)) {
         return showError('You must select a valid Mane Character leader card first!');
       }
-      // Trigger Story Confirmation Popup
       const matchingStories = getStoriesForLeader(card, catalogCards);
       setPendingLeader(card);
       setPendingStories(matchingStories);
@@ -248,7 +266,7 @@ export default function DeckBuilder() {
       stories: pendingStories 
     });
     setTypeFilter('All');
-    setEngineStatus(`Assigned ${pendingLeader.name} as Mane Leader with 4 confirmed stories bundled!`);
+    setEngineStatus(`Assigned ${pendingLeader.name} as Mane Leader with correct set stories bundled!`);
     setShowStoryModal(false);
     setPendingLeader(null);
     setPendingStories([]);
@@ -374,7 +392,7 @@ export default function DeckBuilder() {
             <div>
               <h3 style={{ margin: '0 0 4px 0', fontSize: '1.25rem', fontWeight: 900, color: '#1c1917' }}>📖 Confirm Bundled Story Cards</h3>
               <p style={{ margin: 0, fontSize: '0.85rem', color: '#78716c' }}>
-                Selecting leader <strong style={{ color: '#6b21a8' }}>{pendingLeader?.name}</strong> automatically bundles the following 4 story cards into your deck:
+                Selecting leader <strong style={{ color: '#6b21a8' }}>{pendingLeader?.name}</strong> matches the following 4 expansion story cards:
               </p>
             </div>
 
@@ -486,7 +504,7 @@ export default function DeckBuilder() {
 
               {!selectedDeck?.maneCharacter && (
                 <div style={{ backgroundColor: '#fdf4f8', color: '#6b21a8', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 800, border: '1px solid #fbcfe8', textAlign: 'center' }}>
-                  ✨ Select your Mane Character Leader below to unlock deck building, filtering, and story preview.
+                  ✨ Select your Mane Character Leader below to unlock deck building, filtering, and set-matched story preview.
                 </div>
               )}
 
@@ -559,7 +577,7 @@ export default function DeckBuilder() {
 
               {/* Stories Section (Auto-bundled & Locked) */}
               <div>
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', fontWeight: 800, color: '#d97706' }}>📖 Stories ({selectedDeck?.stories?.length || 0}/4) [Auto-Bundled]</h4>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', fontWeight: 800, color: '#d97706' }}>📖 Stories ({selectedDeck?.stories?.length || 0}/4) [Set-Matched]</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '90px', overflowY: 'auto' }}>
                   {(!selectedDeck?.stories || selectedDeck.stories.length === 0) ? (
                     <div style={{ color: '#a8a29e', fontSize: '0.7rem', textAlign: 'center', padding: '6px' }}>Select leader to bundle stories.</div>
