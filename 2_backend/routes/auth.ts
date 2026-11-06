@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { pool as db } from '../../db.js';
+import { pool as db } from '../../4_data/db.js';
 import { sendVerificationEmail } from '../utils/mailer.js';
 
 const router = Router();
