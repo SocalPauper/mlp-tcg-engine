@@ -12,6 +12,7 @@ interface Card {
   element?: string;
   imageUrl?: string;
   cardNumber?: string;
+  effect?: string;
 }
 
 interface Deck {
@@ -36,6 +37,11 @@ export default function DeckBuilder() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // Modal State for Story Confirmation Popup
+  const [pendingStories, setPendingStories] = useState<Card[]>([]);
+  const [pendingLeader, setPendingLeader] = useState<Card | null>(null);
+  const [showStoryModal, setShowStoryModal] = useState<boolean>(false);
+
   // Leader identification via ID patterns (-001 starter flagships, -RR, -CR, -GR)
   const isLeaderCard = (card: Card) => {
     const id = String(card.id || card.cardNumber || '').toUpperCase();
@@ -55,10 +61,8 @@ export default function DeckBuilder() {
     return typeStr.toLowerCase().includes('story');
   };
 
-  // Automatically bundle/find matching stories for a selected leader
   const getStoriesForLeader = (leaderCard: Card, allCards: Card[]) => {
     const leaderIdStr = String(leaderCard.id || leaderCard.cardNumber || '');
-    // Kayou matching heuristic: find story cards sharing the same set prefix (e.g., 'BP01' or expansion code)
     const setPrefix = leaderIdStr.split('-')[0];
     
     const matchingStories = allCards.filter(c => {
@@ -67,7 +71,6 @@ export default function DeckBuilder() {
       return isStoryCard(cType) && cId.startsWith(setPrefix);
     });
 
-    // If exact set stories are found, take up to 4; otherwise fallback to any 4 story cards
     if (matchingStories.length >= 4) {
       return matchingStories.slice(0, 4);
     }
@@ -191,34 +194,20 @@ export default function DeckBuilder() {
       if (!isLeaderCard(card)) {
         return showError('You must select a valid Mane Character leader card first!');
       }
-      // Automatically bundle matching stories for this leader
-      const assignedStories = getStoriesForLeader(card, catalogCards);
-      setSelectedDeck({ 
-        ...selectedDeck, 
-        maneCharacter: card, 
-        cards: [], 
-        scenes: [], 
-        stories: assignedStories 
-      });
-      setTypeFilter('All');
-      setEngineStatus(`Assigned ${card.name} as Mane Leader! 4 corresponding stories automatically bundled.`);
-      setTimeout(() => setEngineStatus(null), 3000);
+      // Trigger Story Confirmation Popup
+      const matchingStories = getStoriesForLeader(card, catalogCards);
+      setPendingLeader(card);
+      setPendingStories(matchingStories);
+      setShowStoryModal(true);
       return;
     }
 
     if (isLeaderCard(card)) {
-      if (confirm(`Change Mane Leader to ${card.name}? (Note: This will reset your current deck contents and stories).`)) {
-        const assignedStories = getStoriesForLeader(card, catalogCards);
-        setSelectedDeck({ 
-          ...selectedDeck, 
-          maneCharacter: card, 
-          cards: [], 
-          scenes: [], 
-          stories: assignedStories 
-        });
-        setTypeFilter('All');
-        setEngineStatus(`Updated Mane Leader to ${card.name}! Stories re-bundled.`);
-        setTimeout(() => setEngineStatus(null), 2500);
+      if (confirm(`Change Mane Leader to ${card.name}? (Note: This will reset your current deck contents).`)) {
+        const matchingStories = getStoriesForLeader(card, catalogCards);
+        setPendingLeader(card);
+        setPendingStories(matchingStories);
+        setShowStoryModal(true);
       }
       return;
     }
@@ -234,7 +223,7 @@ export default function DeckBuilder() {
     }
 
     if (isStoryCard(cardType)) {
-      return showError('Story cards are automatically bundled with your Mane Character Leader and cannot be manually modified.');
+      return showError('Story cards are automatically bundled with your Mane Character Leader.');
     }
 
     if (selectedDeck.cards.length >= MAX_DECK_SIZE) {
@@ -247,6 +236,29 @@ export default function DeckBuilder() {
     }
 
     setSelectedDeck({ ...selectedDeck, cards: [...selectedDeck.cards, card] });
+  };
+
+  const confirmStoryBundle = () => {
+    if (!selectedDeck || !pendingLeader) return;
+    setSelectedDeck({ 
+      ...selectedDeck, 
+      maneCharacter: pendingLeader, 
+      cards: [], 
+      scenes: [], 
+      stories: pendingStories 
+    });
+    setTypeFilter('All');
+    setEngineStatus(`Assigned ${pendingLeader.name} as Mane Leader with 4 confirmed stories bundled!`);
+    setShowStoryModal(false);
+    setPendingLeader(null);
+    setPendingStories([]);
+    setTimeout(() => setEngineStatus(null), 3000);
+  };
+
+  const cancelStoryBundle = () => {
+    setShowStoryModal(false);
+    setPendingLeader(null);
+    setPendingStories([]);
   };
 
   const handleRemoveLeader = () => {
@@ -294,7 +306,6 @@ export default function DeckBuilder() {
       const isLdr = isLeaderCard(c);
       const isSty = isStoryCard(c.type);
 
-      // Hide story cards from manual catalog browsing since they are auto-bundled
       if (isSty) return false;
 
       if (!selectedDeck?.maneCharacter) {
@@ -352,9 +363,48 @@ export default function DeckBuilder() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative' }}>
       {engineStatus && <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '10px', borderRadius: '12px', textAlign: 'center', fontWeight: 800 }}>{engineStatus}</div>}
       {errorMsg && <div style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '10px', borderRadius: '12px', textAlign: 'center', fontWeight: 800 }}>{errorMsg}</div>}
+
+      {/* Story Confirmation Modal Popup */}
+      {showStoryModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '20px', maxWidth: '700px', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: '2px solid #fbcfe8' }}>
+            <div>
+              <h3 style={{ margin: '0 0 4px 0', fontSize: '1.25rem', fontWeight: 900, color: '#1c1917' }}>📖 Confirm Bundled Story Cards</h3>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#78716c' }}>
+                Selecting leader <strong style={{ color: '#6b21a8' }}>{pendingLeader?.name}</strong> automatically bundles the following 4 story cards into your deck:
+              </p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', maxHeight: '350px', overflowY: 'auto', padding: '4px' }}>
+              {pendingStories.map(story => (
+                <div key={story.id} style={{ border: '1px solid #fbcfe8', borderRadius: '10px', padding: '8px', backgroundColor: '#fef3c7', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ height: '90px', backgroundColor: 'white', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                    <img 
+                      src={story.imageUrl ? (story.imageUrl.startsWith('http') ? story.imageUrl : `https://cards.equestria-clash.pages.dev/assets/${story.id}.webp`) : `https://cards.equestria-clash.pages.dev/assets/${story.id}.webp`} 
+                      alt={story.name} 
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '6px' }} 
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="140" viewBox="0 0 100 140"><rect width="100" height="140" fill="%23fdf2f8"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23db2777" font-family="sans-serif" font-size="10" font-weight="bold">No Art</text></svg>';
+                      }}
+                    />
+                  </div>
+                  <h5 style={{ margin: 0, fontSize: '0.7rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{story.name}</h5>
+                  <span style={{ fontSize: '0.55rem', color: '#92400e', fontWeight: 700, lineHeight: 1.2 }}>{story.effect || 'Standard Story Card'}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #fdf2f8', paddingTop: '12px' }}>
+              <button onClick={cancelStoryBundle} style={{ backgroundColor: '#e7e5e4', color: '#44403c', border: 'none', padding: '10px 18px', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={confirmStoryBundle} style={{ backgroundColor: '#db2777', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>Confirm & Add Leader</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {viewMode === 'hub' ? (
         <>
@@ -436,7 +486,7 @@ export default function DeckBuilder() {
 
               {!selectedDeck?.maneCharacter && (
                 <div style={{ backgroundColor: '#fdf4f8', color: '#6b21a8', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 800, border: '1px solid #fbcfe8', textAlign: 'center' }}>
-                  ✨ Select your Mane Character Leader below to unlock deck building, filtering, and auto-bundled stories.
+                  ✨ Select your Mane Character Leader below to unlock deck building, filtering, and story preview.
                 </div>
               )}
 
