@@ -3,7 +3,7 @@ const { Pool } = pkg;
 
 // Robust PostgreSQL Pool with forced SSL for Render/Cloud environments
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://localhost:5432/mlp_tcg',
+  connectionString: process.env.DATABASE_URL || 'postgresql://mlp_admin:N759KYhjGJvlVnrgFTkF7sC8csN7aXs9@dpg-dblaqfm417fc7380ni40-a.oregon-postgres.render.com/mlp_tcg_db',
   ssl: { rejectUnauthorized: false },
 });
 
