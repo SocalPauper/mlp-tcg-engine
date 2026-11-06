@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import DeckBuilder from './components/DeckBuilder.tsx';
+import { API_BASE_URL } from './config';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<'lobby' | 'decks' | 'leaderboard' | 'community'>('decks');
   const [announcement, setAnnouncement] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/site/announcement')
+    fetch(`${API_BASE_URL}/api/site/announcement`)
       .then(res => res.json())
       .then(data => {
         if (data && data.message) setAnnouncement(data.message);
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("Backend /api/site/announcement unreachable.", err);
+      });
   }, []);
 
   return (
@@ -83,7 +86,7 @@ export default function App() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 800, lineHeight: 1.1 }}>Jesse Alvarez</span>
-            <span style={{ color: '#f472b6', fontSize: '0.65srem', fontWeight: 700 }}>Administrator</span>
+            <span style={{ color: '#f472b6', fontSize: '0.65rem', fontWeight: 700 }}>Administrator</span>
           </div>
         </div>
       </header>
