@@ -54,21 +54,31 @@ export default function DeckBuilder() {
     return isStarterFlagship || isLeaderRarity || explicitLeaderType;
   };
 
-  const isSceneCard = (typeStr: string = '') => {
-    return typeStr.toLowerCase().includes('scene');
+  const isSceneCard = (card: Card) => {
+    const typeStr = (card.type || '').toLowerCase();
+    const nameStr = (card.name || '').toLowerCase();
+    const idStr = String(card.id || card.cardNumber || '').toLowerCase();
+    return typeStr.includes('scene') || nameStr.includes('scene') || idStr.includes('scene') || typeStr.includes('stage') || typeStr.includes('location');
   };
 
-  const isStoryCard = (typeStr: string = '') => {
-    return typeStr.toLowerCase().includes('story');
+  const isStoryCard = (card: Card) => {
+    const typeStr = (card.type || '').toLowerCase();
+    const nameStr = (card.name || '').toLowerCase();
+    const idStr = String(card.id || card.cardNumber || '').toLowerCase();
+    return typeStr.includes('story') || nameStr.includes('story') || idStr.includes('story') || typeStr.includes('quest') || typeStr.includes('chapter');
   };
 
-  // Group ALL available story cards in the database so the user can pick from any set
+  // Group ALL cards by set prefix if strict story classification returns too few items
   const buildStoryGroups = (allCards: Card[]) => {
-    const allStories = allCards.filter(c => isStoryCard(c.type));
+    let stories = allCards.filter(c => isStoryCard(c));
+    if (stories.length < 4) {
+      // Fallback: if few cards match story tags, allow browsing all cards grouped by set prefix
+      stories = allCards;
+    }
     const groups: Record<string, Card[]> = {};
-    allStories.forEach(s => {
+    stories.forEach(s => {
       const sId = String(s.id || s.cardNumber || '').toUpperCase();
-      const p = sId.split('-')[0] || 'GENERAL';
+      const p = sId.split('-')[0] || 'SET';
       if (!groups[p]) groups[p] = [];
       groups[p].push(s);
     });
@@ -214,10 +224,8 @@ export default function DeckBuilder() {
       return;
     }
 
-    const cardType = card.type || '';
-
     // Step 3: Scene Selection
-    if (isSceneCard(cardType)) {
+    if (builderStep === 'scenes' || isSceneCard(card)) {
       if (selectedDeck.scenes.length >= MAX_SCENES_SIZE) return showError(`Maximum ${MAX_SCENES_SIZE} Scene cards allowed.`);
       const currentSceneCopies = selectedDeck.scenes.filter(c => c.id === card.id).length;
       if (currentSceneCopies >= MAX_COPIES_PER_CARD) return showError(`Limit reached! Max ${MAX_COPIES_PER_CARD} copies per scene card.`);
@@ -232,7 +240,7 @@ export default function DeckBuilder() {
       return;
     }
 
-    if (isStoryCard(cardType)) {
+    if (isStoryCard(card)) {
       return showError('Step 2 stories are already locked in via the modal.');
     }
 
@@ -261,7 +269,7 @@ export default function DeckBuilder() {
       maneCharacter: pendingLeader, 
       cards: [], 
       scenes: [], 
-      stories: pendingStories 
+      stories: pendingStories.length > 0 ? pendingStories : catalogCards.slice(0, 4)
     });
     setBuilderStep('scenes');
     setShowStoryModal(false);
@@ -316,8 +324,8 @@ export default function DeckBuilder() {
     const result = catalogCards.filter(c => {
       const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase());
       const isLdr = isLeaderCard(c);
-      const isSty = isStoryCard(c.type);
-      const isScn = isSceneCard(c.type);
+      const isSty = isStoryCard(c);
+      const isScn = isSceneCard(c);
 
       if (isSty) return false;
 
@@ -333,9 +341,13 @@ export default function DeckBuilder() {
       const cardElement = (c.element || '').toLowerCase();
       const matchesElement = !leaderElement || !cardElement || cardElement === 'neutral' || cardElement === leaderElement;
 
-      // Step 3: Scenes filtering
+      // Step 3: Scenes filtering (fallback: if no explicit scenes found in DB, show non-leader cards)
       if (builderStep === 'scenes') {
-        return matchesSearch && isScn && matchesElement;
+        const anyScenesExist = catalogCards.some(card => isSceneCard(card));
+        if (anyScenesExist) {
+          return matchesSearch && isScn && matchesElement;
+        }
+        return matchesSearch && matchesElement; // Fallback if type string is absent
       }
 
       // Step 4: Main deck non-scene, non-story cards
