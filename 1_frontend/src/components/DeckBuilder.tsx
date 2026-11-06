@@ -17,6 +17,7 @@ interface Card {
 interface Deck {
   id: string | number;
   name: string;
+  isPublic?: boolean;
   maneCharacter: Card | null;
   cards: Card[];
   scenes: Card[];
@@ -33,6 +34,7 @@ export default function DeckBuilder() {
   const [typeFilter, setTypeFilter] = useState('Leader / Mane Character');
   const [engineStatus, setEngineStatus] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Leader identification via ID patterns (-001 starter flagships, -RR, -CR, -GR)
   const isLeaderCard = (card: Card) => {
@@ -54,32 +56,31 @@ export default function DeckBuilder() {
   };
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/decks`)
-      .then(res => res.ok ? res.json() : Promise.reject())
-      .then(data => {
-        if (Array.isArray(data)) {
-          const normalized = data.map(d => ({
-            ...d,
-            scenes: d.scenes || [],
-            stories: d.stories || []
-          }));
-          setDecks(normalized);
-        }
-      })
-      .catch(() => {
+    setIsLoading(true);
+    Promise.all([
+      fetch(`${API_BASE_URL}/api/decks`).then(res => res.ok ? res.json() : Promise.reject()).catch(() => null),
+      fetch(`${API_BASE_URL}/api/cards`).then(res => res.ok ? res.json() : Promise.reject()).catch(() => null)
+    ]).then(([decksData, cardsData]) => {
+      if (Array.isArray(decksData)) {
+        const normalized = decksData.map((d: any) => ({
+          ...d,
+          isPublic: d.isPublic ?? false,
+          scenes: d.scenes || [],
+          stories: d.stories || []
+        }));
+        setDecks(normalized);
+      } else {
         const saved = localStorage.getItem('socal_mlp_decks');
         if (saved) setDecks(JSON.parse(saved));
-      });
+      }
 
-    fetch(`${API_BASE_URL}/api/cards`)
-      .then(res => res.ok ? res.json() : Promise.reject())
-      .then(data => {
-        if (Array.isArray(data)) {
-          setCatalogCards(data);
-          setTypeFilter('Leader / Mane Character');
-        }
-      })
-      .catch(() => console.warn('Backend /api/cards unreachable.'));
+      if (Array.isArray(cardsData)) {
+        setCatalogCards(cardsData);
+        setTypeFilter('Leader / Mane Character');
+      }
+    }).finally(() => {
+      setIsLoading(false);
+    });
   }, []);
 
   const saveDecksToStorage = (updatedDecks: Deck[]) => {
@@ -96,6 +97,7 @@ export default function DeckBuilder() {
     const newDeck: Deck = { 
       id: 'deck-' + Date.now(), 
       name: 'New Custom Deck', 
+      isPublic: false,
       maneCharacter: null,
       cards: [],
       scenes: [],
@@ -128,10 +130,43 @@ export default function DeckBuilder() {
     setTimeout(() => setEngineStatus(null), 3000);
   };
 
+  const handleExportDeck = () => {
+    if (!selectedDeck) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(selectedDeck, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `${selectedDeck.name.toLowerCase().replace(/\s+/g, '_')}_deck.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    setEngineStatus('Deck exported successfully!');
+    setTimeout(() => setEngineStatus(null), 2500);
+  };
+
+  const handleImportDeck = () => {
+    const jsonInput = prompt("Paste your exported deck JSON code here:");
+    if (!jsonInput) return;
+    try {
+      const importedDeck = JSON.parse(jsonInput);
+      if (!importedDeck.name || !Array.isArray(importedDeck.cards)) {
+        throw new Error('Invalid deck structure.');
+      }
+      const newDeck: Deck = {
+        ...importedDeck,
+        id: 'deck-' + Date.now(),
+        name: `${importedDeck.name} (Imported)`
+      };
+      saveDecksToStorage([newDeck, ...decks]);
+      setEngineStatus(`Successfully imported "${newDeck.name}"!`);
+      setTimeout(() => setEngineStatus(null), 3000);
+    } catch (e) {
+      showError('Failed to import deck. Please check the JSON format.');
+    }
+  };
+
   const handleAddCard = (card: Card) => {
     if (!selectedDeck) return;
     
-    // 1. Assigning or Changing the Leader
     if (!selectedDeck.maneCharacter) {
       if (!isLeaderCard(card)) {
         return showError('You must select a valid Mane Character leader card first!');
@@ -169,7 +204,6 @@ export default function DeckBuilder() {
       return;
     }
 
-    // 2. Main Deck Size & Copy Limits
     if (selectedDeck.cards.length >= MAX_DECK_SIZE) {
       return showError(`Main deck is full! Maximum ${MAX_DECK_SIZE} cards allowed.`);
     }
@@ -226,15 +260,12 @@ export default function DeckBuilder() {
       const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase());
       const isLdr = isLeaderCard(c);
 
-      // If no leader is selected, only show leaders in catalog
       if (!selectedDeck?.maneCharacter) {
         return matchesSearch && isLdr;
       }
 
-      // Once leader is selected, hide leaders from general catalog view
       if (isLdr) return false;
 
-      // Strict Kayou element/color matching rule for characters, items, actions, and events
       const leaderElement = (selectedDeck.maneCharacter.element || '').toLowerCase();
       const cardElement = (c.element || '').toLowerCase();
       const matchesElement = !leaderElement || !cardElement || cardElement === 'neutral' || cardElement === leaderElement;
@@ -270,6 +301,19 @@ export default function DeckBuilder() {
     return Object.values(counts).sort((a, b) => a.card.name.localeCompare(b.card.name));
   }, [selectedDeck?.scenes]);
 
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '16px' }}>
+        <div style={{ width: '48px', height: '48px', border: '5px solid #fbcfe8', borderTop: '5px solid #db2777', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <div style={{ textAlign: 'center' }}>
+          <h3 style={{ margin: '0 0 4px 0', color: '#1c1917', fontWeight: 900 }}>Waking up server & loading card database...</h3>
+          <p style={{ margin: 0, color: '#78716c', fontSize: '0.85rem' }}>Render free-tier instances take a few seconds to spin up from sleep. Thank you for your patience!</p>
+        </div>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {engineStatus && <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '10px', borderRadius: '12px', textAlign: 'center', fontWeight: 800 }}>{engineStatus}</div>}
@@ -277,19 +321,27 @@ export default function DeckBuilder() {
 
       {viewMode === 'hub' ? (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #fdf4f8, #f3e8ff)', padding: '24px', borderRadius: '20px', border: '1px solid #fbcfe8' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #fdf4f8, #f3e8ff)', padding: '24px', borderRadius: '20px', border: '1px solid #fbcfe8', flexWrap: 'wrap', gap: '16px' }}>
             <div>
               <h2 style={{ fontSize: '1.5rem', fontWeight: 900, margin: '0 0 4px 0', color: '#1c1917' }}>🃏 Deck Builder Hub</h2>
               <p style={{ margin: 0, color: '#57534e', fontSize: '0.9rem' }}>Build, edit, and validate your Kayou MLP decks, leaders, and scenarios.</p>
             </div>
-            <button onClick={handleCreateNewDeck} style={{ background: '#db2777', color: 'white', fontWeight: 800, padding: '12px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer' }}>+ New Deck</button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={handleImportDeck} style={{ background: '#fbcfe8', color: '#831843', fontWeight: 800, padding: '12px 16px', borderRadius: '12px', border: 'none', cursor: 'pointer' }}>📥 Import Deck</button>
+              <button onClick={handleCreateNewDeck} style={{ background: '#db2777', color: 'white', fontWeight: 800, padding: '12px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer' }}>+ New Deck</button>
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
             {decks.map(deck => (
               <div key={deck.id} style={{ backgroundColor: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #fde0e8', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div onClick={() => { setSelectedDeck(deck); setViewMode('editor'); }} style={{ cursor: 'pointer' }}>
-                  <h4 style={{ margin: '0 0 4px 0', fontSize: '1rem', fontWeight: 800 }}>{deck.name}</h4>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>{deck.name}</h4>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 6px', borderRadius: '6px', backgroundColor: deck.isPublic ? '#dcfce7' : '#fef3c7', color: deck.isPublic ? '#166534' : '#92400e' }}>
+                      {deck.isPublic ? 'Public 🌐' : 'Private 🔒'}
+                    </span>
+                  </div>
                   <p style={{ margin: 0, fontSize: '0.75rem', color: '#78716c' }}>Cards: {deck.cards?.length || 0} / {MAX_DECK_SIZE} | Scenes: {deck.scenes?.length || 0} | Stories: {deck.stories?.length || 0}</p>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid #fdf2f8', paddingTop: '8px' }}>
@@ -302,14 +354,33 @@ export default function DeckBuilder() {
         </>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #fdf4f8, #f3e8ff)', padding: '16px 20px', borderRadius: '16px', border: '1px solid #fbcfe8' }}>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #fdf4f8, #f3e8ff)', padding: '16px 20px', borderRadius: '16px', border: '1px solid #fbcfe8', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={() => setViewMode('hub')} style={{ background: '#e7e5e4', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: 800, cursor: 'pointer' }}>⬅ Back</button>
               <input type="text" value={selectedDeck?.name || ''} onChange={(e) => selectedDeck && setSelectedDeck({ ...selectedDeck, name: e.target.value })} style={{ fontSize: '1.1rem', fontWeight: 900, background: 'transparent', border: 'none', borderBottom: '2px dashed #db2777', outline: 'none' }} />
+              
+              {/* Public/Private Toggle Button */}
+              <button 
+                onClick={() => selectedDeck && setSelectedDeck({ ...selectedDeck, isPublic: !selectedDeck.isPublic })} 
+                style={{ 
+                  backgroundColor: selectedDeck?.isPublic ? '#dcfce7' : '#fef3c7', 
+                  color: selectedDeck?.isPublic ? '#166534' : '#92400e', 
+                  border: `1px solid ${selectedDeck?.isPublic ? '#bbf7d0' : '#fde68a'}`, 
+                  padding: '6px 12px', 
+                  borderRadius: '8px', 
+                  fontWeight: 800, 
+                  cursor: 'pointer', 
+                  fontSize: '0.75rem' 
+                }}
+              >
+                {selectedDeck?.isPublic ? '🌐 Public' : '🔒 Private'}
+              </button>
             </div>
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button onClick={handleExportDeck} style={{ background: '#fbcfe8', color: '#831843', border: 'none', padding: '10px 14px', borderRadius: '10px', fontWeight: 800, cursor: 'pointer', fontSize: '0.8rem' }}>Export JSON</button>
               <span style={{ fontWeight: 800, fontSize: '0.85rem', color: selectedDeck?.cards.length === MAX_DECK_SIZE ? '#16a34a' : '#db2777' }}>
-                Main Deck: {selectedDeck?.cards.length || 0} / {MAX_DECK_SIZE}
+                Main: {selectedDeck?.cards.length || 0} / {MAX_DECK_SIZE}
               </span>
               <button onClick={handleSaveDeck} style={{ background: '#059669', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>Save Deck</button>
             </div>
@@ -413,7 +484,7 @@ export default function DeckBuilder() {
                 </div>
               </div>
 
-              {/* Main Deck Section (Extended Vertically with Card Count) */}
+              {/* Main Deck Section */}
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', fontWeight: 800 }}>📦 Main Deck Cards ({selectedDeck?.cards?.length || 0}/{MAX_DECK_SIZE})</h4>
                 <div style={{ flex: 1, maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -424,7 +495,7 @@ export default function DeckBuilder() {
                       <div key={card.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fdf2f8', padding: '6px 10px', borderRadius: '8px', border: '1px solid #fce7f3' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
                           <span style={{ backgroundColor: '#db2777', color: 'white', fontWeight: 900, fontSize: '0.65rem', padding: '2px 5px', borderRadius: '4px' }}>{count}x</span>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }, card.name}></span>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>{card.name}</span>
                         </div>
                         <button onClick={() => handleRemoveCard(card.id, 'cards')} style={{ background: '#ef4444', color: 'white', border: 'none', width: '20px', height: '20px', borderRadius: '4px', cursor: 'pointer', fontWeight: 900, fontSize: '0.75rem' }}>−</button>
                       </div>
