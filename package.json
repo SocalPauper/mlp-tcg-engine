@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "start": "tsx 2_backend/index.ts",
     "dev": "tsx watch --env-file=.env 2_backend/index.ts",
     "sync-wiki": "tsx --env-file=.env 4_data/syncKayouWiki.ts"
   },
