@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_BASE_URL } from '../config';
 
 export default function Signup({ onAuthSuccess }: { onAuthSuccess: (user: any, token: string) => void }) {
   const [isLogin, setIsLogin] = useState(false);
@@ -21,7 +22,7 @@ export default function Signup({ onAuthSuccess }: { onAuthSuccess: (user: any, t
       : { username, displayName, email, password, age: parseInt(age, 10) };
 
     try {
-      const res = await fetch(endpoint, {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
