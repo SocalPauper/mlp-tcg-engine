@@ -9,7 +9,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'mlp_tcg_super_secret_key_2026';
 
 router.post('/register', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    // Gracefully accept frontend fields (displayName, age) while storing valid columns
+    const { username, email, password, displayName, age } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required.' });
@@ -52,7 +53,6 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    // Securely handles both { email, password } AND { username, password }
     const identifier = req.body.email || req.body.username;
     const password = req.body.password;
     
