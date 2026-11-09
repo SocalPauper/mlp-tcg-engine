@@ -1,57 +1,52 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import api from '../config'; // Correct relative path from components/ to src/config.ts
+import { API_BASE_URL } from '../config';
+import { useAuth } from '../context/AuthContext';
 
 export const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
-  
-  const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
-  const [message, setMessage] = useState('Verifying your email address...');
+  const [statusMessage, setStatusMessage] = useState('Verifying your email...');
+  const [isSuccess, setIsSuccess] = useState(false);
+  const { user, login } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const verifyToken = async () => {
-      if (!token) {
-        setStatus('error');
-        setMessage('No verification token provided in the link.');
-        return;
-      }
+    if (!token) {
+      setStatusMessage('Missing verification token.');
+      return;
+    }
 
-      try {
-        // Uses the configured axios instance pointing to the backend API
-        const response = await api.get(`/auth/verify?token=${token}`);
+    fetch(`${API_BASE_URL}/api/auth/verify?token=${token}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Verification failed.');
         
-        setStatus('success');
-        setMessage(response.data.message || 'Email verified successfully!');
-        
-        // Redirect to portal/login after 3 seconds on success
-        setTimeout(() => {
-          navigate('/');
-        }, 3000);
-      } catch (err: any) {
-        setStatus('error');
-        const errorMessage = err.response?.data?.message || err.message || 'Verification failed. The token may be invalid or expired.';
-        setMessage(errorMessage);
-      }
-    };
+        setIsSuccess(true);
+        setStatusMessage(data.message || 'Email verified successfully!');
 
-    verifyToken();
-  }, [token, navigate]);
+        // Update local session state to lift Safe Mode
+        if (user) {
+          const updatedUser = { ...user, isSafeMode: false };
+          login(updatedUser, localStorage.getItem('token') || 'dummy-jwt-token');
+        }
+
+        setTimeout(() => navigate('/'), 3000);
+      })
+      .catch((err) => {
+        setIsSuccess(false);
+        setStatusMessage(err.message || 'An error occurred during verification.');
+      });
+  }, [token, navigate, user, login]);
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '70vh', color: '#fff' }}>
-      <div style={{ padding: '40px', background: '#1f2937', border: '1px solid #374151', borderRadius: '1rem', textAlign: 'center', maxWidth: '420px', width: '100%', boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
-        <h2 style={{ color: status === 'success' ? '#10b981' : status === 'error' ? '#ef4444' : '#f472b6', marginBottom: '1rem' }}>
-          {status === 'verifying' && 'Verifying Account...'}
-          {status === 'success' && 'Account Verified!'}
-          {status === 'error' && 'Verification Failed'}
-        </h2>
-        <p style={{ color: '#d1d5db', lineHeight: '1.5' }}>{message}</p>
-        {status === 'success' && (
-          <p style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '20px' }}>Redirecting you to the portal...</p>
-        )}
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+      <div style={{ background: '#1f2937', padding: '32px', borderRadius: '16px', width: '100%', maxWidth: '450px', color: '#fff', textAlign: 'center', border: '1px solid #374151' }}>
+        <h2 style={{ marginBottom: '16px', color: isSuccess ? '#34d399' : '#f472b6' }}>Email Verification</h2>
+        <p style={{ fontSize: '0.95rem', color: '#d1d5db' }}>{statusMessage}</p>
       </div>
     </div>
   );
 };
+
+export default VerifyEmail;
