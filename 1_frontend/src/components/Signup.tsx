@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../config';
+import { API_BASE_URL } from '../config';
 
 export const Signup: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -28,8 +28,18 @@ export const Signup: React.FC = () => {
     setSuccessMessage(null);
 
     try {
-      const response = await api.post('/auth/register', formData);
-      console.log('Registration successful:', response.data);
+      // Use direct native fetch to bypass any axios instance wrapper discrepancies
+      const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Registration failed.');
+      }
       
       setSuccessMessage('Account created successfully! Please check your email to verify your account.');
       
@@ -39,14 +49,8 @@ export const Signup: React.FC = () => {
 
     } catch (err: any) {
       console.error('Registration error:', err);
-      let errorMessage = 'An unexpected error occurred during registration.';
-      
-      if (err?.response?.data?.message) {
-        errorMessage = err.response.data.message;
-      } else if (typeof err?.message === 'string') {
-        errorMessage = err.message;
-      }
-      
+      // Safely ensure error message is rendered as a clean primitive string
+      const errorMessage = typeof err?.message === 'string' ? err.message : 'An unexpected error occurred during registration.';
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -63,56 +67,27 @@ export const Signup: React.FC = () => {
 
         <div className="form-group">
           <label>USERNAME (Unique)</label>
-          <input 
-            type="text" 
-            name="username" 
-            value={formData.username} 
-            onChange={handleChange} 
-            required 
-          />
+          <input type="text" name="username" value={formData.username} onChange={handleChange} required />
         </div>
 
         <div className="form-group">
           <label>DISPLAY NAME</label>
-          <input 
-            type="text" 
-            name="displayName" 
-            value={formData.displayName} 
-            onChange={handleChange} 
-            required 
-          />
+          <input type="text" name="displayName" value={formData.displayName} onChange={handleChange} required />
         </div>
 
         <div className="form-group">
           <label>AGE</label>
-          <input 
-            type="number" 
-            name="age" 
-            value={formData.age} 
-            onChange={handleChange} 
-            required 
-          />
+          <input type="number" name="age" value={formData.age} onChange={handleChange} required />
         </div>
 
         <div className="form-group">
           <label>EMAIL (Optional for Safe Mode access)</label>
-          <input 
-            type="email" 
-            name="email" 
-            value={formData.email} 
-            onChange={handleChange} 
-          />
+          <input type="email" name="email" value={formData.email} onChange={handleChange} />
         </div>
 
         <div className="form-group">
           <label>PASSWORD</label>
-          <input 
-            type="password" 
-            name="password" 
-            value={formData.password} 
-            onChange={handleChange} 
-            required 
-          />
+          <input type="password" name="password" value={formData.password} onChange={handleChange} required />
         </div>
 
         <button type="submit" disabled={loading} className="submit-btn">
