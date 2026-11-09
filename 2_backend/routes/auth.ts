@@ -1,11 +1,110 @@
 import { Router } from 'express';
-// (Keep your existing imports, and make sure your database pool/client is imported)
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+import { pool } from '../../../4_data/db.js'; // Adjust relative path to db if needed based on directory structure
+import { sendVerificationEmail } from '../services/mailer.js';
 
 const router = Router();
 
-// ... your existing /register and /login routes ...
+// REGISTER ENDPOINT
+router.post('/register', async (req, res) => {
+  const { username, displayName, email, password, age } = req.body;
 
-// Verification Endpoint
+  if (!username || !displayName || !password || age === undefined) {
+    return res.status(400).json({ success: false, message: 'Missing required registration fields.' });
+  }
+
+  try {
+    // Check if username or email already exists
+    const existing = await pool.query(
+      'SELECT id FROM auth.users WHERE username = $1 OR ($2::text IS NOT NULL AND email = $2)',
+      [username, email || null]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ success: false, message: 'Username or email already in use.' });
+    }
+
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+
+    // Insert user into database
+    const insertResult = await pool.query(
+      `INSERT INTO auth.users (username, display_name, email, password_hash, age, verification_token, is_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, username, email`,
+      [username, displayName, email || null, passwordHash, age, verificationToken, !email]
+    );
+
+    const newUser = insertResult.rows[0];
+
+    // Send verification email if email is provided
+    if (email) {
+      try {
+        await sendVerificationEmail(email, verificationToken);
+      } catch (emailErr) {
+        console.error('Failed to send verification email:', emailErr);
+      }
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: email 
+        ? 'Registration successful! Please check your email to verify your account.' 
+        : 'Registration successful!',
+      userId: newUser.id
+    });
+
+  } catch (err: any) {
+    console.error('Registration error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error during registration.' });
+  }
+});
+
+// LOGIN ENDPOINT
+router.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ success: false, message: 'Username and password are required.' });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM auth.users WHERE username = $1 OR email = $1',
+      [username]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ success: false, message: 'Invalid username or password.' });
+    }
+
+    const user = result.rows[0];
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid username or password.' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Login successful',
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        email: user.email,
+        isSafeMode: user.is_safe_mode,
+        isVerified: user.is_verified
+      }
+    });
+  } catch (err: any) {
+    console.error('Login error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error during login.' });
+  }
+});
+
+// VERIFICATION ENDPOINT
 router.get('/verify', async (req, res) => {
   const { token } = req.query;
 
@@ -14,7 +113,6 @@ router.get('/verify', async (req, res) => {
   }
 
   try {
-    // 1. Find user by the verification token in your auth.users table
     const userResult = await pool.query(
       'SELECT id, is_verified FROM auth.users WHERE verification_token = $1',
       [token]
@@ -30,7 +128,6 @@ router.get('/verify', async (req, res) => {
       return res.json({ success: true, message: 'Account is already verified. You can log in.' });
     }
 
-    // 2. Update user to mark them as verified and clear the token
     await pool.query(
       'UPDATE auth.users SET is_verified = TRUE, verification_token = NULL WHERE id = $1',
       [user.id]
