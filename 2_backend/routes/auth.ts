@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import pool from '../config/database';
+import pool from '../../4_data/db.ts';
 import { sendVerificationEmail } from '../services/mailer';
 
 const router = Router();
