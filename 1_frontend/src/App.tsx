@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation, Link } from 'react-router-dom';
 import DeckBuilder from './components/DeckBuilder.tsx';
 import Signup from './components/Signup.tsx';
+import Login from './components/Login.tsx';
 import { VerifyEmail } from './components/VerifyEmail.tsx';
 import { AuthProvider, useAuth } from './context/AuthContext.tsx';
 import { API_BASE_URL } from './config';
@@ -26,14 +27,12 @@ function AppContent() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#fdf4f8' }}>
       
-      {/* Top Banner Announcement if configured */}
       {announcement && (
         <div style={{ backgroundColor: '#db2777', color: 'white', padding: '8px 16px', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem' }}>
           📢 {announcement}
         </div>
       )}
 
-      {/* Celestial Galaxy Navbar (Hidden on verify route for clean UX) */}
       {location.pathname !== '/verify' && (
         <header style={{ 
           background: 'linear-gradient(135deg, #1e1b4b, #3b0764, #581c87)', 
@@ -54,7 +53,6 @@ function AppContent() {
             </div>
           </div>
 
-          {/* Navigation Tabs */}
           <nav style={{ display: 'flex', gap: '8px', backgroundColor: 'rgba(255, 255, 255, 0.08)', padding: '6px', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.12)' }}>
             {[
               { id: 'lobby', label: 'Lobby' },
@@ -86,7 +84,6 @@ function AppContent() {
             })}
           </nav>
 
-          {/* User Profile Badge & Auth Status */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {isAuthenticated && user ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'rgba(255, 255, 255, 0.08)', padding: '6px 14px', borderRadius: '50px', border: '1px solid rgba(255, 255, 255, 0.12)' }}>
@@ -105,25 +102,22 @@ function AppContent() {
                 </button>
               </div>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'rgba(255, 255, 255, 0.08)', padding: '6px 14px', borderRadius: '50px', border: '1px solid rgba(255, 255, 255, 0.12)' }}>
-                <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#ec4899', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.75rem' }}>
-                  👤
-                </div>
-                <span style={{ color: 'white', fontSize: '0.8rem', fontWeight: 700 }}>Not Logged In</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Link to="/login" style={{ color: '#f0abfc', textDecoration: 'none', fontWeight: 'bold', fontSize: '0.85rem' }}>Sign In</Link>
+                <Link to="/signup" style={{ background: '#ec4899', color: '#white', textDecoration: 'none', padding: '6px 14px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.85rem' }}>Register</Link>
               </div>
             )}
           </div>
         </header>
       )}
 
-      {/* Main Content Area handled via Routes */}
       <main style={{ flex: 1, padding: '24px 32px', maxWidth: '1400px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
         <Routes>
           <Route 
             path="/" 
             element={
               !isAuthenticated ? (
-                <Signup />
+                <Login />
               ) : currentTab === 'decks' ? (
                 <DeckBuilder />
               ) : (
@@ -134,6 +128,8 @@ function AppContent() {
               )
             } 
           />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
           <Route path="/verify" element={<VerifyEmail />} />
         </Routes>
       </main>
