@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { pool } from '../../4_data/db.ts'; // Adjust relative path to db if needed based on directory structure
 import { sendVerificationEmail } from '../services/mailer.js';
