@@ -2,7 +2,6 @@
   "name": "mlp-tcg-backend",
   "version": "1.0.0",
   "type": "module",
-  "main": "2_backend/index.ts",
   "scripts": {
     "start": "node --import tsx/esm 2_backend/index.ts"
   },
