@@ -44,7 +44,7 @@ export default function Login() {
         {error && <div style={{ backgroundColor: '#7f1d1d', padding: '10px', marginBottom: '16px', borderRadius: '6px', fontSize: '0.85rem' }}>{error}</div>}
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '6px', color: '#9ca3af' }}>USERNAME OR EMAIL</label>
-          <input type="text" name="username" value={formData.username} onChange={handleChange} required style={{ width: '100%', padding: '10px', background: '#111827', border: '1px solid #374151', borderRadius: '8px', color: '#fff', boxSizing: 'border-box' }} />
+          <input type="text" name="username" value={formData.username} onChange={handleChange} placeholder="Enter username or email" required style={{ width: '100%', padding: '10px', background: '#111827', border: '1px solid #374151', borderRadius: '8px', color: '#fff', boxSizing: 'border-box' }} />
         </div>
         <div style={{ marginBottom: '24px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '6px', color: '#9ca3af' }}>PASSWORD</label>
