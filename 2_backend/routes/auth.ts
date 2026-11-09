@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import pool from '../../4_data/db.ts';
-import { sendVerificationEmail } from '../services/mailer';
+import { pool } from '../../4_data/db.ts';
+import { sendVerificationEmail } from '../services/mailer.ts';
 
 const router = Router();
 
