@@ -1,37 +1,39 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.GMAIL_USER || 'equestriaclash@gmail.com',
-    pass: process.env.GMAIL_APP_PASSWORD || ''
+// Initialize Resend safely
+const resendApiKey = process.env.RESEND_API_KEY;
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
+
+export const sendVerificationEmail = async (toEmail: string, verificationToken: string): Promise<void> => {
+  if (!resend) {
+    console.warn('RESEND_API_KEY is not configured. Skipping email dispatch.');
+    return;
   }
-});
 
-export async function sendVerificationEmail(toEmail: string, userId: number | string) {
-  const backendUrl = process.env.BACKEND_URL || 'https://mlp-tcg-engine.onrender.com';
-  const verificationUrl = `${backendUrl}/api/auth/confirm-email?userId=${userId}`;
-
-  const mailOptions = {
-    from: '"Equestria Clash TCG" <equestriaclash@gmail.com>',
-    to: toEmail,
-    subject: 'Verify Your Email - Equestria Clash TCG',
-    html: `
-      <div style="font-family: Arial, sans-serif; background: #fdf4f8; padding: 30px; color: #1c1917; border-radius: 8px;">
-        <h2 style="color: #db2777;">Welcome to Equestria Clash TCG! ✨</h2>
-        <p>Please click the button below to verify your email address. Verifying your email lifts Safe Mode restrictions for users aged 13 and older (unlocking chat, community posting, and public deck publishing).</p>
-        <div style="margin: 30px 0;">
-          <a href="${verificationUrl}" style="background-color: #db2777; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Verify Email Address</a>
-        </div>
-        <p style="font-size: 12px; color: #78716c;">If you did not request this, please ignore this email.</p>
-      </div>
-    `
-  };
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const verificationLink = `${frontendUrl}/verify?token=${verificationToken}`;
 
   try {
-    await transporter.sendMail(mailOptions);
-    console.log(`[MAILER] Verification email successfully sent to ${toEmail}`);
-  } catch (err: any) {
-    console.error('[MAILER ERROR] Failed to send email via Gmail:', err.message);
+    const { data, error } = await resend.emails.send({
+      from: 'MLP TCG Engine <equestriaclash@verify.socalpauper.com>', 
+      to: toEmail,
+      subject: 'Confirm Your MLP TCG Engine Account',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #6b46c1;">Welcome to MLP TCG Engine!</h2>
+          <p>Thank you for registering. Please click the button below to verify your email address and activate your account:</p>
+          <a href="${verificationLink}" style="display: inline-block; padding: 10px 20px; background-color: #805ad5; color: #ffffff; text-decoration: none; border-radius: 5px; margin-top: 15px;">Verify Email</a>
+          <p style="margin-top: 20px; font-size: 12px; color: #718096;">If you didn't request this, you can safely ignore this email.</p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error('Resend API Error:', error);
+    } else {
+      console.log('Verification email dispatched via Resend:', data);
+    }
+  } catch (err) {
+    console.error('Unexpected error sending email with Resend:', err);
   }
-}
+};
