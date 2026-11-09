@@ -2,16 +2,17 @@ import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 465,
-  secure: true, // Use SSL/TLS
+  port: 587,
+  secure: false,
+  requireTLS: true,
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
   },
   tls: {
-    // Do not fail on invalid certs in cloud environments
     rejectUnauthorized: false
-  }
+  },
+  family: 4 
 });
 
 export const sendVerificationEmail = async (toEmail: string, verificationToken: string): Promise<void> => {
@@ -19,7 +20,8 @@ export const sendVerificationEmail = async (toEmail: string, verificationToken: 
   const verificationLink = `${frontendUrl}/verify?token=${verificationToken}`;
 
   const mailOptions = {
-    from: `"MLP TCG Engine" <${process.env.EMAIL_USER}>`,
+    // Updated to use GMAIL_USER here as well
+    from: `"MLP TCG Engine" <${process.env.GMAIL_USER}>`,
     to: toEmail,
     subject: 'Confirm Your MLP TCG Engine Account',
     html: `
