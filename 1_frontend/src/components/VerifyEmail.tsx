@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import api from '../config'; // Your configured axios instance
+import api from '../config'; // Correct relative path from components/ to src/config.ts
 
 export const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -14,26 +14,25 @@ export const VerifyEmail: React.FC = () => {
     const verifyToken = async () => {
       if (!token) {
         setStatus('error');
-        setMessage('No verification token provided.');
+        setMessage('No verification token provided in the link.');
         return;
       }
 
       try {
+        // Uses the configured axios instance pointing to the backend API
         const response = await api.get(`/auth/verify?token=${token}`);
+        
         setStatus('success');
         setMessage(response.data.message || 'Email verified successfully!');
         
-        // Automatically redirect to login after 3 seconds
+        // Redirect to portal/login after 3 seconds on success
         setTimeout(() => {
-          navigate('/login');
+          navigate('/');
         }, 3000);
       } catch (err: any) {
         setStatus('error');
-        if (err.response && err.response.data && err.response.data.message) {
-          setMessage(err.response.data.message);
-        } else {
-          setMessage('Verification failed. The token may be invalid or expired.');
-        }
+        const errorMessage = err.response?.data?.message || err.message || 'Verification failed. The token may be invalid or expired.';
+        setMessage(errorMessage);
       }
     };
 
@@ -41,16 +40,16 @@ export const VerifyEmail: React.FC = () => {
   }, [token, navigate]);
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#1a1c23', color: '#fff', fontFamily: 'Arial, sans-serif' }}>
-      <div style={{ padding: '40px', background: '#242736', borderRadius: '8px', textAlign: 'center', maxWidth: '400px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>
-        <h2 style={{ color: status === 'success' ? '#10b981' : status === 'error' ? '#ef4444' : '#8b5cf6' }}>
-          {status === 'verifying' && 'Processing...'}
-          {status === 'success' && 'Verification Success!'}
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '70vh', color: '#fff' }}>
+      <div style={{ padding: '40px', background: '#1f2937', border: '1px solid #374151', borderRadius: '1rem', textAlign: 'center', maxWidth: '420px', width: '100%', boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+        <h2 style={{ color: status === 'success' ? '#10b981' : status === 'error' ? '#ef4444' : '#f472b6', marginBottom: '1rem' }}>
+          {status === 'verifying' && 'Verifying Account...'}
+          {status === 'success' && 'Account Verified!'}
           {status === 'error' && 'Verification Failed'}
         </h2>
-        <p style={{ marginTop: '15px', color: '#d1d5db' }}>{message}</p>
+        <p style={{ color: '#d1d5db', lineHeight: '1.5' }}>{message}</p>
         {status === 'success' && (
-          <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '20px' }}>Redirecting to login...</p>
+          <p style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '20px' }}>Redirecting you to the portal...</p>
         )}
       </div>
     </div>

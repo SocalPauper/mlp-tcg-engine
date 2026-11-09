@@ -1,6 +1,8 @@
 import { Resend } from 'resend';
+import dotenv from 'dotenv';
 
-// Initialize Resend safely
+dotenv.config();
+
 const resendApiKey = process.env.RESEND_API_KEY;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
@@ -10,12 +12,14 @@ export const sendVerificationEmail = async (toEmail: string, verificationToken: 
     return;
   }
 
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  // Configurable frontend URL pointing to your active Cloudflare Pages deployment
+  const frontendUrl = process.env.FRONTEND_URL || 'https://equestria-clash.pages.dev';
   const verificationLink = `${frontendUrl}/verify?token=${verificationToken}`;
 
   try {
     const { data, error } = await resend.emails.send({
-      from: 'MLP TCG Engine <equestriaclash@verify.socalpauper.com>', 
+      // Must use your Resend-verified domain email address here
+      from: 'MLP TCG Engine <onboarding@socalpauper.com>', 
       to: toEmail,
       subject: 'Confirm Your MLP TCG Engine Account',
       html: `
