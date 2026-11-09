@@ -39,10 +39,14 @@ export const Signup: React.FC = () => {
 
     } catch (err: any) {
       console.error('Registration error:', err);
-      // Safely ensure we extract a string message without invoking anything as a function
-      const errorMessage = 
-        err.response?.data?.message || 
-        (typeof err.message === 'string' ? err.message : 'An unexpected error occurred during registration.');
+      let errorMessage = 'An unexpected error occurred during registration.';
+      
+      if (err?.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (typeof err?.message === 'string') {
+        errorMessage = err.message;
+      }
+      
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -59,27 +63,56 @@ export const Signup: React.FC = () => {
 
         <div className="form-group">
           <label>USERNAME (Unique)</label>
-          <input type="text" name="username" value={formData.username} onChange={handleChange} required />
+          <input 
+            type="text" 
+            name="username" 
+            value={formData.username} 
+            onChange={handleChange} 
+            required 
+          />
         </div>
 
         <div className="form-group">
           <label>DISPLAY NAME</label>
-          <input type="text" name="displayName" value={formData.displayName} onChange={handleChange} required />
+          <input 
+            type="text" 
+            name="displayName" 
+            value={formData.displayName} 
+            onChange={handleChange} 
+            required 
+          />
         </div>
 
         <div className="form-group">
           <label>AGE</label>
-          <input type="number" name="age" value={formData.age} onChange={handleChange} required />
+          <input 
+            type="number" 
+            name="age" 
+            value={formData.age} 
+            onChange={handleChange} 
+            required 
+          />
         </div>
 
         <div className="form-group">
           <label>EMAIL (Optional for Safe Mode access)</label>
-          <input type="email" name="email" value={formData.email} onChange={handleChange} />
+          <input 
+            type="email" 
+            name="email" 
+            value={formData.email} 
+            onChange={handleChange} 
+          />
         </div>
 
         <div className="form-group">
           <label>PASSWORD</label>
-          <input type="password" name="password" value={formData.password} onChange={handleChange} required />
+          <input 
+            type="password" 
+            name="password" 
+            value={formData.password} 
+            onChange={handleChange} 
+            required 
+          />
         </div>
 
         <button type="submit" disabled={loading} className="submit-btn">
