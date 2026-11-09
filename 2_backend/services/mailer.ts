@@ -1,15 +1,21 @@
 import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true, // Use SSL/TLS
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  tls: {
+    // Do not fail on invalid certs in cloud environments
+    rejectUnauthorized: false
+  }
 });
 
 export const sendVerificationEmail = async (toEmail: string, verificationToken: string): Promise<void> => {
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const verificationLink = `${frontendUrl}/verify?token=${verificationToken}`;
 
   const mailOptions = {
