@@ -12,13 +12,13 @@ const router = Router();
 // ==========================================
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { username, email, password } = req.body;
+    // 1. Capture all fields matching the frontend form
+    const { username, display_name, age, email, password } = req.body;
 
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'Username, email, and password are required.' });
     }
 
-    // Check if user already exists in auth schema/table
     const userExists = await pool.query(
       'SELECT id FROM auth.users WHERE email = $1 OR username = $2', 
       [email, username]
@@ -28,21 +28,29 @@ router.post('/register', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Username or email already in use.' });
     }
 
-    // Hash password & generate verification token
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
     const verificationToken = crypto.randomBytes(32).toString('hex');
 
-    // Insert user into PostgreSQL (setting is_verified = false)
+    // 2. Include display_name and age in the INSERT statement
     const newUserQuery = `
-      INSERT INTO auth.users (username, email, password_hash, verification_token, is_verified)
-      VALUES ($1, $2, $3, $4, false)
+      INSERT INTO auth.users (username, display_name, age, email, password_hash, verification_token, is_verified)
+      VALUES ($1, $2, $3, $4, $5, $6, false)
       RETURNING id, username, email;
     `;
-    const newUserData = await pool.query(newUserQuery, [username, email, passwordHash, verificationToken]);
+    
+    const newUserData = await pool.query(newUserQuery, [
+      username, 
+      display_name, 
+      age, // Ensure age is passed as an integer from the frontend, or cast it: parseInt(age, 10)
+      email, 
+      passwordHash, 
+      verificationToken
+    ]);
+    
     const user = newUserData.rows[0];
 
-    // Dispatch confirmation email via Gmail SMTP
+    // Mailer is wrapped in its own try/catch so it won't trigger the outer 500 if SMTP fails
     try {
       await sendVerificationEmail(email, verificationToken);
     } catch (mailError) {
