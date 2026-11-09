@@ -12,7 +12,6 @@ const router = Router();
 // ==========================================
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    // 1. Capture all fields matching the frontend form
     const { username, display_name, age, email, password } = req.body;
 
     if (!username || !email || !password) {
@@ -31,26 +30,29 @@ router.post('/register', async (req: Request, res: Response) => {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
     const verificationToken = crypto.randomBytes(32).toString('hex');
+    
+    // Evaluate adult status from the frontend age input
+    const isAdult = parseInt(age, 10) >= 18;
 
-    // 2. Include display_name and age in the INSERT statement
+    // Add is_verified_adult to the columns and values
     const newUserQuery = `
-      INSERT INTO auth.users (username, display_name, age, email, password_hash, verification_token, is_verified)
-      VALUES ($1, $2, $3, $4, $5, $6, false)
+      INSERT INTO auth.users (username, display_name, age, email, password_hash, verification_token, is_verified_adult, is_verified)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, false)
       RETURNING id, username, email;
     `;
     
     const newUserData = await pool.query(newUserQuery, [
       username, 
       display_name, 
-      age, // Ensure age is passed as an integer from the frontend, or cast it: parseInt(age, 10)
+      parseInt(age, 10), 
       email, 
       passwordHash, 
-      verificationToken
+      verificationToken,
+      isAdult
     ]);
     
     const user = newUserData.rows[0];
 
-    // Mailer is wrapped in its own try/catch so it won't trigger the outer 500 if SMTP fails
     try {
       await sendVerificationEmail(email, verificationToken);
     } catch (mailError) {
