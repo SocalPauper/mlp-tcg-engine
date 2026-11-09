@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../config'; // Correct relative path from components/ to src/config.ts
+import api from '../config';
 
 export const Signup: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -39,8 +39,10 @@ export const Signup: React.FC = () => {
 
     } catch (err: any) {
       console.error('Registration error:', err);
-      // Safely extract the error message string to prevent "e is not a function" errors
-      const errorMessage = err.response?.data?.message || err.message || 'An unexpected error occurred during registration.';
+      // Safely ensure we extract a string message without invoking anything as a function
+      const errorMessage = 
+        err.response?.data?.message || 
+        (typeof err.message === 'string' ? err.message : 'An unexpected error occurred during registration.');
       setError(errorMessage);
     } finally {
       setLoading(false);
