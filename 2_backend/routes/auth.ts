@@ -1,120 +1,136 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { pool as db } from '../../4_data/db.js';
-import { sendVerificationEmail } from '../utils/mailer.js';
+import pool from '../config/database';
+import { sendVerificationEmail } from '../services/mailer';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'mlp_tcg_super_secret_key_2026';
 
-router.post('/register', async (req, res) => {
+// ==========================================
+// REGISTER ROUTE
+// ==========================================
+router.post('/register', async (req: Request, res: Response) => {
   try {
-    // Gracefully accept frontend fields (displayName, age) while storing valid columns
-    const { username, email, password, displayName, age } = req.body;
+    const { username, email, password } = req.body;
 
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required.' });
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: 'Username, email, and password are required.' });
     }
 
-    const existingUser = await db.query('SELECT id FROM auth.users WHERE username = $1', [username]);
-    if (existingUser.rows.length > 0) {
-      return res.status(400).json({ error: 'Username is already taken.' });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const result = await db.query(
-      `INSERT INTO auth.users (username, email, password_hash) 
-       VALUES ($1, $2, $3) 
-       RETURNING id, username, email, is_admin, is_verified, created_at`,
-      [username, email || null, passwordHash]
+    // Check if user already exists in auth schema/table
+    const userExists = await pool.query(
+      'SELECT id FROM auth.users WHERE email = $1 OR username = $2', 
+      [email, username]
     );
-
-    const user = result.rows[0];
-
-    if (user.email) {
-      sendVerificationEmail(user.email, user.id).catch(err => {
-        console.error('[BACKGROUND EMAIL ERROR]', err);
-      });
-    }
-
-    const token = jwt.sign(
-      { userId: user.id, username: user.username, isAdmin: user.is_admin, isVerified: user.is_verified },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({ token, user });
-  } catch (err: any) {
-    console.error('[REGISTRATION ERROR]', err.message);
-    res.status(500).json({ error: 'Registration failed due to a server error.' });
-  }
-});
-
-router.post('/login', async (req, res) => {
-  try {
-    const identifier = req.body.email || req.body.username;
-    const password = req.body.password;
     
-    if (!identifier || !password) {
-        return res.status(400).json({ error: 'Identifier (email/username) and password are required.' });
+    if (userExists.rows.length > 0) {
+      return res.status(400).json({ error: 'Username or email already in use.' });
     }
 
-    const result = await db.query('SELECT * FROM auth.users WHERE email = $1 OR username = $1', [identifier]);
-    if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+    // Hash password & generate verification token
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
+    const verificationToken = crypto.randomBytes(32).toString('hex');
 
-    const user = result.rows[0];
-    const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+    // Insert user into PostgreSQL (setting is_verified = false)
+    const newUserQuery = `
+      INSERT INTO auth.users (username, email, password_hash, verification_token, is_verified)
+      VALUES ($1, $2, $3, $4, false)
+      RETURNING id, username, email;
+    `;
+    const newUserData = await pool.query(newUserQuery, [username, email, passwordHash, verificationToken]);
+    const user = newUserData.rows[0];
 
-    const token = jwt.sign(
-      { userId: user.id, username: user.username, isAdmin: user.is_admin, isVerified: user.is_verified },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    // Dispatch confirmation email via Gmail SMTP
+    try {
+      await sendVerificationEmail(email, verificationToken);
+    } catch (mailError) {
+      console.error('Failed to send verification email, but user was created:', mailError);
+    }
 
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        isAdmin: user.is_admin,
-        isVerified: user.is_verified
-      },
+    return res.status(201).json({
+      message: 'Registration successful! Please check your email to verify your account.',
+      userId: user.id,
     });
-  } catch (err: any) {
-    console.error('[LOGIN ERROR]', err.message);
-    res.status(500).json({ error: 'Login failed due to a server error.' });
+  } catch (error) {
+    console.error('Registration error:', error);
+    return res.status(500).json({ error: 'Internal server error during registration.' });
   }
 });
 
-router.get('/confirm-email', async (req, res) => {
+// ==========================================
+// LOGIN ROUTE
+// ==========================================
+router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { userId } = req.query;
+    const { email, password } = req.body;
 
-    if (!userId) {
-      return res.status(400).send('<h3>Invalid verification link. User ID missing.</h3>');
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const result = await db.query(
-      `UPDATE auth.users SET is_verified = TRUE WHERE id = $1 RETURNING id`,
-      [userId]
+    const result = await pool.query('SELECT * FROM auth.users WHERE email = $1', [email]);
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    const user = result.rows[0];
+
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    if (user.is_verified === false) {
+      return res.status(403).json({ error: 'Please verify your email address before logging in.' });
+    }
+
+    const jwtSecret = process.env.JWT_SECRET || 'fallback_secret_key';
+    const token = jwt.sign(
+      { userId: user.id, username: user.username, email: user.email },
+      jwtSecret,
+      { expiresIn: '7d' }
     );
+
+    return res.status(200).json({
+      message: 'Login successful',
+      token,
+      user: { id: user.id, username: user.username, email: user.email }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    return res.status(500).json({ error: 'Internal server error during login.' });
+  }
+});
+
+// ==========================================
+// EMAIL VERIFICATION ROUTE
+// ==========================================
+router.get('/verify', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.query;
+    if (!token) {
+      return res.status(400).json({ error: 'Missing verification token.' });
+    }
+
+    const updateQuery = `
+      UPDATE auth.users
+      SET is_verified = true, verification_token = NULL
+      WHERE verification_token = $1 AND is_verified = false
+      RETURNING id, username;
+    `;
+    const result = await pool.query(updateQuery, [token]);
 
     if (result.rows.length === 0) {
-      return res.status(404).send('<h3>User not found.</h3>');
+      return res.status(400).json({ error: 'Invalid or expired verification token.' });
     }
 
-    res.send(`
-      <div style="font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #fdf4f8; color: #1c1917; height: 100vh;">
-        <h1 style="color: #db2777;">Email Verified Successfully! ✨</h1>
-        <p>Your account is now verified. You can return to Equestria Clash TCG.</p>
-      </div>
-    `);
-  } catch (err: any) {
-    console.error('[EMAIL CONFIRMATION ERROR]', err.message);
-    res.status(500).send('<h3>Internal server error during email verification.</h3>');
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return res.redirect(`${frontendUrl}/login?verified=true`);
+  } catch (error) {
+    console.error('Verification error:', error);
+    return res.status(500).json({ error: 'Internal server error during verification.' });
   }
 });
 
