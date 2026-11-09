@@ -12,8 +12,8 @@ export const sendVerificationEmail = async (toEmail: string, verificationToken: 
     return;
   }
 
-  // Ensure it reads FRONTEND_URL from environment variables correctly, defaulting to Cloudflare Pages
-  const frontendUrl = process.env.FRONTEND_URL || 'https://equestria-clash.pages.dev';
+  const rawFrontendUrl = process.env.FRONTEND_URL || 'https://equestria-clash.pages.dev';
+  const frontendUrl = rawFrontendUrl.endsWith('/') ? rawFrontendUrl.slice(0, -1) : rawFrontendUrl;
   const verificationLink = `${frontendUrl}/verify?token=${verificationToken}`;
 
   try {

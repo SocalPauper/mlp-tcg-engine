@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate, useLocation, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, Link } from 'react-router-dom';
 import DeckBuilder from './components/DeckBuilder.tsx';
 import Signup from './components/Signup.tsx';
 import Login from './components/Login.tsx';
@@ -33,7 +33,7 @@ function AppContent() {
         </div>
       )}
 
-      {location.pathname !== '/verify' && (
+      {location.pathname !== '/verify' && location.pathname !== '//verify' && (
         <header style={{ 
           background: 'linear-gradient(135deg, #1e1b4b, #3b0764, #581c87)', 
           padding: '16px 32px', 
@@ -131,6 +131,7 @@ function AppContent() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/verify" element={<VerifyEmail />} />
+          <Route path="//verify" element={<VerifyEmail />} />
         </Routes>
       </main>
 
