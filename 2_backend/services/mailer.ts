@@ -12,14 +12,13 @@ export const sendVerificationEmail = async (toEmail: string, verificationToken: 
     return;
   }
 
-  // Configurable frontend URL pointing to your active Cloudflare Pages deployment
   const frontendUrl = process.env.FRONTEND_URL || 'https://equestria-clash.pages.dev';
   const verificationLink = `${frontendUrl}/verify?token=${verificationToken}`;
 
   try {
     const { data, error } = await resend.emails.send({
-      // Must use your Resend-verified domain email address here
-      from: 'MLP TCG Engine <onboarding@socalpauper.com>', 
+      // Set to your custom verified domain email address
+      from: 'MLP TCG Engine <equestriaclash@verify.socalpauper.com>', 
       to: toEmail,
       subject: 'Confirm Your MLP TCG Engine Account',
       html: `
