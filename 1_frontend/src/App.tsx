@@ -1,7 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from './config';
+import Navbar from './components/Navbar';
+import Home from './components/Home';
 import DeckBuilder from './components/DeckBuilder';
+import './App.css';
 
 axios.defaults.withCredentials = true;
 
@@ -90,9 +93,17 @@ export const useAuth = () => {
 };
 
 export default function App() {
+  const [currentView, setCurrentView] = useState<'home' | 'deckBuilder'>('home');
+
   return (
     <AuthProvider>
-      <DeckBuilder />
+      <div className="app-root">
+        <Navbar currentView={currentView} setCurrentView={setCurrentView} />
+        <main className="app-content">
+          {currentView === 'home' && <Home onStartDeckBuilder={() => setCurrentView('deckBuilder')} />}
+          {currentView === 'deckBuilder' && <DeckBuilder />}
+        </main>
+      </div>
     </AuthProvider>
   );
 }
