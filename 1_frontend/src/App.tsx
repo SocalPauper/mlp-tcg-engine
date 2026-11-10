@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL } from './config';
+import DeckBuilder from './components/DeckBuilder';
 
 axios.defaults.withCredentials = true;
 
@@ -87,3 +88,11 @@ export const useAuth = () => {
   }
   return context;
 };
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <DeckBuilder />
+    </AuthProvider>
+  );
+}
