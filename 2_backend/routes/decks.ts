@@ -3,11 +3,19 @@ import { pool } from '../../4_data/db.js';
 
 const router = Router();
 
+router.get('/decks', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM auth.decks ORDER BY created_at DESC;');
+    return res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching decks:', err);
+    return res.json([]);
+  }
+});
+
 router.post('/decks', async (req, res) => {
   const { id, name, isPublic, mane, stories, scenes, main } = req.body;
-  
-  // Extract authenticated user info from session middleware (e.g. req.user)
-  const authorName = (req as any).user?.displayName || (req as any).user?.username || 'Authenticated Player';
+  const authorName = (req as any).user?.displayName || 'Player';
 
   try {
     const query = `
@@ -31,7 +39,7 @@ router.post('/decks', async (req, res) => {
     return res.json(result.rows[0]);
   } catch (err) {
     console.error('Error saving deck:', err);
-    return res.status(500).json({ success: false, message: 'Failed to save deck to database.' });
+    return res.status(500).json({ success: false, message: 'Failed to save deck.' });
   }
 });
 

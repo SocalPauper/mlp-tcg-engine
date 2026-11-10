@@ -358,7 +358,7 @@ export default function DeckBuilder() {
                           src={card.imageUrl} 
                           alt={card.name} 
                           style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '0.5rem' }}
-                          onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                          onError={(e) => { e.currentTarget.src = e.currentTarget.src = 'https://mlp-tcg-engine.onrender.com/assets/default-card-back.webp'; }}
                         />
                         <h4 style={{ fontSize: '0.875rem', margin: '0.5rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
                         <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>Traits: {card.traits || 'None'}</p>
