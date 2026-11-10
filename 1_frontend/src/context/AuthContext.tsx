@@ -4,9 +4,8 @@ import axios from 'axios';
 // Ensure axios sends cookies/credentials with every request
 axios.defaults.withCredentials = true;
 
-// If running local development where frontend and backend are on separate ports, 
-// uncomment and point to your backend server URL:
-// axios.defaults.baseURL = 'http://localhost:3001';
+// Point directly to your live Render backend URL
+axios.defaults.baseURL = 'https://mlp-tcg-engine.onrender.com';
 
 interface User {
   id: number;
@@ -33,7 +32,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const verifyLiveSession = async () => {
       try {
         const { data } = await axios.get('/auth/verify');
-        // If the server returns a valid user, set it; otherwise clear
         setUser(data.user || data);
       } catch (err) {
         // Verification failed (not logged in or session expired); ensure user is null, NOT safe mode
