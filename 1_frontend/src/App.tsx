@@ -2,8 +2,10 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from './config';
 import Navbar from './components/Navbar';
-import Home from './components/Home';
+import MainHub from './components/MainHub';
 import DeckBuilder from './components/DeckBuilder';
+import AdminPanel from './components/AdminPanel';
+import './index.css';
 
 axios.defaults.withCredentials = true;
 
@@ -35,37 +37,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const verifyLiveSession = async () => {
       try {
         const { data } = await axios.get(`${API_BASE_URL}/api/auth/me`);
-        if (data.user) {
-          setUser(data.user);
-        } else {
-          setUser(null);
-        }
+        if (data.user) setUser(data.user);
       } catch (err) {
         setUser(null);
       } finally {
         setLoading(false);
       }
     };
-
     verifyLiveSession();
   }, []);
 
   const login = async (credentials: { username: string; password: string }) => {
     const { data } = await axios.post(`${API_BASE_URL}/api/auth/login`, credentials);
-    if (data.user) {
-      setUser(data.user);
-    } else {
-      setUser(data);
-    }
+    setUser(data.user || data);
   };
 
   const register = async (formData: any) => {
     const { data } = await axios.post(`${API_BASE_URL}/api/auth/register`, formData);
-    if (data.user) {
-      setUser(data.user);
-    } else {
-      setUser(data);
-    }
+    setUser(data.user || data);
   };
 
   const logout = async () => {
@@ -85,23 +74,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'home' | 'deckBuilder'>('home');
+  const [currentTab, setCurrentTab] = useState<string>('hub');
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const { login, register } = useAuth();
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (isRegisterMode) {
+        await register({ username, password, email: `${username}@mlp.local`, displayName: username });
+      } else {
+        await login({ username, password });
+      }
+      setShowAuthModal(false);
+      setUsername('');
+      setPassword('');
+    } catch (err) {
+      alert('Authentication failed. Please check your credentials.');
+    }
+  };
 
   return (
     <AuthProvider>
-      <div className="app-root">
-        <Navbar currentView={currentView} setCurrentView={setCurrentView} />
-        <main className="app-content">
-          {currentView === 'home' && <Home onStartDeckBuilder={() => setCurrentView('deckBuilder')} />}
-          {currentView === 'deckBuilder' && <DeckBuilder />}
+      <div className="app-container">
+        <Navbar currentTab={currentTab} setCurrentTab={setCurrentTab} onOpenAuth={() => setShowAuthModal(true)} />
+
+        <main className="main-content-area">
+          {currentTab === 'hub' && <MainHub />}
+          {currentTab === 'deckBuilder' && <DeckBuilder />}
+          {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
+          {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
+          {currentTab === 'fanPage' && <div className="placeholder-tab"><h2>Fan Art & Lore Page Coming Soon</h2></div>}
+          {currentTab === 'admin' && <AdminPanel />}
         </main>
+
+        {/* Login / Registration Modal */}
+        {showAuthModal && (
+          <div className="auth-modal-overlay">
+            <div className="auth-modal panel-box">
+              <h2>{isRegisterMode ? 'Create Account' : 'Login to Equestria Clash'}</h2>
+              <form onSubmit={handleAuthSubmit}>
+                <input 
+                  type="text" 
+                  placeholder="Username" 
+                  value={username} 
+                  onChange={e => setUsername(e.target.value)} 
+                  required
+                />
+                <input 
+                  type="password" 
+                  placeholder="Password" 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)} 
+                  required
+                />
+                <button type="submit" className="mlp-btn primary">
+                  {isRegisterMode ? 'Register' : 'Login'}
+                </button>
+              </form>
+              <p className="toggle-auth-mode" onClick={() => setIsRegisterMode(!isRegisterMode)}>
+                {isRegisterMode ? 'Already have an account? Login' : "Don't have an account? Register"}
+              </p>
+              <button onClick={() => setShowAuthModal(false)} className="mlp-btn secondary">Close</button>
+            </div>
+          </div>
+        )}
       </div>
     </AuthProvider>
   );

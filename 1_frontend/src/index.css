@@ -1,23 +1,29 @@
-* {
-  box-sizing: border-box;
+:root {
+  --primary-pink: #ec4899;
+  --primary-purple: #9333ea;
+  --bg-dark: #1e1124;
+  --card-bg: #2d1b36;
+  --text-main: #fbcfe8;
+  --text-muted: #d8b4fe;
+  --border-radius: 12px;
 }
 
 body {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   margin: 0;
   padding: 0;
-  background-color: #f5f3ff;
-  color: #1c1917;
+  overflow-x: hidden;
 }
 
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
-::-webkit-scrollbar-track {
-  background: #fdf2f8;
-}
-::-webkit-scrollbar-thumb {
-  background: #f472b6;
-  border-radius: 4px;
+
+/* Soft rounded elements */
+input, select, button, .panel-box, .card-item {
+  border-radius: var(--border-radius);
 }

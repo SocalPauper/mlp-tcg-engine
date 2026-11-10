@@ -154,24 +154,30 @@ export default function DeckBuilder() {
           <p className="loading-text">Loading card database...</p>
         ) : (
           <div className="card-grid">
-            {filteredCards.map(card => (
-              <div key={card.id} className="card-item" onClick={() => addCardToDeck(card)}>
-                <img 
-                  src={card.image_url} 
-                  alt={card.name} 
-                  loading="lazy" 
-                  onError={(e) => {
-                    // Fallback placeholder if image link fails or domain doesn't resolve
-                    (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="140" height="200" background="#333"><text x="10" y="100" fill="%23aaa" font-size="12">No Image</text></svg>';
-                  }} 
-                />
-                <div className="card-info">
-                  <span className="card-id">{card.id}</span>
-                  <span className="card-name">{card.name}</span>
-                  <span className="card-stats">Cost: {card.cost} | Pwr: {card.power}</span>
+            {filteredCards.map(card => {
+              // Fix malformed r2 URLs if needed or provide graceful fallback
+              const imgSource = card.image_url;
+              return (
+                <div key={card.id} className="card-item" onClick={() => addCardToDeck(card)}>
+                  <img 
+                    src={imgSource} 
+                    alt={card.name} 
+                    loading="lazy" 
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      // Fallback to a clean data-URI card preview card if image fails
+                      target.onerror = null; 
+                      target.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="140" height="200"><rect width="100%" height="100%" fill="%23202024"/><text x="15" y="40" fill="%2300b37e" font-size="12" font-family="sans-serif" font-weight="bold">${card.id}</text><text x="15" y="70" fill="%23fff" font-size="12" font-family="sans-serif">${card.name}</text><text x="15" y="110" fill="%23a8a8b3" font-size="10" font-family="sans-serif">Cost: ${card.cost} | Pwr: ${card.power}</text></svg>`;
+                    }} 
+                  />
+                  <div className="card-info">
+                    <span className="card-id">{card.id}</span>
+                    <span className="card-name">{card.name}</span>
+                    <span className="card-stats">Cost: {card.cost} | Pwr: {card.power}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
