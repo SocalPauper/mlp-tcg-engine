@@ -16,6 +16,7 @@ export default function BackgroundUploader({ tabKey }: Props) {
         const result = reader.result as string;
         setBgImage(result);
         localStorage.setItem(`bg_${tabKey}`, result);
+        window.location.reload(); // Refresh to apply background immediately
       };
       reader.readAsDataURL(file);
     }
@@ -24,6 +25,7 @@ export default function BackgroundUploader({ tabKey }: Props) {
   const clearBackground = () => {
     setBgImage('');
     localStorage.removeItem(`bg_${tabKey}`);
+    window.location.reload();
   };
 
   return (
@@ -35,8 +37,6 @@ export default function BackgroundUploader({ tabKey }: Props) {
       {bgImage && (
         <button onClick={clearBackground} className="bg-clear-btn">Reset BG</button>
       )}
-      {/* Apply dynamic background to parent tab container */}
-      {/* Inline style injector via useEffect or wrapper */}
     </div>
   );
 }
