@@ -14,7 +14,8 @@ interface Card {
   power: number;
   defense: number;
   effectText: string;
-  imageUrl: string;
+  image_url?: string;
+  imageUrl?: string;
 }
 
 interface Deck {
@@ -50,18 +51,14 @@ export default function DeckBuilder() {
   const [importExportText, setImportExportText] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
 
-  // Fetch cards and existing decks from backend API with fallback sample catalog
+  // Fetch cards and existing decks from backend API
   useEffect(() => {
     Promise.all([
       fetch(`${API_BASE_URL}/api/cards`).then(async (res) => {
         const ct = res.headers.get('content-type');
         if (!ct || !ct.includes('application/json')) throw new Error('Not JSON');
         return res.json();
-      }).catch(() => [
-        { id: '1', cardNumber: 'M01', name: 'Twilight Sparkle, Element of Magic', type: 'Character', rarity: 'Mane', set_code: 'EQ', traits: 'Alicorn, Magic', cost: 0, power: 4, defense: 4, effectText: '', imageUrl: '' },
-        { id: '2', cardNumber: 'M02', name: 'Applejack, Honest Worker', type: 'Character', rarity: 'Mane', set_code: 'EQ', traits: 'Earth Pony, Farm', cost: 0, power: 3, defense: 5, effectText: '', imageUrl: '' },
-        { id: '3', cardNumber: 'S01', name: 'Friendship is Magic Story 1', type: 'Event', rarity: 'Common', set_code: 'EQ', traits: 'Friendship', cost: 1, power: 2, defense: 2, effectText: '', imageUrl: '' }
-      ]),
+      }).catch(() => []),
       fetch(`${API_BASE_URL}/api/decks`).then(async (res) => {
         const ct = res.headers.get('content-type');
         if (!ct || !ct.includes('application/json')) throw new Error('Not JSON');
@@ -355,10 +352,10 @@ export default function DeckBuilder() {
                         style={{ background: '#111827', border: activeDeck.mane?.id === card.id ? '2px solid #db2777' : '1px solid #374151', borderRadius: '0.75rem', padding: '0.75rem', cursor: 'pointer' }}
                       >
                         <img 
-                          src={card.imageUrl} 
+                          src={card.image_url || card.imageUrl} 
                           alt={card.name} 
                           style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '0.5rem' }}
-                          onError={(e) => { e.currentTarget.src = e.currentTarget.src = 'https://mlp-tcg-engine.onrender.com/assets/default-card-back.webp'; }}
+                          onError={(e) => { e.currentTarget.src = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/default-card-back.webp'; }}
                         />
                         <h4 style={{ fontSize: '0.875rem', margin: '0.5rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
                         <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>Traits: {card.traits || 'None'}</p>
@@ -390,10 +387,10 @@ export default function DeckBuilder() {
                             {arcCards.map((card) => (
                               <img 
                                 key={card.id} 
-                                src={card.imageUrl} 
+                                src={card.image_url || card.imageUrl} 
                                 alt={card.name} 
                                 style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '0.375rem' }}
-                                onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                                onError={(e) => { e.currentTarget.src = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/default-card-back.webp'; }}
                               />
                             ))}
                           </div>
@@ -424,10 +421,10 @@ export default function DeckBuilder() {
                         >
                           {isSelected && <span style={{ position: 'absolute', top: '10px', right: '10px', background: '#db2777', fontSize: '0.625rem', padding: '0.125rem 0.375rem', borderRadius: '0.25rem', fontWeight: 'bold' }}>Added</span>}
                           <img 
-                            src={card.imageUrl} 
+                            src={card.image_url || card.imageUrl} 
                             alt={card.name} 
                             style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '0.375rem' }}
-                            onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                            onError={(e) => { e.currentTarget.src = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/default-card-back.webp'; }}
                           />
                           <h4 style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
                         </div>
@@ -449,10 +446,10 @@ export default function DeckBuilder() {
                         style={{ background: '#111827', border: '1px solid #374151', borderRadius: '0.75rem', padding: '0.5rem', cursor: 'pointer' }}
                       >
                         <img 
-                          src={card.imageUrl} 
+                          src={card.image_url || card.imageUrl} 
                           alt={card.name} 
                           style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '0.375rem' }}
-                          onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                          onError={(e) => { e.currentTarget.src = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/default-card-back.webp'; }}
                         />
                         <h4 style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
                         <p style={{ fontSize: '0.675rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>Cost: {card.cost} | {card.traits}</p>
