@@ -1,0 +1,32 @@
+.bg-uploader-widget {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+.bg-upload-label {
+  background: rgba(147, 51, 234, 0.2);
+  border: 1px dashed #9333ea;
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: #fbcfe8;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: bold;
+  transition: background 0.2s;
+}
+
+.bg-upload-label:hover {
+  background: rgba(147, 51, 234, 0.4);
+}
+
+.bg-clear-btn {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
