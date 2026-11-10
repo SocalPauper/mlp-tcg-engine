@@ -78,7 +78,8 @@ export const useAuth = () => {
   return context;
 };
 
-export default function App() {
+// Inner App component so it is fully wrapped by AuthProvider
+function AppContent() {
   const [currentTab, setCurrentTab] = useState<string>('hub');
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -103,51 +104,57 @@ export default function App() {
   };
 
   return (
-    <AuthProvider>
-      <div className="app-container">
-        <Navbar currentTab={currentTab} setCurrentTab={setCurrentTab} onOpenAuth={() => setShowAuthModal(true)} />
+    <div className="app-container">
+      <Navbar currentTab={currentTab} setCurrentTab={setCurrentTab} onOpenAuth={() => setShowAuthModal(true)} />
 
-        <main className="main-content-area">
-          {currentTab === 'hub' && <MainHub />}
-          {currentTab === 'deckBuilder' && <DeckBuilder />}
-          {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
-          {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
-          {currentTab === 'fanPage' && <div className="placeholder-tab"><h2>Fan Art & Lore Page Coming Soon</h2></div>}
-          {currentTab === 'admin' && <AdminPanel />}
-        </main>
+      <main className="main-content-area">
+        {currentTab === 'hub' && <MainHub />}
+        {currentTab === 'deckBuilder' && <DeckBuilder />}
+        {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
+        {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
+        {currentTab === 'fanPage' && <div className="placeholder-tab"><h2>Fan Art & Lore Page Coming Soon</h2></div>}
+        {currentTab === 'admin' && <AdminPanel />}
+      </main>
 
-        {/* Login / Registration Modal */}
-        {showAuthModal && (
-          <div className="auth-modal-overlay">
-            <div className="auth-modal panel-box">
-              <h2>{isRegisterMode ? 'Create Account' : 'Login to Equestria Clash'}</h2>
-              <form onSubmit={handleAuthSubmit}>
-                <input 
-                  type="text" 
-                  placeholder="Username" 
-                  value={username} 
-                  onChange={e => setUsername(e.target.value)} 
-                  required
-                />
-                <input 
-                  type="password" 
-                  placeholder="Password" 
-                  value={password} 
-                  onChange={e => setPassword(e.target.value)} 
-                  required
-                />
-                <button type="submit" className="mlp-btn primary">
-                  {isRegisterMode ? 'Register' : 'Login'}
-                </button>
-              </form>
-              <p className="toggle-auth-mode" onClick={() => setIsRegisterMode(!isRegisterMode)}>
-                {isRegisterMode ? 'Already have an account? Login' : "Don't have an account? Register"}
-              </p>
-              <button onClick={() => setShowAuthModal(false)} className="mlp-btn secondary">Close</button>
-            </div>
+      {/* Login / Registration Modal */}
+      {showAuthModal && (
+        <div className="auth-modal-overlay">
+          <div className="auth-modal panel-box">
+            <h2>{isRegisterMode ? 'Create Account' : 'Login to Equestria Clash'}</h2>
+            <form onSubmit={handleAuthSubmit}>
+              <input 
+                type="text" 
+                placeholder="Username" 
+                value={username} 
+                onChange={e => setUsername(e.target.value)} 
+                required
+              />
+              <input 
+                type="password" 
+                placeholder="Password" 
+                value={password} 
+                onChange={e => setPassword(e.target.value)} 
+                required
+              />
+              <button type="submit" className="mlp-btn primary">
+                {isRegisterMode ? 'Register' : 'Login'}
+              </button>
+            </form>
+            <p className="toggle-auth-mode" onClick={() => setIsRegisterMode(!isRegisterMode)}>
+              {isRegisterMode ? 'Already have an account? Login' : "Don't have an account? Register"}
+            </p>
+            <button onClick={() => setShowAuthModal(false)} className="mlp-btn secondary">Close</button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
     </AuthProvider>
   );
 }
