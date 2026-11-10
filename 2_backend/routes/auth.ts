@@ -69,22 +69,27 @@ router.post('/login', async (req, res) => {
   }
 
   try {
+    console.log('[LOGIN DEBUG] Querying user from database...');
     const result = await pool.query(
       'SELECT * FROM auth.users WHERE username = $1 OR email = $1',
       [username]
     );
+    console.log('[LOGIN DEBUG] Query result rows count:', result.rows.length);
 
     if (result.rows.length === 0) {
       return res.status(401).json({ success: false, message: 'Invalid username or password.' });
     }
 
     const user = result.rows[0];
+    console.log('[LOGIN DEBUG] Comparing password hashes...');
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    console.log('[LOGIN DEBUG] Password match result:', passwordMatch);
 
     if (!passwordMatch) {
       return res.status(401).json({ success: false, message: 'Invalid username or password.' });
     }
 
+    console.log('[LOGIN DEBUG] Sending success response...');
     return res.json({
       success: true,
       message: 'Login successful',
@@ -98,7 +103,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (err: any) {
-    console.error('Login error:', err);
+    console.error('[LOGIN EXCEPTION]', err);
     return res.status(500).json({ success: false, message: 'Internal server error during login.' });
   }
 });
