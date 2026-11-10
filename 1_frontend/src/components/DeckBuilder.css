@@ -1,0 +1,221 @@
+import React, { useState, useEffect } from 'react';
+import './DeckBuilder.css';
+
+interface Card {
+  id: string;
+  name: string;
+  set_code: string;
+  cost: number;
+  power: number;
+  defense: number;
+  traits: string;
+  effect_text: string;
+  element: string | null;
+  rarity: string;
+  image_url: string;
+}
+
+export default function DeckBuilder() {
+  const [cards, setCards] = useState<Card[]>([]);
+  const [deck, setDeck] = useState<Card[]>([]);
+  const [deckName, setDeckName] = useState('My Custom Deck');
+  const [isPublic, setIsPublic] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedElement, setSelectedElement] = useState<string | 'ALL'>('ALL');
+  const [selectedRarity, setSelectedRarity] = useState<string | 'ALL'>('ALL');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const elements = ['Magic', 'Honesty', 'Kindness', 'Laughter', 'Generosity', 'Loyalty'];
+
+  useEffect(() => {
+    fetch('https://mlp-tcg-engine.onrender.com/api/cards')
+      .then(res => res.json())
+      .then(data => {
+        setCards(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load cards:', err);
+        setLoading(false);
+      });
+  }, []);
+
+  const addCardToDeck = (card: Card) => {
+    if (deck.length >= 60) {
+      alert('Deck has reached the 60-card maximum limit.');
+      return;
+    }
+    setDeck([...deck, card]);
+  };
+
+  const removeCardFromDeck = (index: number) => {
+    const updated = [...deck];
+    updated.splice(index, 1);
+    setDeck(updated);
+  };
+
+  const saveDeckToBackend = async () => {
+    if (!deckName.trim()) {
+      alert('Please enter a deck name.');
+      return;
+    }
+    if (deck.length === 0) {
+      alert('Cannot save an empty deck.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        id: 'deck-' + Date.now(),
+        name: deckName,
+        isPublic,
+        mane: null, // Can map your Mane Character selection here
+        stories: [],
+        scenes: [],
+        main: deck
+      };
+
+      const res = await fetch('https://mlp-tcg-engine.onrender.com/api/decks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert('Deck saved successfully to PostgreSQL!');
+      } else {
+        alert(`Failed to save deck: ${data.message || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Error saving deck:', err);
+      alert('Network error while saving deck.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filteredCards = cards.filter(card => {
+    const matchesSearch = card.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          card.id.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesElement = selectedElement === 'ALL' || card.element === selectedElement;
+    const matchesRarity = selectedRarity === 'ALL' || card.rarity === selectedRarity;
+    return matchesSearch && matchesElement && matchesRarity;
+  });
+
+  return (
+    <div className="deck-builder-container">
+      {/* Left Column: Card Library & Filters */}
+      <div className="card-library-section">
+        <h2>Card Library</h2>
+        
+        <div className="filters-bar">
+          <input 
+            type="text" 
+            placeholder="Search by name or ID (e.g. BP01)..." 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="search-input"
+          />
+
+          <select value={selectedRarity} onChange={e => setSelectedRarity(e.target.value)} className="rarity-select">
+            <option value="ALL">All Rarities</option>
+            <option value="C">Common (C)</option>
+            <option value="U">Uncommon (U)</option>
+            <option value="SR">Silver Rare (SR)</option>
+            <option value="SPR">Sapphire Rare (SPR)</option>
+            <option value="CR">Colorful Rare (CR)</option>
+            <option value="GR">Gold Rare (GR)</option>
+            <option value="RR">Ruby Rare (RR)</option>
+          </select>
+        </div>
+
+        <div className="element-filters">
+          <button 
+            className={`element-btn ${selectedElement === 'ALL' ? 'active' : ''}`}
+            onClick={() => setSelectedElement('ALL')}
+          >
+            All Elements
+          </button>
+          {elements.map(el => (
+            <button 
+              key={el}
+              className={`element-btn ${el.toLowerCase()} ${selectedElement === el ? 'active' : ''}`}
+              onClick={() => setSelectedElement(el)}
+            >
+              {el}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <p className="loading-text">Loading card database...</p>
+        ) : (
+          <div className="card-grid">
+            {filteredCards.map(card => (
+              <div key={card.id} className="card-item" onClick={() => addCardToDeck(card)}>
+                <img src={card.image_url} alt={card.name} loading="lazy" onError={(e)=>{(e.target as HTMLImageElement).src='/placeholder.png'}} />
+                <div className="card-info">
+                  <span className="card-id">{card.id}</span>
+                  <span className="card-name">{card.name}</span>
+                  <span className="card-stats">Cost: {card.cost} | Pwr: {card.power}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Right Column: Active Deck Management & Saving */}
+      <div className="deck-panel-section">
+        <h2>Deck Builder</h2>
+        
+        <div className="deck-meta-inputs">
+          <input 
+            type="text" 
+            value={deckName} 
+            onChange={e => setDeckName(e.target.value)} 
+            placeholder="Deck Name"
+            className="deck-name-input"
+          />
+          <label className="public-checkbox">
+            <input 
+              type="checkbox" 
+              checked={isPublic} 
+              onChange={e => setIsPublic(e.target.checked)} 
+            />
+            Make Public
+          </label>
+        </div>
+
+        <div className="deck-header-stats">
+          <span>Total Cards: {deck.length}/60</span>
+          <button onClick={() => setDeck([])} className="clear-deck-btn">Clear</button>
+        </div>
+
+        <div className="deck-list">
+          {deck.length === 0 ? (
+            <p className="empty-deck">Click cards from the library to add them to your deck.</p>
+          ) : (
+            deck.map((card, idx) => (
+              <div key={`${card.id}-${idx}`} className="deck-row" onClick={() => removeCardFromDeck(idx)}>
+                <span>{card.id} - {card.name}</span>
+                <span className="remove-tag">Remove</span>
+              </div>
+            ))
+          )}
+        </div>
+
+        <button 
+          onClick={saveDeckToBackend} 
+          disabled={saving} 
+          className="save-deck-btn"
+        >
+          {saving ? 'Saving Deck...' : 'Save Deck to Database'}
+        </button>
+      </div>
+    </div>
+  );
+}
