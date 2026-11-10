@@ -9,8 +9,8 @@ const router = Router();
 // CURRENT SESSION ENDPOINT
 router.get('/me', async (req, res) => {
   // If session/cookie authentication is active, check user session here.
-  // Returning 401 unauthenticated by default if no active session middleware is present.
-  return res.status(401).json({ success: false, message: 'Not authenticated' });
+  // Return user: null with 200 OK so the frontend handles guest state cleanly without console 401 errors.
+  return res.json({ success: true, user: null });
 });
 
 // REGISTER ENDPOINT

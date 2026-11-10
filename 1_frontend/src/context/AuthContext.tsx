@@ -31,7 +31,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const verifyLiveSession = async () => {
       try {
         const { data } = await axios.get(`${API_BASE_URL}/api/auth/me`);
-        setUser(data.user || data);
+        if (data.user) {
+          setUser(data.user);
+        } else {
+          setUser(null);
+        }
       } catch (err) {
         setUser(null);
       } finally {
