@@ -84,29 +84,45 @@ export default function DeckBuilder() {
     );
   }
 
-  // --- Filtering Helpers ---
+  // --- Strict Filtering Logic ---
+
+  // 1. Mane Characters: strictly cards with rarity 'Mane' or type 'Mane' or starting with 'M' prefix in ID/set
   const maneCharacters = cards.filter(
-    (c) => c.type === 'Character' && (c.rarity === 'Mane' || c.id?.includes('Mane'))
+    (c) => c.rarity?.toLowerCase() === 'mane' || c.type?.toLowerCase() === 'mane' || c.id?.startsWith('M')
   );
 
-  const storyCards = cards.filter((c) => c.name?.toLowerCase().includes('story'));
+  // 2. Story Arcs: cards identified as stories (type Story or name contains Story)
+  const storyCards = cards.filter(
+    (c) => c.type?.toLowerCase() === 'story' || c.name?.toLowerCase().includes('story') || c.id?.startsWith('S')
+  );
+
   const groupedStoryArcs: { [key: string]: Card[] } = {};
   storyCards.forEach((c) => {
-    const arcKey = c.name.replace(/\b(1|2|3|4|I|II|III|IV)\b/g, '').trim();
+    const arcKey = c.name.replace(/\b(1|2|3|4|I|II|III|IV|Part \d)\b/gi, '').trim();
     if (!groupedStoryArcs[arcKey]) groupedStoryArcs[arcKey] = [];
-    groupedStoryArcs[arcKey].push(c);
+    if (!groupedStoryArcs[arcKey].some((existing) => existing.id === c.id)) {
+      groupedStoryArcs[arcKey].push(c);
+    }
   });
 
+  // 3. Scene Cards: cards with type Scene or set code starting with ER
   const sceneCards = cards.filter(
-    (c) => c.type === 'Scene' || c.set_code?.startsWith('ER') || c.id?.includes('ER')
+    (c) => c.type?.toLowerCase() === 'scene' || c.set_code?.startsWith('ER') || c.id?.includes('ER')
   );
 
+  // 4. Main Deck Card Pool: Exactly 50-card pool excluding Mane, Stories, and Scenes
   const getLegalMainDeckCards = () => {
     return cards.filter((c) => {
-      if (c.type === 'Character' && (c.rarity === 'Mane' || c.id?.includes('Mane'))) return false;
-      if (c.name?.toLowerCase().includes('story')) return false;
-      if (c.type === 'Scene' || c.set_code?.startsWith('ER')) return false;
+      const isMane = c.rarity?.toLowerCase() === 'mane' || c.type?.toLowerCase() === 'mane' || c.id?.startsWith('M');
+      const isStory = c.type?.toLowerCase() === 'story' || c.name?.toLowerCase().includes('story') || c.id?.startsWith('S');
+      const isScene = c.type?.toLowerCase() === 'scene' || c.set_code?.startsWith('ER') || c.id?.includes('ER');
+      
+      if (isMane || isStory || isScene) return false;
+
+      // Optional trait matching against active Mane character if present
       if (!activeDeck.mane) return true;
+      if (!activeDeck.mane.traits) return true;
+      
       return c.traits?.split(', ').some((t) => activeDeck.mane?.traits?.includes(t));
     });
   };
@@ -250,7 +266,7 @@ export default function DeckBuilder() {
                         <div>Mane Character: {deck.mane ? deck.mane.name : 'None'}</div>
                         <div>Story Arcs: {deck.stories?.length > 0 ? '4 / 4' : '0 / 4'}</div>
                         <div>Scenes: {deck.scenes?.length || 0} / 15</div>
-                        <div>Main Deck: {deck.main?.length || 0} cards</div>
+                        <div>Main Deck: {deck.main?.length || 0} / 50</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
@@ -319,7 +335,7 @@ export default function DeckBuilder() {
                   onClick={() => setActiveTab('main')}
                   style={{ background: activeTab === 'main' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
                 >
-                  4. Card Pool ({activeDeck.main?.length || 0})
+                  4. Card Pool ({activeDeck.main?.length || 0}/50)
                 </button>
               </div>
 
@@ -345,7 +361,7 @@ export default function DeckBuilder() {
                 <div>
                   <h3 style={{ marginTop: 0 }}>Choose Your Mane Character</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
-                    {(maneCharacters.length > 0 ? maneCharacters : cards.slice(0, 12)).map((card) => (
+                    {(maneCharacters.length > 0 ? maneCharacters : cards).map((card) => (
                       <div
                         key={card.id}
                         onClick={() => setActiveDeck({ ...activeDeck, mane: card })}
@@ -354,7 +370,8 @@ export default function DeckBuilder() {
                         <img 
                           src={card.image_url || card.imageUrl} 
                           alt={card.name} 
-                          style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '0.5rem' }}
+                          loading="lazy"
+                          style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '0.5rem', background: '#374151' }}
                           onError={(e) => { e.currentTarget.src = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/default-card-back.webp'; }}
                         />
                         <h4 style={{ fontSize: '0.875rem', margin: '0.5rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
@@ -384,12 +401,13 @@ export default function DeckBuilder() {
                             </span>
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
-                            {arcCards.map((card) => (
+                            {arcCards.slice(0, 4).map((card) => (
                               <img 
                                 key={card.id} 
                                 src={card.image_url || card.imageUrl} 
                                 alt={card.name} 
-                                style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '0.375rem' }}
+                                loading="lazy"
+                                style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '0.375rem', background: '#374151' }}
                                 onError={(e) => { e.currentTarget.src = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/default-card-back.webp'; }}
                               />
                             ))}
@@ -405,7 +423,7 @@ export default function DeckBuilder() {
                 <div>
                   <h3 style={{ marginTop: 0 }}>Select Scene Cards ({activeDeck.scenes?.length || 0} / 15)</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
-                    {(sceneCards.length > 0 ? sceneCards : cards).map((card) => {
+                    {sceneCards.map((card) => {
                       const isSelected = activeDeck.scenes?.some((s) => s.id === card.id);
                       return (
                         <div
@@ -419,11 +437,12 @@ export default function DeckBuilder() {
                           }}
                           style={{ background: '#111827', border: isSelected ? '2px solid #db2777' : '1px solid #374151', borderRadius: '0.75rem', padding: '0.5rem', cursor: 'pointer', position: 'relative' }}
                         >
-                          {isSelected && <span style={{ position: 'absolute', top: '10px', right: '10px', background: '#db2777', fontSize: '0.625rem', padding: '0.125rem 0.375rem', borderRadius: '0.25rem', fontWeight: 'bold' }}>Added</span>}
+                          {isSelected && <span style={{ position: 'absolute', top: '10px', right: '10px', background: '#db2777', fontSize: '0.625rem', padding: '0.125rem 0.375rem', borderRadius: '0.25rem', fontWeight: 'bold', zIndex: 2 }}>Added</span>}
                           <img 
                             src={card.image_url || card.imageUrl} 
                             alt={card.name} 
-                            style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '0.375rem' }}
+                            loading="lazy"
+                            style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '0.375rem', background: '#374151' }}
                             onError={(e) => { e.currentTarget.src = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/default-card-back.webp'; }}
                           />
                           <h4 style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
@@ -436,25 +455,34 @@ export default function DeckBuilder() {
 
               {activeTab === 'main' && (
                 <div>
-                  <h3 style={{ marginTop: 0 }}>Attribute-Filtered Card Pool</h3>
-                  <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Click any card to add it to your main deck.</p>
+                  <h3 style={{ marginTop: 0 }}>50-Card Main Deck Pool ({activeDeck.main?.length || 0} / 50)</h3>
+                  <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Click any card to add it to your main deck (Mane, Stories, and Scenes are excluded).</p>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
-                    {getLegalMainDeckCards().map((card) => (
-                      <div
-                        key={card.id}
-                        onClick={() => setActiveDeck({ ...activeDeck, main: [...(activeDeck.main || []), card] })}
-                        style={{ background: '#111827', border: '1px solid #374151', borderRadius: '0.75rem', padding: '0.5rem', cursor: 'pointer' }}
-                      >
-                        <img 
-                          src={card.image_url || card.imageUrl} 
-                          alt={card.name} 
-                          style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '0.375rem' }}
-                          onError={(e) => { e.currentTarget.src = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/default-card-back.webp'; }}
-                        />
-                        <h4 style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
-                        <p style={{ fontSize: '0.675rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>Cost: {card.cost} | {card.traits}</p>
-                      </div>
-                    ))}
+                    {getLegalMainDeckCards().map((card) => {
+                      const count = activeDeck.main?.filter((c) => c.id === card.id).length || 0;
+                      return (
+                        <div
+                          key={card.id}
+                          onClick={() => {
+                            if ((activeDeck.main?.length || 0) < 50) {
+                              setActiveDeck({ ...activeDeck, main: [...(activeDeck.main || []), card] });
+                            }
+                          }}
+                          style={{ background: '#111827', border: count > 0 ? '2px solid #059669' : '1px solid #374151', borderRadius: '0.75rem', padding: '0.5rem', cursor: 'pointer', position: 'relative' }}
+                        >
+                          {count > 0 && <span style={{ position: 'absolute', top: '10px', right: '10px', background: '#059669', fontSize: '0.625rem', padding: '0.125rem 0.375rem', borderRadius: '0.25rem', fontWeight: 'bold', zIndex: 2 }}>x{count}</span>}
+                          <img 
+                            src={card.image_url || card.imageUrl} 
+                            alt={card.name} 
+                            loading="lazy"
+                            style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '0.375rem', background: '#374151' }}
+                            onError={(e) => { e.currentTarget.src = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/default-card-back.webp'; }}
+                          />
+                          <h4 style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
+                          <p style={{ fontSize: '0.675rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>Cost: {card.cost} | {card.traits}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
