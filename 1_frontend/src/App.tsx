@@ -4,7 +4,6 @@ import { API_BASE_URL } from './config';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import DeckBuilder from './components/DeckBuilder';
-import './App.css';
 
 axios.defaults.withCredentials = true;
 
