@@ -8,8 +8,6 @@ const router = Router();
 
 // CURRENT SESSION ENDPOINT
 router.get('/me', async (req, res) => {
-  // If session/cookie authentication is active, check user session here.
-  // Return user: null with 200 OK so the frontend handles guest state cleanly without console 401 errors.
   return res.json({ success: true, user: null });
 });
 
@@ -67,36 +65,29 @@ router.post('/register', async (req, res) => {
 
 // LOGIN ENDPOINT
 router.post('/login', async (req, res) => {
-  console.log('[LOGIN DEBUG] Request body received:', req.body);
   const { username, password } = req.body;
 
   if (!username || !password) {
-    console.log('[LOGIN ERROR] Missing username or password in body:', req.body);
     return res.status(400).json({ success: false, message: 'Username and password are required.' });
   }
 
   try {
-    console.log('[LOGIN DEBUG] Querying user from database...');
     const result = await pool.query(
       'SELECT * FROM auth.users WHERE username = $1 OR email = $1',
       [username]
     );
-    console.log('[LOGIN DEBUG] Query result rows count:', result.rows.length);
 
     if (result.rows.length === 0) {
       return res.status(401).json({ success: false, message: 'Invalid username or password.' });
     }
 
     const user = result.rows[0];
-    console.log('[LOGIN DEBUG] Comparing password hashes...');
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
-    console.log('[LOGIN DEBUG] Password match result:', passwordMatch);
 
     if (!passwordMatch) {
       return res.status(401).json({ success: false, message: 'Invalid username or password.' });
     }
 
-    console.log('[LOGIN DEBUG] Sending success response...');
     return res.json({
       success: true,
       message: 'Login successful',
@@ -110,7 +101,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (err: any) {
-    console.error('[LOGIN EXCEPTION]', err);
+    console.error('Login error:', err);
     return res.status(500).json({ success: false, message: 'Internal server error during login.' });
   }
 });
