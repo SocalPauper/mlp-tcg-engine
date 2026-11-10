@@ -15,7 +15,6 @@ router.post('/register', async (req, res) => {
   }
 
   try {
-    // Check if username or email already exists
     const existing = await pool.query(
       'SELECT id FROM auth.users WHERE username = $1 OR ($2::text IS NOT NULL AND email = $2)',
       [username, email || null]
@@ -29,7 +28,6 @@ router.post('/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, saltRounds);
     const verificationToken = crypto.randomBytes(32).toString('hex');
 
-    // Insert user into database
     const insertResult = await pool.query(
       `INSERT INTO auth.users (username, display_name, email, password_hash, age, verification_token, is_verified)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, username, email`,
@@ -38,7 +36,6 @@ router.post('/register', async (req, res) => {
 
     const newUser = insertResult.rows[0];
 
-    // Send verification email if email is provided
     if (email) {
       try {
         await sendVerificationEmail(email, verificationToken);
@@ -63,9 +60,11 @@ router.post('/register', async (req, res) => {
 
 // LOGIN ENDPOINT
 router.post('/login', async (req, res) => {
+  console.log('[LOGIN DEBUG] Request body received:', req.body);
   const { username, password } = req.body;
 
   if (!username || !password) {
+    console.log('[LOGIN ERROR] Missing username or password in body:', req.body);
     return res.status(400).json({ success: false, message: 'Username and password are required.' });
   }
 
