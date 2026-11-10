@@ -1,96 +1,80 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import axios from 'axios';
+
+// Ensure axios sends cookies/credentials with every request
+axios.defaults.withCredentials = true;
+
+// If running local development where frontend and backend are on separate ports, 
+// uncomment and point to your backend server URL:
+// axios.defaults.baseURL = 'http://localhost:3001';
 
 interface User {
   id: number;
   username: string;
-  displayName: string;
-  email: string | null;
-  age: number;
-  isSafeMode: boolean;
-  isVerifiedAdult: boolean;
-  isAdmin: boolean;
+  email: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
-  login: (userData: User, jwtToken: string) => void;
-  logout: () => void;
-  verifyEmail: () => Promise<void>;
-  isAuthenticated: boolean;
+  loading: boolean;
+  login: (credentials: { email: string; password: string }) => Promise<void>;
+  logout: () => Promise<void>;
+  register: (formData: { username: string; email: string; password: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
+  // Verify live session directly against your PostgreSQL backend on mount
   useEffect(() => {
-    // Load persisted auth state on mount
-    const savedToken = localStorage.getItem('token');
-    const savedUser = localStorage.getItem('user');
-    if (savedToken && savedUser) {
+    const verifyLiveSession = async () => {
       try {
-        setToken(savedToken);
-        setUser(JSON.parse(savedUser));
-      } catch (e) {
-        console.error('Failed to parse saved user data:', e);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        const { data } = await axios.get('/auth/verify');
+        // If the server returns a valid user, set it; otherwise clear
+        setUser(data.user || data);
+      } catch (err) {
+        // Verification failed (not logged in or session expired); ensure user is null, NOT safe mode
+        setUser(null);
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+
+    verifyLiveSession();
   }, []);
 
-  const login = (userData: User, jwtToken: string) => {
-    setUser(userData);
-    setToken(jwtToken);
-    localStorage.setItem('token', jwtToken);
-    localStorage.setItem('user', JSON.stringify(userData));
+  const login = async (credentials: { email: string; password: string }) => {
+    const { data } = await axios.post('/auth/login', credentials);
+    setUser(data.user || data);
   };
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+  const register = async (formData: { username: string; email: string; password: string }) => {
+    const { data } = await axios.post('/auth/register', formData);
+    setUser(data.user || data);
   };
 
-  const verifyEmail = async () => {
-    if (!user || !token) return;
+  const logout = async () => {
     try {
-      const res = await fetch('/api/auth/verify-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ userId: user.id }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Verification failed');
-
-      // Update local state with new safe-mode/verification status
-      setUser(data.user);
-      localStorage.setItem('user', JSON.stringify(data.user));
-    } catch (err) {
-      console.error('Error verifying email:', err);
-      throw err;
+      await axios.post('/auth/logout');
+    } finally {
+      setUser(null);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, verifyEmail, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, register }}>
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
+};
