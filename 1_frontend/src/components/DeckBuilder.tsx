@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
+import { useAuth } from '../context/AuthContext';
 
 interface Card {
   id: string;
@@ -28,6 +29,7 @@ interface Deck {
 }
 
 export default function DeckBuilder() {
+  const { user } = useAuth();
   const [cards, setCards] = useState<Card[]>([]);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +38,7 @@ export default function DeckBuilder() {
   const [activeDeck, setActiveDeck] = useState<Deck>({
     id: '',
     name: 'New Custom Deck',
-    author: 'Player',
+    author: user?.displayName || 'Player',
     isPublic: false,
     mane: null,
     stories: [],
@@ -117,7 +119,7 @@ export default function DeckBuilder() {
     setActiveDeck({
       id: 'deck-' + Date.now(),
       name: 'My Custom Deck',
-      author: 'Player',
+      author: user?.displayName || 'Player',
       isPublic: false,
       mane: null,
       stories: [],
@@ -177,6 +179,27 @@ export default function DeckBuilder() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#111827', color: '#fff', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <header style={{ background: '#1f2937', borderBottom: '1px solid #374151', padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0, color: '#f472b6' }}>
+            Equestria Clash TCG
+          </h1>
+          <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>KAYOU MLP ONLINE ENGINE</span>
+        </div>
+        <div>
+          {view === 'editor' && (
+            <button
+              onClick={() => setView('hub')}
+              style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem' }}
+            >
+              ← Back to Deck Hub
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Main Content */}
       <main style={{ flex: 1, padding: '1.5rem', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
         {view === 'hub' ? (
           <div>
@@ -193,6 +216,15 @@ export default function DeckBuilder() {
                   style={{ background: 'linear-gradient(to right, #db2777, #9333ea)', color: '#fff', border: 'none', padding: '0.75rem 1.25rem', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
                 >
                   + Create New Deck
+                </button>
+                <button
+                  onClick={() => {
+                    setImportExportText('');
+                    setShowImportModal(true);
+                  }}
+                  style={{ background: '#1f2937', color: '#fff', border: '1px solid #374151', padding: '0.75rem 1.25rem', borderRadius: '0.75rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.875rem' }}
+                >
+                  Import Deck JSON
                 </button>
               </div>
             </div>
@@ -212,8 +244,31 @@ export default function DeckBuilder() {
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                         <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#f472b6' }}>{deck.name}</h3>
+                        <span style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', borderRadius: '9999px', background: deck.isPublic ? '#065f46' : '#92400e', color: '#fff', fontWeight: 'bold' }}>
+                          {deck.isPublic ? 'Public' : 'Private'}
+                        </span>
                       </div>
                       <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 1rem 0' }}>Author: {deck.author}</p>
+                      <div style={{ fontSize: '0.875rem', color: '#9ca3af', background: '#111827', padding: '0.75rem', borderRadius: '0.5rem' }}>
+                        <div>Mane Character: {deck.mane ? deck.mane.name : 'None'}</div>
+                        <div>Story Arcs: {deck.stories?.length > 0 ? '4 / 4' : '0 / 4'}</div>
+                        <div>Scenes: {deck.scenes?.length || 0} / 15</div>
+                        <div>Main Deck: {deck.main?.length || 0} cards</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleEditDeck(deck); }}
+                        style={{ flex: 1, background: '#7c3aed', color: '#fff', border: 'none', padding: '0.5rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer' }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveDeck(deck); handleExportDeck(); }}
+                        style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer' }}
+                      >
+                        Export
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -222,6 +277,7 @@ export default function DeckBuilder() {
           </div>
         ) : (
           <div style={{ display: 'flex', gap: '2rem' }}>
+            {/* Sidebar Editor Controls */}
             <div style={{ width: '300px', background: '#1f2937', border: '1px solid #374151', borderRadius: '1rem', padding: '1.25rem', height: 'fit-content' }}>
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 'bold' }}>DECK NAME</label>
@@ -232,19 +288,202 @@ export default function DeckBuilder() {
                   style={{ width: '100%', marginTop: '0.25rem', background: '#111827', border: '1px solid #374151', borderRadius: '0.5rem', padding: '0.5rem', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }}
                 />
               </div>
-              <button
-                onClick={handleSaveDeck}
-                style={{ width: '100%', background: '#059669', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}
-              >
-                Save Deck
-              </button>
+
+              <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#111827', padding: '0.5rem 0.75rem', borderRadius: '0.5rem' }}>
+                <span style={{ fontSize: '0.875rem' }}>Visibility:</span>
+                <button
+                  onClick={() => setActiveDeck({ ...activeDeck, isPublic: !activeDeck.isPublic })}
+                  style={{ background: activeDeck.isPublic ? '#059669' : '#d97706', color: '#fff', border: 'none', padding: '0.25rem 0.75rem', borderRadius: '0.375rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  {activeDeck.isPublic ? 'Public' : 'Private'}
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                <button
+                  onClick={() => setActiveTab('mane')}
+                  style={{ background: activeTab === 'mane' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  1. Mane Character ({activeDeck.mane ? '1' : '0'})
+                </button>
+                <button
+                  onClick={() => setActiveTab('stories')}
+                  style={{ background: activeTab === 'stories' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  2. Story Arcs ({activeDeck.stories?.length || 0}/4)
+                </button>
+                <button
+                  onClick={() => setActiveTab('scenes')}
+                  style={{ background: activeTab === 'scenes' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  3. Scene Cards ({activeDeck.scenes?.length || 0}/15)
+                </button>
+                <button
+                  onClick={() => setActiveTab('main')}
+                  style={{ background: activeTab === 'main' ? '#db2777' : '#111827', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  4. Card Pool ({activeDeck.main?.length || 0})
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <button
+                  onClick={handleSaveDeck}
+                  style={{ background: '#059669', color: '#fff', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Save Deck
+                </button>
+                <button
+                  onClick={handleExportDeck}
+                  style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.875rem' }}
+                >
+                  Export JSON
+                </button>
+              </div>
             </div>
+
+            {/* Clickable Card Selection Grid */}
             <div style={{ flex: 1, background: '#1f2937', border: '1px solid #374151', borderRadius: '1rem', padding: '1.5rem' }}>
-              <h3>Deck Builder Editor Active ({cards.length} cards available)</h3>
+              {activeTab === 'mane' && (
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Choose Your Mane Character</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+                    {(maneCharacters.length > 0 ? maneCharacters : cards.slice(0, 12)).map((card) => (
+                      <div
+                        key={card.id}
+                        onClick={() => setActiveDeck({ ...activeDeck, mane: card })}
+                        style={{ background: '#111827', border: activeDeck.mane?.id === card.id ? '2px solid #db2777' : '1px solid #374151', borderRadius: '0.75rem', padding: '0.75rem', cursor: 'pointer' }}
+                      >
+                        <img 
+                          src={card.imageUrl} 
+                          alt={card.name} 
+                          style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '0.5rem' }}
+                          onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                        />
+                        <h4 style={{ fontSize: '0.875rem', margin: '0.5rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
+                        <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>Traits: {card.traits || 'None'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'stories' && (
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Select a Story Arc (Set of 4)</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginTop: '1rem' }}>
+                    {Object.entries(groupedStoryArcs).map(([arcName, arcCards]) => {
+                      const isSelected = activeDeck.stories?.some((s) => arcCards.some((ac) => ac.id === s.id));
+                      return (
+                        <div
+                          key={arcName}
+                          onClick={() => setActiveDeck({ ...activeDeck, stories: isSelected ? [] : arcCards.slice(0, 4) })}
+                          style={{ background: '#111827', border: isSelected ? '2px solid #db2777' : '1px solid #374151', borderRadius: '0.75rem', padding: '1rem', cursor: 'pointer' }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                            <span style={{ fontWeight: 'bold', color: '#f472b6', fontSize: '1rem' }}>{arcName} Arc</span>
+                            <span style={{ fontSize: '0.75rem', background: isSelected ? '#db2777' : '#374151', padding: '0.25rem 0.75rem', borderRadius: '0.375rem', fontWeight: 'bold' }}>
+                              {isSelected ? 'Selected (4/4)' : 'Click to Select Arc'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                            {arcCards.map((card) => (
+                              <img 
+                                key={card.id} 
+                                src={card.imageUrl} 
+                                alt={card.name} 
+                                style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '0.375rem' }}
+                                onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'scenes' && (
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Select Scene Cards ({activeDeck.scenes?.length || 0} / 15)</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+                    {(sceneCards.length > 0 ? sceneCards : cards).map((card) => {
+                      const isSelected = activeDeck.scenes?.some((s) => s.id === card.id);
+                      return (
+                        <div
+                          key={card.id}
+                          onClick={() => {
+                            if (isSelected) {
+                              setActiveDeck({ ...activeDeck, scenes: activeDeck.scenes.filter((s) => s.id !== card.id) });
+                            } else if ((activeDeck.scenes?.length || 0) < 15) {
+                              setActiveDeck({ ...activeDeck, scenes: [...(activeDeck.scenes || []), card] });
+                            }
+                          }}
+                          style={{ background: '#111827', border: isSelected ? '2px solid #db2777' : '1px solid #374151', borderRadius: '0.75rem', padding: '0.5rem', cursor: 'pointer', position: 'relative' }}
+                        >
+                          {isSelected && <span style={{ position: 'absolute', top: '10px', right: '10px', background: '#db2777', fontSize: '0.625rem', padding: '0.125rem 0.375rem', borderRadius: '0.25rem', fontWeight: 'bold' }}>Added</span>}
+                          <img 
+                            src={card.imageUrl} 
+                            alt={card.name} 
+                            style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '0.375rem' }}
+                            onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                          />
+                          <h4 style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'main' && (
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Attribute-Filtered Card Pool</h3>
+                  <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Click any card to add it to your main deck.</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
+                    {getLegalMainDeckCards().map((card) => (
+                      <div
+                        key={card.id}
+                        onClick={() => setActiveDeck({ ...activeDeck, main: [...(activeDeck.main || []), card] })}
+                        style={{ background: '#111827', border: '1px solid #374151', borderRadius: '0.75rem', padding: '0.5rem', cursor: 'pointer' }}
+                      >
+                        <img 
+                          src={card.imageUrl} 
+                          alt={card.name} 
+                          style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '0.375rem' }}
+                          onError={(e) => { e.currentTarget.src = '/assets/default-card-back.webp'; }}
+                        />
+                        <h4 style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.name}</h4>
+                        <p style={{ fontSize: '0.675rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>Cost: {card.cost} | {card.traits}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
       </main>
+
+      {/* Import / Export Modal */}
+      {showImportModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '1rem', padding: '1.5rem', width: '500px', maxWidth: '90%' }}>
+            <h3 style={{ marginTop: 0 }}>Import / Export Deck JSON</h3>
+            <textarea
+              value={importExportText}
+              onChange={(e) => setImportExportText(e.target.value)}
+              rows={8}
+              style={{ width: '100%', background: '#111827', border: '1px solid #374151', borderRadius: '0.5rem', padding: '0.75rem', color: '#4ade80', fontFamily: 'monospace', fontSize: '0.75rem', boxSizing: 'border-box' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+              <button onClick={() => setShowImportModal(false)} style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleImportDeck} style={{ background: '#db2777', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontWeight: 'bold', cursor: 'pointer' }}>Import</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

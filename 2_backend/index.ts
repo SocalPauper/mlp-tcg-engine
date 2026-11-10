@@ -5,6 +5,8 @@ import { initDatabase, pool } from '../4_data/db.js';
 
 // Import modular backend routes
 import authRouter from './routes/auth.js';
+import cardsRouter from './routes/cards.js';
+import decksRouter from './routes/decks.js';
 
 const app = express();
 app.use(cors());
@@ -54,6 +56,10 @@ async function startServer() {
   }
 
   app.use('/api/auth', authRouter);
+  
+  // Mount cards and decks API route handlers
+  app.use('/api', cardsRouter);
+  app.use('/api', decksRouter);
 
   // Site configuration announcement endpoint
   app.get('/api/site/announcement', async (req, res) => {
