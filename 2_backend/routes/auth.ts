@@ -33,10 +33,14 @@ router.post('/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, saltRounds);
     const verificationToken = crypto.randomBytes(32).toString('hex');
 
+    // If no email is required or provided, and age >= 13, disable safe mode immediately
+    const isVerified = !email;
+    const isSafeMode = !(!email && age >= 13);
+
     const insertResult = await pool.query(
-      `INSERT INTO auth.users (username, display_name, email, password_hash, age, verification_token, is_verified)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, username, email`,
-      [username, displayName, email || null, passwordHash, age, verificationToken, !email]
+      `INSERT INTO auth.users (username, display_name, email, password_hash, age, verification_token, is_verified, is_safe_mode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, username, email`,
+      [username, displayName, email || null, passwordHash, age, verificationToken, isVerified, isSafeMode]
     );
 
     const newUser = insertResult.rows[0];
@@ -88,6 +92,13 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid username or password.' });
     }
 
+    // Enforce rule: remove safe mode if verified and age >= 13
+    let currentSafeMode = user.is_safe_mode;
+    if (user.is_verified && user.age >= 13 && currentSafeMode) {
+      await pool.query('UPDATE auth.users SET is_safe_mode = FALSE WHERE id = $1', [user.id]);
+      currentSafeMode = false;
+    }
+
     return res.json({
       success: true,
       message: 'Login successful',
@@ -96,7 +107,7 @@ router.post('/login', async (req, res) => {
         username: user.username,
         displayName: user.display_name,
         email: user.email,
-        isSafeMode: user.is_safe_mode,
+        isSafeMode: currentSafeMode,
         isVerified: user.is_verified
       }
     });
@@ -120,7 +131,7 @@ router.get('/verify', async (req, res) => {
 
   try {
     const userResult = await pool.query(
-      'SELECT id, is_verified FROM auth.users WHERE verification_token = $1',
+      'SELECT id, age, is_verified FROM auth.users WHERE verification_token = $1',
       [token]
     );
 
@@ -134,12 +145,15 @@ router.get('/verify', async (req, res) => {
       return res.json({ success: true, message: 'Account is already verified. You can log in.' });
     }
 
+    // If verified and age >= 13, remove safe mode
+    const removeSafeMode = user.age >= 13;
+
     await pool.query(
-      'UPDATE auth.users SET is_verified = TRUE, verification_token = NULL WHERE id = $1',
-      [user.id]
+      'UPDATE auth.users SET is_verified = TRUE, is_safe_mode = CASE WHEN $2::boolean THEN FALSE ELSE is_safe_mode END, verification_token = NULL WHERE id = $1',
+      [user.id, removeSafeMode]
     );
 
-    return res.json({ success: true, message: 'Email verified successfully! You may now log in.' });
+    return res.json({ success: true, message: 'Email verified successfully! Safe mode removed. You may now log in.' });
   } catch (err) {
     console.error('Error during email verification:', err);
     return res.status(500).json({ success: false, message: 'Internal server error during verification.' });

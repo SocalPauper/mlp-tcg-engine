@@ -15,16 +15,13 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('[LOGIN CLICK] Sign in form submitted with:', formData);
     setLoading(true);
     setError(null);
 
     try {
       await login(formData);
-      console.log('[LOGIN SUCCESS] Navigation triggered to /');
       navigate('/');
     } catch (err: any) {
-      console.error('[LOGIN ERROR CATCH]', err);
       setError(err.response?.data?.message || err.message || 'Login failed.');
     } finally {
       setLoading(false);
