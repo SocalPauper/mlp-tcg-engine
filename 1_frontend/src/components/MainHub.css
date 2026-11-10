@@ -1,0 +1,125 @@
+.hub-container {
+  padding: 20px;
+  min-height: calc(100vh - 60px);
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+
+.hub-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.panel-box {
+  background: rgba(45, 27, 54, 0.9);
+  border: 1px solid #9333ea;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(147, 51, 234, 0.2);
+}
+
+.panel-box h2, .panel-box h3 {
+  color: #fbcfe8;
+  margin-top: 0;
+}
+
+.create-room-box {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.create-room-box input, .chat-form input, .admin-container input, .admin-container textarea {
+  flex: 1;
+  padding: 10px;
+  background: #1e1124;
+  border: 1px solid #9333ea;
+  border-radius: 8px;
+  color: #fbcfe8;
+}
+
+.mlp-btn {
+  background: linear-gradient(135deg, #ec4899, #9333ea);
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.mlp-btn:hover {
+  opacity: 0.9;
+}
+
+.mlp-btn.secondary {
+  background: #2d1b36;
+  border: 1px solid #ec4899;
+}
+
+.mlp-btn.warning {
+  background: #d97706;
+}
+
+.mlp-btn.danger {
+  background: #dc2626;
+}
+
+.lobby-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lobby-card {
+  background: #1e1124;
+  padding: 12px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #4a1d5e;
+}
+
+.lobby-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-messages {
+  height: 300px;
+  overflow-y: auto;
+  background: #1e1124;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-msg {
+  font-size: 13px;
+  color: #fbcfe8;
+}
+
+.chat-username {
+  color: #ec4899;
+  font-weight: bold;
+}
+
+.chat-form {
+  display: flex;
+  gap: 10px;
+}
+
+.auth-prompt-msg {
+  color: #d8b4fe;
+  font-style: italic;
+  font-size: 13px;
+}
