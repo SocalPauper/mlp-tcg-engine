@@ -3,14 +3,12 @@ import { createServer } from 'http';
 import cors from 'cors';
 import { initDatabase, pool } from '../4_data/db.js';
 
-// Import modular backend routes
 import authRouter from './routes/auth.js';
 import cardsRouter from './routes/cards.js';
 import decksRouter from './routes/decks.js';
 
 const app = express();
 
-// Explicitly configure CORS to support credentials from your Cloudflare Pages frontend
 app.use(cors({
   origin: ['https://equestria-clash.pages.dev', 'http://localhost:5173', 'http://localhost:3000'],
   credentials: true
@@ -24,7 +22,6 @@ async function startServer() {
   try {
     await initDatabase();
 
-    // Ensure auth schema and users table exist with all required columns
     await pool.query(`
       CREATE SCHEMA IF NOT EXISTS auth;
 
@@ -43,9 +40,7 @@ async function startServer() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('[DATABASE] Auth schema and users table verified successfully.');
 
-    // Ensure the decks table exists in auth schema
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth.decks (
         id VARCHAR(255) PRIMARY KEY,
@@ -58,27 +53,13 @@ async function startServer() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('[DATABASE] Auth decks table verified successfully.');
   } catch (err: any) {
     console.error('[DATABASE INIT ERROR]', err.message);
   }
 
   app.use('/api/auth', authRouter);
-  
-  // Mount cards and decks API route handlers
   app.use('/api', cardsRouter);
   app.use('/api', decksRouter);
-
-  // Site configuration announcement endpoint
-  app.get('/api/site/announcement', async (req, res) => {
-    try {
-      const result = await pool.query("SELECT value FROM site_config WHERE key = 'announcement'");
-      const message = result.rows.length > 0 ? result.rows[0].value : null;
-      res.json({ message });
-    } catch {
-      res.json({ message: null });
-    }
-  });
 
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', engine: 'MLP TCG Engine online' });
