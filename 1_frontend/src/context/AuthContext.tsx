@@ -1,11 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../config';
 
-// Ensure axios sends cookies/credentials with every request
 axios.defaults.withCredentials = true;
-
-// Point directly to your live Render backend URL
-axios.defaults.baseURL = 'https://mlp-tcg-engine.onrender.com';
 
 interface User {
   id: number;
@@ -21,7 +18,7 @@ interface AuthContextType {
   loading: boolean;
   login: (credentials: { username: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
-  register: (formData: { username: string; displayName: string; email: string; password: string; age: number }) => Promise<void>;
+  register: (formData: any) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,11 +27,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Verify live session against backend using /api/auth/verify
   useEffect(() => {
     const verifyLiveSession = async () => {
       try {
-        const { data } = await axios.get('/api/auth/verify');
+        const { data } = await axios.get(`${API_BASE_URL}/api/auth/verify`);
         setUser(data.user || data);
       } catch (err) {
         setUser(null);
@@ -47,18 +43,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (credentials: { username: string; password: string }) => {
-    const { data } = await axios.post('/api/auth/login', credentials);
+    const { data } = await axios.post(`${API_BASE_URL}/api/auth/login`, credentials);
     setUser(data.user || data);
   };
 
-  const register = async (formData: { username: string; displayName: string; email: string; password: string; age: number }) => {
-    const { data } = await axios.post('/api/auth/register', formData);
+  const register = async (formData: any) => {
+    const { data } = await axios.post(`${API_BASE_URL}/api/auth/register`, formData);
     setUser(data.user || data);
   };
 
   const logout = async () => {
     try {
-      await axios.post('/api/auth/logout');
+      await axios.post(`${API_BASE_URL}/api/auth/logout`);
     } finally {
       setUser(null);
     }
