@@ -6,6 +6,13 @@ import { sendVerificationEmail } from '../services/mailer.js';
 
 const router = Router();
 
+// CURRENT SESSION ENDPOINT
+router.get('/me', async (req, res) => {
+  // If session/cookie authentication is active, check user session here.
+  // Returning 401 unauthenticated by default if no active session middleware is present.
+  return res.status(401).json({ success: false, message: 'Not authenticated' });
+});
+
 // REGISTER ENDPOINT
 router.post('/register', async (req, res) => {
   const { username, displayName, email, password, age } = req.body;
@@ -108,7 +115,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// VERIFICATION ENDPOINT
+// EMAIL VERIFICATION ENDPOINT
 router.get('/verify', async (req, res) => {
   const { token } = req.query;
 
