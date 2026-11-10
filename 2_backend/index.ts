@@ -65,6 +65,10 @@ async function startServer() {
     res.json({ status: 'ok', engine: 'MLP TCG Engine online' });
   });
 
+  app.get('/api/site/announcement', (req, res) => {
+    res.json({ success: true, announcement: "Welcome to Equestria Clash TCG Online!" });
+  });
+
   const server = createServer(app);
   server.listen(PORT, () => {
     console.log(`[SERVER] MLP TCG Backend active on port ${PORT}`);
