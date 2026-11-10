@@ -1,221 +1,210 @@
-import React, { useState, useEffect } from 'react';
-import './DeckBuilder.css';
-
-interface Card {
-  id: string;
-  name: string;
-  set_code: string;
-  cost: number;
-  power: number;
-  defense: number;
-  traits: string;
-  effect_text: string;
-  element: string | null;
-  rarity: string;
-  image_url: string;
+.deck-builder-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background-color: #121214;
+  color: #e1e1e6;
+  font-family: sans-serif;
+  overflow: hidden;
 }
 
-export default function DeckBuilder() {
-  const [cards, setCards] = useState<Card[]>([]);
-  const [deck, setDeck] = useState<Card[]>([]);
-  const [deckName, setDeckName] = useState('My Custom Deck');
-  const [isPublic, setIsPublic] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedElement, setSelectedElement] = useState<string | 'ALL'>('ALL');
-  const [selectedRarity, setSelectedRarity] = useState<string | 'ALL'>('ALL');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+.card-library-section {
+  flex: 3;
+  padding: 20px;
+  overflow-y: auto;
+  border-right: 1px solid #29292e;
+}
 
-  const elements = ['Magic', 'Honesty', 'Kindness', 'Laughter', 'Generosity', 'Loyalty'];
+.deck-panel-section {
+  flex: 1;
+  padding: 20px;
+  background-color: #18181b;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
 
-  useEffect(() => {
-    fetch('https://mlp-tcg-engine.onrender.com/api/cards')
-      .then(res => res.json())
-      .then(data => {
-        setCards(data);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Failed to load cards:', err);
-        setLoading(false);
-      });
-  }, []);
+.filters-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 15px;
+}
 
-  const addCardToDeck = (card: Card) => {
-    if (deck.length >= 60) {
-      alert('Deck has reached the 60-card maximum limit.');
-      return;
-    }
-    setDeck([...deck, card]);
-  };
+.search-input, .rarity-select, .deck-name-input {
+  padding: 10px;
+  background: #202024;
+  border: 1px solid #323238;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+}
 
-  const removeCardFromDeck = (index: number) => {
-    const updated = [...deck];
-    updated.splice(index, 1);
-    setDeck(updated);
-  };
+.search-input {
+  flex: 2;
+}
 
-  const saveDeckToBackend = async () => {
-    if (!deckName.trim()) {
-      alert('Please enter a deck name.');
-      return;
-    }
-    if (deck.length === 0) {
-      alert('Cannot save an empty deck.');
-      return;
-    }
+.deck-meta-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 15px;
+}
 
-    setSaving(true);
-    try {
-      const payload = {
-        id: 'deck-' + Date.now(),
-        name: deckName,
-        isPublic,
-        mane: null, // Can map your Mane Character selection here
-        stories: [],
-        scenes: [],
-        main: deck
-      };
+.public-checkbox {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #c4c4cc;
+  cursor: pointer;
+}
 
-      const res = await fetch('https://mlp-tcg-engine.onrender.com/api/decks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+.element-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
 
-      const data = await res.json();
-      if (res.ok) {
-        alert('Deck saved successfully to PostgreSQL!');
-      } else {
-        alert(`Failed to save deck: ${data.message || 'Unknown error'}`);
-      }
-    } catch (err) {
-      console.error('Error saving deck:', err);
-      alert('Network error while saving deck.');
-    } finally {
-      setSaving(false);
-    }
-  };
+.element-btn {
+  background: #29292e;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  color: #a8a8b3;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  transition: all 0.2s;
+}
 
-  const filteredCards = cards.filter(card => {
-    const matchesSearch = card.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          card.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesElement = selectedElement === 'ALL' || card.element === selectedElement;
-    const matchesRarity = selectedRarity === 'ALL' || card.rarity === selectedRarity;
-    return matchesSearch && matchesElement && matchesRarity;
-  });
+.element-btn.active {
+  background: #00b37e;
+  color: #fff;
+}
 
-  return (
-    <div className="deck-builder-container">
-      {/* Left Column: Card Library & Filters */}
-      <div className="card-library-section">
-        <h2>Card Library</h2>
-        
-        <div className="filters-bar">
-          <input 
-            type="text" 
-            placeholder="Search by name or ID (e.g. BP01)..." 
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="search-input"
-          />
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
 
-          <select value={selectedRarity} onChange={e => setSelectedRarity(e.target.value)} className="rarity-select">
-            <option value="ALL">All Rarities</option>
-            <option value="C">Common (C)</option>
-            <option value="U">Uncommon (U)</option>
-            <option value="SR">Silver Rare (SR)</option>
-            <option value="SPR">Sapphire Rare (SPR)</option>
-            <option value="CR">Colorful Rare (CR)</option>
-            <option value="GR">Gold Rare (GR)</option>
-            <option value="RR">Ruby Rare (RR)</option>
-          </select>
-        </div>
+.card-item {
+  background: #202024;
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.2s, border-color 0.2s;
+}
 
-        <div className="element-filters">
-          <button 
-            className={`element-btn ${selectedElement === 'ALL' ? 'active' : ''}`}
-            onClick={() => setSelectedElement('ALL')}
-          >
-            All Elements
-          </button>
-          {elements.map(el => (
-            <button 
-              key={el}
-              className={`element-btn ${el.toLowerCase()} ${selectedElement === el ? 'active' : ''}`}
-              onClick={() => setSelectedElement(el)}
-            >
-              {el}
-            </button>
-          ))}
-        </div>
+.card-item:hover {
+  transform: translateY(-4px);
+  border-color: #00b37e;
+}
 
-        {loading ? (
-          <p className="loading-text">Loading card database...</p>
-        ) : (
-          <div className="card-grid">
-            {filteredCards.map(card => (
-              <div key={card.id} className="card-item" onClick={() => addCardToDeck(card)}>
-                <img src={card.image_url} alt={card.name} loading="lazy" onError={(e)=>{(e.target as HTMLImageElement).src='/placeholder.png'}} />
-                <div className="card-info">
-                  <span className="card-id">{card.id}</span>
-                  <span className="card-name">{card.name}</span>
-                  <span className="card-stats">Cost: {card.cost} | Pwr: {card.power}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+.card-item img {
+  width: 100%;
+  border-radius: 4px;
+  aspect-ratio: 2/3;
+  object-fit: cover;
+  background: #2a2a30;
+}
 
-      {/* Right Column: Active Deck Management & Saving */}
-      <div className="deck-panel-section">
-        <h2>Deck Builder</h2>
-        
-        <div className="deck-meta-inputs">
-          <input 
-            type="text" 
-            value={deckName} 
-            onChange={e => setDeckName(e.target.value)} 
-            placeholder="Deck Name"
-            className="deck-name-input"
-          />
-          <label className="public-checkbox">
-            <input 
-              type="checkbox" 
-              checked={isPublic} 
-              onChange={e => setIsPublic(e.target.checked)} 
-            />
-            Make Public
-          </label>
-        </div>
+.card-info {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+}
 
-        <div className="deck-header-stats">
-          <span>Total Cards: {deck.length}/60</span>
-          <button onClick={() => setDeck([])} className="clear-deck-btn">Clear</button>
-        </div>
+.card-id {
+  color: #00b37e;
+  font-weight: bold;
+}
 
-        <div className="deck-list">
-          {deck.length === 0 ? (
-            <p className="empty-deck">Click cards from the library to add them to your deck.</p>
-          ) : (
-            deck.map((card, idx) => (
-              <div key={`${card.id}-${idx}`} className="deck-row" onClick={() => removeCardFromDeck(idx)}>
-                <span>{card.id} - {card.name}</span>
-                <span className="remove-tag">Remove</span>
-              </div>
-            ))
-          )}
-        </div>
+.card-name {
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-        <button 
-          onClick={saveDeckToBackend} 
-          disabled={saving} 
-          className="save-deck-btn"
-        >
-          {saving ? 'Saving Deck...' : 'Save Deck to Database'}
-        </button>
-      </div>
-    </div>
-  );
+.card-stats {
+  color: #c4c4cc;
+}
+
+.deck-header-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.clear-deck-btn {
+  background: #29292e;
+  border: none;
+  color: #f75a68;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.deck-list {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 15px;
+  max-height: calc(100vh - 250px);
+}
+
+.deck-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #202024;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.deck-row:hover {
+  background: #29292e;
+}
+
+.remove-tag {
+  color: #f75a68;
+  font-size: 11px;
+}
+
+.empty-deck {
+  color: #7c7c8a;
+  text-align: center;
+  margin-top: 40px;
+  font-size: 14px;
+}
+
+.save-deck-btn {
+  background: #00b37e;
+  color: #fff;
+  border: none;
+  padding: 12px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.save-deck-btn:hover {
+  background: #00875f;
+}
+
+.save-deck-btn:disabled {
+  background: #29292e;
+  color: #7c7c8a;
+  cursor: not-allowed;
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import './DeckBuilder.css'; // Optional custom styling or Tailwind classes
+import './DeckBuilder.css';
 
 interface Card {
   id: string;
@@ -18,15 +18,18 @@ interface Card {
 export default function DeckBuilder() {
   const [cards, setCards] = useState<Card[]>([]);
   const [deck, setDeck] = useState<Card[]>([]);
+  const [deckName, setDeckName] = useState('My Custom Deck');
+  const [isPublic, setIsPublic] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedElement, setSelectedElement] = useState<string | 'ALL'>('ALL');
   const [selectedRarity, setSelectedRarity] = useState<string | 'ALL'>('ALL');
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const elements = ['Magic', 'Honesty', 'Kindness', 'Laughter', 'Generosity', 'Loyalty'];
 
   useEffect(() => {
-    fetch('https://mlp-tcg-engine.onrender.com/api/cards') // Update to your backend card route as needed
+    fetch('https://mlp-tcg-engine.onrender.com/api/cards')
       .then(res => res.json())
       .then(data => {
         setCards(data);
@@ -50,6 +53,48 @@ export default function DeckBuilder() {
     const updated = [...deck];
     updated.splice(index, 1);
     setDeck(updated);
+  };
+
+  const saveDeckToBackend = async () => {
+    if (!deckName.trim()) {
+      alert('Please enter a deck name.');
+      return;
+    }
+    if (deck.length === 0) {
+      alert('Cannot save an empty deck.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        id: 'deck-' + Date.now(),
+        name: deckName,
+        isPublic,
+        mane: null,
+        stories: [],
+        scenes: [],
+        main: deck
+      };
+
+      const res = await fetch('https://mlp-tcg-engine.onrender.com/api/decks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert('Deck saved successfully to PostgreSQL!');
+      } else {
+        alert(`Failed to save deck: ${data.message || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Error saving deck:', err);
+      alert('Network error while saving deck.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const filteredCards = cards.filter(card => {
@@ -111,7 +156,15 @@ export default function DeckBuilder() {
           <div className="card-grid">
             {filteredCards.map(card => (
               <div key={card.id} className="card-item" onClick={() => addCardToDeck(card)}>
-                <img src={card.image_url} alt={card.name} loading="lazy" onError={(e)=>{(e.target as HTMLImageElement).src='/placeholder.png'}} />
+                <img 
+                  src={card.image_url} 
+                  alt={card.name} 
+                  loading="lazy" 
+                  onError={(e) => {
+                    // Fallback placeholder if image link fails or domain doesn't resolve
+                    (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="140" height="200" background="#333"><text x="10" y="100" fill="%23aaa" font-size="12">No Image</text></svg>';
+                  }} 
+                />
                 <div className="card-info">
                   <span className="card-id">{card.id}</span>
                   <span className="card-name">{card.name}</span>
@@ -123,9 +176,33 @@ export default function DeckBuilder() {
         )}
       </div>
 
-      {/* Right Column: Active Deck Management */}
+      {/* Right Column: Active Deck Management & Saving */}
       <div className="deck-panel-section">
-        <h2>Current Deck ({deck.length}/60)</h2>
+        <h2>Deck Builder</h2>
+        
+        <div className="deck-meta-inputs">
+          <input 
+            type="text" 
+            value={deckName} 
+            onChange={e => setDeckName(e.target.value)} 
+            placeholder="Deck Name"
+            className="deck-name-input"
+          />
+          <label className="public-checkbox">
+            <input 
+              type="checkbox" 
+              checked={isPublic} 
+              onChange={e => setIsPublic(e.target.checked)} 
+            />
+            Make Public
+          </label>
+        </div>
+
+        <div className="deck-header-stats">
+          <span>Total Cards: {deck.length}/60</span>
+          <button onClick={() => setDeck([])} className="clear-deck-btn">Clear</button>
+        </div>
+
         <div className="deck-list">
           {deck.length === 0 ? (
             <p className="empty-deck">Click cards from the library to add them to your deck.</p>
@@ -138,6 +215,14 @@ export default function DeckBuilder() {
             ))
           )}
         </div>
+
+        <button 
+          onClick={saveDeckToBackend} 
+          disabled={saving} 
+          className="save-deck-btn"
+        >
+          {saving ? 'Saving Deck...' : 'Save Deck to Database'}
+        </button>
       </div>
     </div>
   );
