@@ -11,14 +11,17 @@ interface User {
   id: number;
   username: string;
   email: string;
+  displayName: string;
+  isSafeMode: boolean;
+  isVerified: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (credentials: { email: string; password: string }) => Promise<void>;
+  login: (credentials: { username: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
-  register: (formData: { username: string; email: string; password: string }) => Promise<void>;
+  register: (formData: { username: string; displayName: string; email: string; password: string; age: number }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,14 +30,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Verify live session directly against your PostgreSQL backend on mount
+  // Verify live session against backend using /api/auth/verify
   useEffect(() => {
     const verifyLiveSession = async () => {
       try {
-        const { data } = await axios.get('/auth/verify');
+        const { data } = await axios.get('/api/auth/verify');
         setUser(data.user || data);
       } catch (err) {
-        // Verification failed (not logged in or session expired); ensure user is null, NOT safe mode
         setUser(null);
       } finally {
         setLoading(false);
@@ -44,19 +46,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     verifyLiveSession();
   }, []);
 
-  const login = async (credentials: { email: string; password: string }) => {
-    const { data } = await axios.post('/auth/login', credentials);
+  const login = async (credentials: { username: string; password: string }) => {
+    const { data } = await axios.post('/api/auth/login', credentials);
     setUser(data.user || data);
   };
 
-  const register = async (formData: { username: string; email: string; password: string }) => {
-    const { data } = await axios.post('/auth/register', formData);
+  const register = async (formData: { username: string; displayName: string; email: string; password: string; age: number }) => {
+    const { data } = await axios.post('/api/auth/register', formData);
     setUser(data.user || data);
   };
 
   const logout = async () => {
     try {
-      await axios.post('/auth/logout');
+      await axios.post('/api/auth/logout');
     } finally {
       setUser(null);
     }
