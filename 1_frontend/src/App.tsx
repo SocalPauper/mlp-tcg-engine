@@ -6,7 +6,6 @@ import MainHub from './components/MainHub';
 import DeckBuilder from './components/DeckBuilder';
 import AdminPanel from './components/AdminPanel';
 import './index.css';
-import './components/AuthModal.css';
 
 axios.defaults.withCredentials = true;
 
