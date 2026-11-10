@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
@@ -19,10 +20,19 @@ export default function Login() {
     setError(null);
 
     try {
-      await login(formData);
+      const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Login failed.');
+
+      login(data.user, 'dummy-jwt-token');
       navigate('/');
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message || 'An unexpected error occurred during login.');
+      setError(err.message || 'An unexpected error occurred during login.');
     } finally {
       setLoading(false);
     }
