@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+// import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
 
@@ -44,12 +44,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (credentials: { username: string; password: string }) => {
     const { data } = await axios.post(`${API_BASE_URL}/api/auth/login`, credentials);
-    setUser(data.user || data);
+    if (data.user) {
+      setUser(data.user);
+    } else {
+      setUser(data);
+    }
   };
 
   const register = async (formData: any) => {
     const { data } = await axios.post(`${API_BASE_URL}/api/auth/register`, formData);
-    setUser(data.user || data);
+    if (data.user) {
+      setUser(data.user);
+    } else {
+      setUser(data);
+    }
   };
 
   const logout = async () => {
