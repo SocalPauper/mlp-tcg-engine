@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { pool } from '../../4_data/db.ts'; // Adjust relative path to db if needed based on directory structure
+import { pool } from '../../4_data/db.ts';
 import { sendVerificationEmail } from '../services/mailer.js';
 
 const router = Router();
@@ -108,8 +108,12 @@ router.post('/login', async (req, res) => {
 router.get('/verify', async (req, res) => {
   const { token } = req.query;
 
-  if (!token || typeof token !== 'string') {
-    return res.status(400).json({ success: false, message: 'Invalid or missing verification token.' });
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'No verification token provided.' });
+  }
+
+  if (typeof token !== 'string') {
+    return res.status(400).json({ success: false, message: 'Invalid verification token format.' });
   }
 
   try {
