@@ -9,7 +9,13 @@ import cardsRouter from './routes/cards.js';
 import decksRouter from './routes/decks.js';
 
 const app = express();
-app.use(cors());
+
+// Explicitly configure CORS to support credentials from your Cloudflare Pages frontend
+app.use(cors({
+  origin: ['https://equestria-clash.pages.dev', 'http://localhost:5173', 'http://localhost:3000'],
+  credentials: true
+}));
+
 app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
@@ -32,6 +38,8 @@ async function startServer() {
         is_safe_mode BOOLEAN DEFAULT TRUE,
         is_verified_adult BOOLEAN DEFAULT FALSE,
         is_admin BOOLEAN DEFAULT FALSE,
+        is_verified BOOLEAN DEFAULT FALSE,
+        verification_token VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
