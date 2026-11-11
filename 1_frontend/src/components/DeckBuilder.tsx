@@ -5,6 +5,7 @@ interface Card {
   id: string;
   name: string;
   set_code: string;
+  card_type: string;
   cost: number;
   power: number;
   defense: number;
@@ -17,14 +18,24 @@ interface Card {
 
 export default function DeckBuilder() {
   const [cards, setCards] = useState<Card[]>([]);
-  const [deck, setDeck] = useState<Card[]>([]);
-  const [deckName, setDeckName] = useState('My Custom Deck');
+  
+  // Strict Deck Zones
+  const [maneCharacter, setManeCharacter] = useState<Card | null>(null);
+  const [storyDeck, setStoryDeck] = useState<Card[]>([]);
+  const [sceneDeck, setSceneDeck] = useState<Card[]>([]);
+  const [mainDeck, setMainDeck] = useState<Card[]>([]);
+  
+  const [deckName, setDeckName] = useState('My Sparkle Deck');
   const [isPublic, setIsPublic] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedElement, setSelectedElement] = useState<string | 'ALL'>('ALL');
   const [selectedRarity, setSelectedRarity] = useState<string | 'ALL'>('ALL');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Hover Inspector State
+  const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   const elements = ['Magic', 'Honesty', 'Kindness', 'Laughter', 'Generosity', 'Loyalty'];
 
@@ -41,29 +52,42 @@ export default function DeckBuilder() {
       });
   }, []);
 
-  const addCardToDeck = (card: Card) => {
-    if (deck.length >= 60) {
-      alert('Deck has reached the 60-card maximum limit.');
-      return;
-    }
-    setDeck([...deck, card]);
+  const handleMouseMove = (e: React.MouseEvent) => {
+    setMousePos({ x: e.clientX, y: e.clientY });
   };
 
-  const removeCardFromDeck = (index: number) => {
-    const updated = [...deck];
-    updated.splice(index, 1);
-    setDeck(updated);
+  const addCardToDeck = (card: Card) => {
+    if (card.card_type === 'Mane Character') {
+      setManeCharacter(card);
+    } else if (card.card_type === 'Story') {
+      if (storyDeck.length < 4) setStoryDeck([...storyDeck, card]);
+      else alert('Your Story Deck has reached its 4-card limit.');
+    } else if (card.card_type === 'Scene') {
+      if (sceneDeck.length < 15) setSceneDeck([...sceneDeck, card]);
+      else alert('Your Scene Deck has reached its 15-card limit.');
+    } else {
+      if (mainDeck.length < 50) setMainDeck([...mainDeck, card]);
+      else alert('Your Main Deck has reached its 50-card limit.');
+    }
+  };
+
+  const removeCard = (zone: string, index: number) => {
+    if (zone === 'mane') setManeCharacter(null);
+    if (zone === 'story') setStoryDeck(storyDeck.filter((_, i) => i !== index));
+    if (zone === 'scene') setSceneDeck(sceneDeck.filter((_, i) => i !== index));
+    if (zone === 'main') setMainDeck(mainDeck.filter((_, i) => i !== index));
+  };
+
+  const clearDeck = () => {
+    setManeCharacter(null);
+    setStoryDeck([]);
+    setSceneDeck([]);
+    setMainDeck([]);
   };
 
   const saveDeckToBackend = async () => {
-    if (!deckName.trim()) {
-      alert('Please enter a deck name.');
-      return;
-    }
-    if (deck.length === 0) {
-      alert('Cannot save an empty deck.');
-      return;
-    }
+    if (!deckName.trim()) return alert('Please enter a deck name.');
+    if (!maneCharacter && mainDeck.length === 0) return alert('Cannot save an empty deck.');
 
     setSaving(true);
     try {
@@ -71,10 +95,10 @@ export default function DeckBuilder() {
         id: 'deck-' + Date.now(),
         name: deckName,
         isPublic,
-        mane: null,
-        stories: [],
-        scenes: [],
-        main: deck
+        mane: maneCharacter,
+        stories: storyDeck,
+        scenes: sceneDeck,
+        main: mainDeck
       };
 
       const res = await fetch('https://mlp-tcg-engine.onrender.com/api/decks', {
@@ -83,14 +107,10 @@ export default function DeckBuilder() {
         body: JSON.stringify(payload)
       });
 
-      const data = await res.json();
-      if (res.ok) {
-        alert('Deck saved successfully to PostgreSQL!');
-      } else {
-        alert(`Failed to save deck: ${data.message || 'Unknown error'}`);
-      }
+      if (res.ok) alert('Deck saved successfully!');
+      else alert('Failed to save deck.');
     } catch (err) {
-      console.error('Error saving deck:', err);
+      console.error(err);
       alert('Network error while saving deck.');
     } finally {
       setSaving(false);
@@ -105,22 +125,57 @@ export default function DeckBuilder() {
     return matchesSearch && matchesElement && matchesRarity;
   });
 
+  const totalCards = (maneCharacter ? 1 : 0) + storyDeck.length + sceneDeck.length + mainDeck.length;
+
   return (
-    <div className="deck-builder-container">
-      {/* Left Column: Card Library & Filters */}
+    <div className="deck-builder-container" onMouseMove={handleMouseMove}>
+      
+      {/* Floating Inspector Popup */}
+      {hoveredCard && (
+        <div 
+          className="card-popup" 
+          style={{ left: mousePos.x + 20, top: mousePos.y + 20 }}
+        >
+          <img src={hoveredCard.image_url} alt={hoveredCard.name} />
+          <div className="card-popup-details">
+            <div className="popup-title">{hoveredCard.name}</div>
+            <div className="popup-type">{hoveredCard.card_type} • {hoveredCard.id}</div>
+            
+            <div className="popup-stats-grid">
+              {['Character', 'Friend Character', 'Event', 'Item'].includes(hoveredCard.card_type) && (
+                <div className="stat-box cost-box">Cost: {hoveredCard.cost}</div>
+              )}
+              {['Character', 'Friend Character'].includes(hoveredCard.card_type) && (
+                <div className="stat-box power-box">Power: {hoveredCard.power}</div>
+              )}
+              {hoveredCard.element && (
+                <div className={`stat-box element-box ${hoveredCard.element.toLowerCase()}`}>
+                  {hoveredCard.element}
+                </div>
+              )}
+            </div>
+
+            <div className="popup-effect">
+              {hoveredCard.effect_text || 'No effect.'}
+            </div>
+            <div className="popup-traits">Traits: {hoveredCard.traits || 'None'}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Left Column: Card Library */}
       <div className="card-library-section">
-        <h2>Card Library</h2>
+        <h2 className="section-title">Collection</h2>
         
         <div className="filters-bar">
           <input 
             type="text" 
-            placeholder="Search by name or ID (e.g. BP01)..." 
+            placeholder="Search ponies, items, IDs..." 
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="search-input"
+            className="search-input input-bubble"
           />
-
-          <select value={selectedRarity} onChange={e => setSelectedRarity(e.target.value)} className="rarity-select">
+          <select value={selectedRarity} onChange={e => setSelectedRarity(e.target.value)} className="rarity-select input-bubble">
             <option value="ALL">All Rarities</option>
             <option value="C">Common (C)</option>
             <option value="U">Uncommon (U)</option>
@@ -134,10 +189,10 @@ export default function DeckBuilder() {
 
         <div className="element-filters">
           <button 
-            className={`element-btn ${selectedElement === 'ALL' ? 'active' : ''}`}
+            className={`element-btn all-elements ${selectedElement === 'ALL' ? 'active' : ''}`}
             onClick={() => setSelectedElement('ALL')}
           >
-            All Elements
+            All
           </button>
           {elements.map(el => (
             <button 
@@ -151,83 +206,99 @@ export default function DeckBuilder() {
         </div>
 
         {loading ? (
-          <p className="loading-text">Loading card database...</p>
+          <div className="loading-sparkles">Gathering cards... ✨</div>
         ) : (
           <div className="card-grid">
-            {filteredCards.map(card => {
-              // Fix malformed r2 URLs if needed or provide graceful fallback
-              const imgSource = card.image_url;
-              return (
-                <div key={card.id} className="card-item" onClick={() => addCardToDeck(card)}>
-                  <img 
-                    src={imgSource} 
-                    alt={card.name} 
-                    loading="lazy" 
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      // Fallback to a clean data-URI card preview card if image fails
-                      target.onerror = null; 
-                      target.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="140" height="200"><rect width="100%" height="100%" fill="%23202024"/><text x="15" y="40" fill="%2300b37e" font-size="12" font-family="sans-serif" font-weight="bold">${card.id}</text><text x="15" y="70" fill="%23fff" font-size="12" font-family="sans-serif">${card.name}</text><text x="15" y="110" fill="%23a8a8b3" font-size="10" font-family="sans-serif">Cost: ${card.cost} | Pwr: ${card.power}</text></svg>`;
-                    }} 
-                  />
-                  <div className="card-info">
-                    <span className="card-id">{card.id}</span>
-                    <span className="card-name">{card.name}</span>
-                    <span className="card-stats">Cost: {card.cost} | Pwr: {card.power}</span>
-                  </div>
-                </div>
-              );
-            })}
+            {filteredCards.map(card => (
+              <div 
+                key={card.id} 
+                className="card-item" 
+                onClick={() => addCardToDeck(card)}
+                onMouseEnter={() => setHoveredCard(card)}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
+                <img 
+                  src={card.image_url} 
+                  alt={card.name} 
+                  loading="lazy" 
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null; 
+                    target.src = '/placeholder-card.png'; // Add a cute placeholder image here later
+                  }} 
+                />
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Right Column: Active Deck Management & Saving */}
+      {/* Right Column: Active Deck */}
       <div className="deck-panel-section">
-        <h2>Deck Builder</h2>
+        <h2 className="section-title">Your Deck</h2>
         
         <div className="deck-meta-inputs">
           <input 
             type="text" 
             value={deckName} 
             onChange={e => setDeckName(e.target.value)} 
-            placeholder="Deck Name"
-            className="deck-name-input"
+            placeholder="Name your fabulous deck!"
+            className="deck-name-input input-bubble"
           />
           <label className="public-checkbox">
-            <input 
-              type="checkbox" 
-              checked={isPublic} 
-              onChange={e => setIsPublic(e.target.checked)} 
-            />
+            <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} />
             Make Public
           </label>
         </div>
 
         <div className="deck-header-stats">
-          <span>Total Cards: {deck.length}/60</span>
-          <button onClick={() => setDeck([])} className="clear-deck-btn">Clear</button>
+          <span>Cards: <strong>{totalCards}</strong> / 70</span>
+          <button onClick={clearDeck} className="clear-deck-btn">Reset Deck</button>
         </div>
 
-        <div className="deck-list">
-          {deck.length === 0 ? (
-            <p className="empty-deck">Click cards from the library to add them to your deck.</p>
-          ) : (
-            deck.map((card, idx) => (
-              <div key={`${card.id}-${idx}`} className="deck-row" onClick={() => removeCardFromDeck(idx)}>
-                <span>{card.id} - {card.name}</span>
-                <span className="remove-tag">Remove</span>
+        <div className="deck-zones-container">
+          
+          <div className="deck-zone">
+            <h3>Mane Character (1)</h3>
+            {maneCharacter ? (
+               <div className="deck-row mane-row" onClick={() => removeCard('mane', 0)}>
+                 <span>{maneCharacter.name}</span>
+                 <span className="remove-tag">✕</span>
+               </div>
+            ) : <div className="empty-zone">Select a Mane Character</div>}
+          </div>
+
+          <div className="deck-zone">
+            <h3>Story Deck ({storyDeck.length}/4)</h3>
+            {storyDeck.map((c, i) => (
+              <div key={i} className="deck-row" onClick={() => removeCard('story', i)}>
+                <span>{c.name}</span><span className="remove-tag">✕</span>
               </div>
-            ))
-          )}
+            ))}
+          </div>
+
+          <div className="deck-zone">
+            <h3>Scene Deck ({sceneDeck.length}/15)</h3>
+            {sceneDeck.map((c, i) => (
+              <div key={i} className="deck-row" onClick={() => removeCard('scene', i)}>
+                <span>{c.name}</span><span className="remove-tag">✕</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="deck-zone main-deck-zone">
+            <h3>Main Deck ({mainDeck.length}/50)</h3>
+            {mainDeck.map((c, i) => (
+              <div key={i} className="deck-row" onClick={() => removeCard('main', i)}>
+                <span>{c.name}</span><span className="remove-tag">✕</span>
+              </div>
+            ))}
+          </div>
+
         </div>
 
-        <button 
-          onClick={saveDeckToBackend} 
-          disabled={saving} 
-          className="save-deck-btn"
-        >
-          {saving ? 'Saving Deck...' : 'Save Deck to Database'}
+        <button onClick={saveDeckToBackend} disabled={saving} className="save-deck-btn bubble-btn">
+          {saving ? 'Saving...' : '✨ Save Deck ✨'}
         </button>
       </div>
     </div>

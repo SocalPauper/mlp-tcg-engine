@@ -1,6 +1,8 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 import { pool } from './db.js';
 
 dotenv.config();
@@ -20,6 +22,25 @@ const r2Client = new S3Client({
 });
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Robust fetch with exponential backoff to defeat rate limits
+async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'EquestriaClashEngine/1.0' } });
+      if (res.ok) return res;
+      if (res.status === 429) {
+        console.warn(`[RATE LIMIT] Hit 429 on Wiki. Retrying in ${2000 * (i + 1)}ms...`);
+        await delay(2000 * (i + 1)); // Wait longer on each retry
+        continue;
+      }
+    } catch (err) {
+      if (i === retries - 1) throw err;
+    }
+    await delay(1000); // Standard wait before retry
+  }
+  throw new Error(`Failed to fetch ${url} after ${retries} attempts`);
+}
 
 async function fetchWikiAllPages(): Promise<string[]> {
   const titles: string[] = [];
@@ -70,49 +91,38 @@ async function fetchFileUrlFromWiki(filename: string): Promise<string | null> {
       }
     }
   } catch (err: any) {
-    console.warn(`[API WARN] Could not resolve file ${filename}: ${err.message}`);
+    // Suppress warning to keep logs clean on fallbacks
   }
   return null;
 }
 
 async function runMasterSync() {
-  console.log('[MASTER SYNC] Initializing Master Scraper v2.5 (Event Stats & Mane Character Detection)...');
+  console.log('[MASTER SYNC] Initializing Master Scraper (Retry Logic & Safe Delays)...');
+
+  const configPath = path.resolve(process.cwd(), '4_data/allowed_sets.json');
+  let adminConfig = { activeSets: [] };
+  try {
+    adminConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  } catch (err) {
+    console.error('[ERROR] Could not load allowed_sets.json. Please ensure it exists in 4_data/.');
+    return;
+  }
+  const activeSets = new Set(adminConfig.activeSets);
 
   const allPageTitles = await fetchWikiAllPages();
   const cardPageTitles = allPageTitles.filter(title => /^[※]?[A-Z0-9]+-[A-Z0-9]+/.test(title));
-  console.log(`[MASTER SYNC] Discovered ${cardPageTitles.length} card pages to process.`);
+  console.log(`[MASTER SYNC] Discovered ${cardPageTitles.length} total card pages on wiki.`);
 
   const client = await pool.connect();
   try {
-    await client.query(`
-      CREATE SCHEMA IF NOT EXISTS game;
-      CREATE TABLE IF NOT EXISTS game.cards (
-        id VARCHAR(255) PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        card_type VARCHAR(64),
-        element TEXT,
-        rarity TEXT,
-        power INT4 DEFAULT 0,
-        image_url TEXT,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        effect_text TEXT,
-        traits TEXT,
-        set_code VARCHAR(100),
-        cost INT4 DEFAULT 0,
-        defense INT4 DEFAULT 0,
-        flavor_text TEXT,
-        artist VARCHAR(100),
-        card_number VARCHAR(64)
-      );
-    `);
-
     await client.query('BEGIN');
 
     const validElements = new Set(['Magic', 'Honesty', 'Kindness', 'Laughter', 'Generosity', 'Loyalty']);
-    const validRarities = new Set(['C', 'U', 'R', 'SR', 'SSR', 'UR', 'PR', 'P', 'SEC']);
+    const validRarities = new Set(['C', 'U', 'R', 'SR', 'SSR', 'UR', 'PR', 'P', 'SEC', 'CR', 'GR', 'RR', 'SPR']); // Included extended Kayou rarities
     
     let count = 0;
     let skippedChinese = 0;
+    let skippedUnapproved = 0;
     let uploadedArt = 0;
 
     for (const title of cardPageTitles) {
@@ -123,6 +133,11 @@ async function runMasterSync() {
       const rawCardId = titleMatch[1].replace(/※/g, '').trim();
       const cardId = isShining ? `${rawCardId}-S` : rawCardId;
       const setCode = rawCardId.split('-')[0];
+
+      if (!activeSets.has(setCode)) {
+        skippedUnapproved++;
+        continue;
+      }
       
       let cardName = title.replace(/^([※]?[A-Z0-9]+-[A-Z0-9]+)/, '').trim();
       if (isShining && !cardName.includes('Shining')) {
@@ -178,9 +193,19 @@ async function runMasterSync() {
           .trim();
       };
 
+      const storyKeywords = [
+        'Story', 'The Last Roundup', 'Sweet and Elite', 'The Ticket Master', 
+        'Party of One', 'Over a Barrel', 'Griffon the Brush Off', 'Suited for Success',
+        'Boast Busters', 'Dragonshy', 'Look Before You Sleep', 'Bridle Gossip', 
+        'Swarm of the Century', 'Winter Wrap Up', 'Call of the Cutie', 'Fall Weather Friends', 
+        'Green Isn\'t Your Color', 'A Bird in the Hoof', 'The Cutie Mark Chronicles', 'Owl\'s Well That Ends Well'
+      ];
+      const isStoryCard = templateName.includes('story') || storyKeywords.some(kw => cardName.includes(kw));
+
       let cardType = namedParams['type'] || namedParams['card_type'] || '';
       if (!cardType) {
-        if (templateName.includes('event')) cardType = 'Event';
+        if (isStoryCard) cardType = 'Story';
+        else if (templateName.includes('event')) cardType = 'Event';
         else if (templateName.includes('item')) cardType = 'Item';
         else if (templateName.includes('mane')) cardType = 'Mane Character';
         else if (templateName.includes('friend')) cardType = 'Friend Character';
@@ -200,16 +225,9 @@ async function runMasterSync() {
       let ability = namedParams['effect'] || namedParams['ability'] || '';
       let flavor = namedParams['flavor'] || '';
 
-      // Universal positional parsing to catch missed numbers across ALL card types
-      if (rawParams[1] && validRarities.has(rawParams[1].toUpperCase())) {
-        rarity = rawParams[1].toUpperCase();
-      }
-      if (!cardName && rawParams[3]) {
-        cardName = cleanParam(rawParams[3]);
-      }
-      if (!traits && rawParams[4]) {
-        traits = cleanParam(rawParams[4]);
-      }
+      if (rawParams[1] && validRarities.has(rawParams[1].toUpperCase())) rarity = rawParams[1].toUpperCase();
+      if (!cardName && rawParams[3]) cardName = cleanParam(rawParams[3]);
+      if (!traits && rawParams[4]) traits = cleanParam(rawParams[4]);
       
       const numericTokens: number[] = [];
       const textTokens: string[] = [];
@@ -220,7 +238,7 @@ async function runMasterSync() {
         if (!element && validElements.has(val)) {
           element = val;
         } else if (/^\d+$/.test(val)) {
-          if (i < 4) continue; // Skip collector numbers
+          if (i < 4) continue; 
           numericTokens.push(parseInt(val, 10));
         } else if (i > 4 && isNaN(Number(val))) {
           textTokens.push(val);
@@ -228,12 +246,8 @@ async function runMasterSync() {
       }
       
       if (cost === 0 && numericTokens.length > 0) cost = numericTokens[0];
-      
-      if (cardType.includes('Character')) {
-          if (power === 0 && numericTokens.length > 1) power = numericTokens[1];
-      }
+      if (cardType.includes('Character') && power === 0 && numericTokens.length > 1) power = numericTokens[1];
 
-      // Auto-detect full art Mane Characters: If it's a character but lacks printed Cost/Power bubbles
       if (cardType === 'Character' && cost === 0 && power === 0) {
          cardType = 'Mane Character';
       }
@@ -245,12 +259,20 @@ async function runMasterSync() {
       const defense = power;
 
       if (!element) {
-        if (cardName.includes('Twilight Sparkle')) element = 'Magic';
-        else if (cardName.includes('Applejack')) element = 'Honesty';
-        else if (cardName.includes('Fluttershy')) element = 'Kindness';
-        else if (cardName.includes('Pinkie Pie')) element = 'Laughter';
-        else if (cardName.includes('Rarity')) element = 'Generosity';
-        else if (cardName.includes('Rainbow Dash')) element = 'Loyalty';
+        const nameLower = cardName.toLowerCase();
+        if (nameLower.includes('twilight sparkle') || nameLower.includes('spike') || nameLower.includes('trixie') || nameLower.includes('celestia') || nameLower.includes('luna') || nameLower.includes('cadance') || nameLower.includes('shining armor') || nameLower.includes('owlowiscious') || nameLower.includes('discord')) {
+          element = 'Magic';
+        } else if (nameLower.includes('applejack') || nameLower.includes('apple bloom') || nameLower.includes('big mcintosh') || nameLower.includes('granny smith') || nameLower.includes('winona') || nameLower.includes('mayor mare')) {
+          element = 'Honesty';
+        } else if (nameLower.includes('fluttershy') || nameLower.includes('angel') || nameLower.includes('zecora')) {
+          element = 'Kindness';
+        } else if (nameLower.includes('pinkie pie') || nameLower.includes('gummy') || nameLower.includes('cheese sandwich')) {
+          element = 'Laughter';
+        } else if (nameLower.includes('rarity') || nameLower.includes('sweetie belle') || nameLower.includes('opalescence') || nameLower.includes('diamond tiara') || nameLower.includes('silver spoon')) {
+          element = 'Generosity';
+        } else if (nameLower.includes('rainbow dash') || nameLower.includes('scootaloo') || nameLower.includes('gilda') || nameLower.includes('tank') || nameLower.includes('spitfire') || nameLower.includes('soarin')) {
+          element = 'Loyalty';
+        }
       }
 
       const r2Key = `cards/${cardId}.webp`;
@@ -263,34 +285,32 @@ async function runMasterSync() {
       if (process.env.R2_BUCKET_NAME) {
         try {
           let targetUrl = await fetchFileUrlFromWiki(specificImageFile);
-          if (!targetUrl) {
-            targetUrl = await fetchFileUrlFromWiki(`${rawWikiFileName}.png`);
-          }
+          if (!targetUrl) targetUrl = await fetchFileUrlFromWiki(`${rawWikiFileName}.png`);
+          if (!targetUrl) targetUrl = await fetchFileUrlFromWiki(`${rawWikiFileName}.jpg`); 
+          if (!targetUrl) targetUrl = await fetchFileUrlFromWiki(`${rawWikiFileName}.jpeg`);
 
           if (targetUrl && !/[\u4e00-\u9fa5]/.test(targetUrl)) {
-            const imgRes = await fetch(targetUrl, { headers: { 'User-Agent': 'EquestriaClashEngine/1.0' } });
-            if (imgRes.ok) {
-              const arrayBuffer = await imgRes.arrayBuffer();
-              const webpBuffer = await sharp(Buffer.from(arrayBuffer))
-                .resize({ width: TARGET_WIDTH, withoutEnlargement: true })
-                .webp({ quality: WEBP_QUALITY, effort: 4 })
-                .toBuffer();
+            const imgRes = await fetchWithRetry(targetUrl); 
+            const arrayBuffer = await imgRes.arrayBuffer();
+            
+            const webpBuffer = await sharp(Buffer.from(arrayBuffer))
+              .resize({ width: TARGET_WIDTH, withoutEnlargement: true })
+              .webp({ quality: WEBP_QUALITY, effort: 4 })
+              .toBuffer();
 
-              await r2Client.send(new PutObjectCommand({
-                Bucket: process.env.R2_BUCKET_NAME,
-                Key: r2Key,
-                Body: webpBuffer,
-                ContentType: 'image/webp',
-              }));
-              uploadedArt++;
-            }
+            await r2Client.send(new PutObjectCommand({
+              Bucket: process.env.R2_BUCKET_NAME,
+              Key: r2Key,
+              Body: webpBuffer,
+              ContentType: 'image/webp',
+            }));
+            uploadedArt++;
           }
         } catch (err: any) {
-          console.warn(`[R2 FAIL] ${cardId}: ${err.message}`);
+          console.warn(`[R2 UPLOAD FAIL] ${cardId}: ${err.message}`);
         }
       }
 
-      // Updated SQL Query to insert card_type
       await client.query(`
         INSERT INTO game.cards (
           id, card_number, name, card_type, set_code, cost, power, defense, traits, effect_text, flavor_text, element, rarity, image_url
@@ -312,14 +332,15 @@ async function runMasterSync() {
 
       count++;
       if (count % 25 === 0) {
-        console.log(`[PROGRESS] Synchronized ${count} clean cards...`);
+        console.log(`[PROGRESS] Synchronized ${count} English cards, uploaded ${uploadedArt} images...`);
       }
 
-      await delay(15);
+      await delay(300); // Safer delay to prevent API timeouts
     }
 
     await client.query('COMMIT');
-    console.log(`[SUCCESS] Master sync completed! Synced ${count} clean cards, uploaded ${uploadedArt} art assets, skipped ${skippedChinese} Chinese cards.`);
+    console.log(`[SUCCESS] Master Sync completed! Synced ${count} valid cards, uploaded ${uploadedArt} images.`);
+    console.log(`[FILTERED] Skipped ${skippedChinese} Chinese assets and ${skippedUnapproved} unapproved set cards.`);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[ERROR]', err);

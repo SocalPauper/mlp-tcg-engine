@@ -1,0 +1,18 @@
+{
+  "description": "Admin-controlled list of localized English sets approved for database ingestion.",
+  "activeSets": [
+    "BP01", 
+    "BP02", 
+    "BP03", 
+    "BP04", 
+    "SD01", 
+    "SD01A", 
+    "SD01B", 
+    "SD01C", 
+    "SD01D", 
+    "SD01E", 
+    "SD01F", 
+    "PR", 
+    "TK"
+  ]
+}
