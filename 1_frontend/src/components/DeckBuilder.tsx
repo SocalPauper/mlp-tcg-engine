@@ -16,6 +16,8 @@ interface Card {
   image_url: string;
 }
 
+type BuildPhase = 'MANE' | 'STORY' | 'SCENE' | 'MAIN';
+
 export default function DeckBuilder() {
   const [cards, setCards] = useState<Card[]>([]);
   
@@ -25,10 +27,12 @@ export default function DeckBuilder() {
   const [sceneDeck, setSceneDeck] = useState<Card[]>([]);
   const [mainDeck, setMainDeck] = useState<Card[]>([]);
   
+  const [buildPhase, setBuildPhase] = useState<BuildPhase>('MANE');
+  const deckElement = maneCharacter?.element || null;
+  
   const [deckName, setDeckName] = useState('My Sparkle Deck');
   const [isPublic, setIsPublic] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedElement, setSelectedElement] = useState<string | 'ALL'>('ALL');
   const [selectedRarity, setSelectedRarity] = useState<string | 'ALL'>('ALL');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -36,8 +40,6 @@ export default function DeckBuilder() {
   // Hover Inspector State
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-
-  const elements = ['Magic', 'Honesty', 'Kindness', 'Laughter', 'Generosity', 'Loyalty'];
 
   useEffect(() => {
     fetch('https://mlp-tcg-engine.onrender.com/api/cards')
@@ -57,73 +59,84 @@ export default function DeckBuilder() {
   };
 
   const addCardToDeck = (card: Card) => {
-    if (card.card_type === 'Mane Character') {
+    const baseId = card.id.replace('-S', '');
+
+    if (buildPhase === 'MANE') {
       setManeCharacter(card);
-    } else if (card.card_type === 'Story') {
-      if (storyDeck.length < 4) setStoryDeck([...storyDeck, card]);
-      else alert('Your Story Deck has reached its 4-card limit.');
-    } else if (card.card_type === 'Scene') {
-      if (sceneDeck.length < 15) setSceneDeck([...sceneDeck, card]);
-      else alert('Your Scene Deck has reached its 15-card limit.');
-    } else {
-      if (mainDeck.length < 50) setMainDeck([...mainDeck, card]);
-      else alert('Your Main Deck has reached its 50-card limit.');
+      setBuildPhase('STORY'); // Auto-advance
+    } 
+    else if (buildPhase === 'SCENE') {
+      if (sceneDeck.length >= 15) return alert('Scene Deck is full (15/15).');
+      const copies = sceneDeck.filter(c => c.id.replace('-S', '') === baseId).length;
+      const isBasic = card.traits?.toLowerCase().includes('everyday');
+      if (!isBasic && copies >= 3) return alert('You can only have 3 copies of a non-basic Scene.');
+      
+      const newSceneDeck = [...sceneDeck, card];
+      setSceneDeck(newSceneDeck);
+      if (newSceneDeck.length === 15) setBuildPhase('MAIN'); // Auto-advance
+    } 
+    else if (buildPhase === 'MAIN') {
+      if (mainDeck.length >= 50) return alert('Main Deck is full (50/50).');
+      const copies = mainDeck.filter(c => c.id.replace('-S', '') === baseId).length;
+      if (copies >= 3) return alert('You can only have 3 copies of any card.');
+      
+      setMainDeck([...mainDeck, card]);
     }
   };
 
+  const addStoryGroup = (group: Card[]) => {
+    if (storyDeck.length + group.length > 4) return alert('Story Deck can only hold 4 cards.');
+    setStoryDeck([...storyDeck, ...group]);
+    setBuildPhase('SCENE'); // Auto-advance
+  };
+
   const removeCard = (zone: string, index: number) => {
-    if (zone === 'mane') setManeCharacter(null);
+    if (zone === 'mane') {
+      const confirmReset = window.confirm('Removing your Mane Character will reset your deck element and clear all other cards. Continue?');
+      if (confirmReset) {
+        setManeCharacter(null);
+        setStoryDeck([]);
+        setSceneDeck([]);
+        setMainDeck([]);
+        setBuildPhase('MANE');
+      }
+    }
     if (zone === 'story') setStoryDeck(storyDeck.filter((_, i) => i !== index));
     if (zone === 'scene') setSceneDeck(sceneDeck.filter((_, i) => i !== index));
     if (zone === 'main') setMainDeck(mainDeck.filter((_, i) => i !== index));
   };
 
-  const clearDeck = () => {
-    setManeCharacter(null);
-    setStoryDeck([]);
-    setSceneDeck([]);
-    setMainDeck([]);
-  };
-
-  const saveDeckToBackend = async () => {
-    if (!deckName.trim()) return alert('Please enter a deck name.');
-    if (!maneCharacter && mainDeck.length === 0) return alert('Cannot save an empty deck.');
-
-    setSaving(true);
-    try {
-      const payload = {
-        id: 'deck-' + Date.now(),
-        name: deckName,
-        isPublic,
-        mane: maneCharacter,
-        stories: storyDeck,
-        scenes: sceneDeck,
-        main: mainDeck
-      };
-
-      const res = await fetch('https://mlp-tcg-engine.onrender.com/api/decks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (res.ok) alert('Deck saved successfully!');
-      else alert('Failed to save deck.');
-    } catch (err) {
-      console.error(err);
-      alert('Network error while saving deck.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const filteredCards = cards.filter(card => {
-    const matchesSearch = card.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          card.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesElement = selectedElement === 'ALL' || card.element === selectedElement;
+  // --- STRICT FILTERING LOGIC ---
+  const baseFilteredCards = cards.filter(card => {
+    if (card.id.includes('-S')) return false; // Hide alternate arts from base builder
+    const matchesSearch = card.name.toLowerCase().includes(searchQuery.toLowerCase()) || card.id.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRarity = selectedRarity === 'ALL' || card.rarity === selectedRarity;
-    return matchesSearch && matchesElement && matchesRarity;
+    return matchesSearch && matchesRarity;
   });
+
+  let displayCards: Card[] = [];
+  if (buildPhase === 'MANE') {
+    displayCards = baseFilteredCards.filter(c => c.card_type === 'Mane Character');
+  } else if (buildPhase === 'STORY') {
+    displayCards = baseFilteredCards.filter(c => c.card_type === 'Story' && c.element === deckElement);
+  } else if (buildPhase === 'SCENE') {
+    displayCards = baseFilteredCards.filter(c => c.card_type === 'Scene' && c.element === deckElement);
+  } else if (buildPhase === 'MAIN') {
+    displayCards = baseFilteredCards.filter(c => 
+      ['Character', 'Friend Character', 'Event', 'Item'].includes(c.card_type) && 
+      (c.element === deckElement || !c.element) // Must match element OR be colorless
+    );
+  }
+
+  // --- STORY STACKING LOGIC ---
+  const storyGroups = displayCards.reduce((acc, card) => {
+    // Group stories by their base name (stripping numerals like I, II, III, IV)
+    const baseName = card.name.replace(/\s+(I|II|III|IV|V)$/i, '').trim();
+    if (!acc[baseName]) acc[baseName] = [];
+    acc[baseName].push(card);
+    acc[baseName].sort((a, b) => a.id.localeCompare(b.id)); // Keep sequential order
+    return acc;
+  }, {} as Record<string, Card[]>);
 
   const totalCards = (maneCharacter ? 1 : 0) + storyDeck.length + sceneDeck.length + mainDeck.length;
 
@@ -132,10 +145,7 @@ export default function DeckBuilder() {
       
       {/* Floating Inspector Popup */}
       {hoveredCard && (
-        <div 
-          className="card-popup" 
-          style={{ left: mousePos.x + 20, top: mousePos.y + 20 }}
-        >
+        <div className="card-popup" style={{ left: mousePos.x + 20, top: mousePos.y + 20 }}>
           <img src={hoveredCard.image_url} alt={hoveredCard.name} />
           <div className="card-popup-details">
             <div className="popup-title">{hoveredCard.name}</div>
@@ -149,24 +159,27 @@ export default function DeckBuilder() {
                 <div className="stat-box power-box">Power: {hoveredCard.power}</div>
               )}
               {hoveredCard.element && (
-                <div className={`stat-box element-box ${hoveredCard.element.toLowerCase()}`}>
-                  {hoveredCard.element}
-                </div>
+                <div className={`stat-box element-box ${hoveredCard.element.toLowerCase()}`}>{hoveredCard.element}</div>
               )}
             </div>
 
-            <div className="popup-effect">
-              {hoveredCard.effect_text || 'No effect.'}
-            </div>
+            <div className="popup-effect">{hoveredCard.effect_text || 'No effect.'}</div>
             <div className="popup-traits">Traits: {hoveredCard.traits || 'None'}</div>
           </div>
         </div>
       )}
 
-      {/* Left Column: Card Library */}
+      {/* Left Column: Phase-Based Card Library */}
       <div className="card-library-section">
-        <h2 className="section-title">Collection</h2>
         
+        {/* Phase Tracker */}
+        <div className="phase-tracker">
+          <button className={`phase-btn ${buildPhase === 'MANE' ? 'active' : ''}`} onClick={() => setBuildPhase('MANE')}>1. Mane</button>
+          <button className={`phase-btn ${buildPhase === 'STORY' ? 'active' : ''}`} onClick={() => maneCharacter && setBuildPhase('STORY')} disabled={!maneCharacter}>2. Story</button>
+          <button className={`phase-btn ${buildPhase === 'SCENE' ? 'active' : ''}`} onClick={() => maneCharacter && setBuildPhase('SCENE')} disabled={!maneCharacter}>3. Scenes</button>
+          <button className={`phase-btn ${buildPhase === 'MAIN' ? 'active' : ''}`} onClick={() => maneCharacter && setBuildPhase('MAIN')} disabled={!maneCharacter}>4. Main Deck</button>
+        </div>
+
         <div className="filters-bar">
           <input 
             type="text" 
@@ -177,66 +190,74 @@ export default function DeckBuilder() {
           />
           <select value={selectedRarity} onChange={e => setSelectedRarity(e.target.value)} className="rarity-select input-bubble">
             <option value="ALL">All Rarities</option>
-            <option value="C">Common (C)</option>
-            <option value="U">Uncommon (U)</option>
-            <option value="SR">Silver Rare (SR)</option>
-            <option value="SPR">Sapphire Rare (SPR)</option>
-            <option value="CR">Colorful Rare (CR)</option>
-            <option value="GR">Gold Rare (GR)</option>
-            <option value="RR">Ruby Rare (RR)</option>
+            <option value="C">Common</option>
+            <option value="U">Uncommon</option>
+            <option value="SR">Silver Rare</option>
+            <option value="SPR">Sapphire Rare</option>
+            <option value="CR">Colorful Rare</option>
+            <option value="GR">Gold Rare</option>
+            <option value="RR">Ruby Rare</option>
           </select>
-        </div>
-
-        <div className="element-filters">
-          <button 
-            className={`element-btn all-elements ${selectedElement === 'ALL' ? 'active' : ''}`}
-            onClick={() => setSelectedElement('ALL')}
-          >
-            All
-          </button>
-          {elements.map(el => (
-            <button 
-              key={el}
-              className={`element-btn ${el.toLowerCase()} ${selectedElement === el ? 'active' : ''}`}
-              onClick={() => setSelectedElement(el)}
-            >
-              {el}
-            </button>
-          ))}
         </div>
 
         {loading ? (
           <div className="loading-sparkles">Gathering cards... ✨</div>
         ) : (
           <div className="card-grid">
-            {filteredCards.map(card => (
-              <div 
-                key={card.id} 
-                className="card-item" 
-                onClick={() => addCardToDeck(card)}
-                onMouseEnter={() => setHoveredCard(card)}
-                onMouseLeave={() => setHoveredCard(null)}
-              >
-                <img 
-                  src={card.image_url} 
-                  alt={card.name} 
-                  loading="lazy" 
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.onerror = null; 
-                    target.src = '/placeholder-card.png'; // Add a cute placeholder image here later
-                  }} 
-                />
-              </div>
-            ))}
+            {buildPhase === 'STORY' ? (
+              // Render Stories as Splaying Stacks
+              Object.entries(storyGroups).map(([groupName, group]) => (
+                <div 
+                  key={groupName} 
+                  className="story-stack" 
+                  onClick={() => addStoryGroup(group)}
+                  onMouseEnter={() => setHoveredCard(group[0])} // Hover shows the first stage
+                  onMouseLeave={() => setHoveredCard(null)}
+                >
+                  {group.map((card, index) => (
+                    <img 
+                      key={card.id}
+                      className="story-card-layer"
+                      src={card.image_url} 
+                      alt={card.name} 
+                      style={{ zIndex: 4 - index }}
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-card.png'; }}
+                    />
+                  ))}
+                  <div className="story-stack-label">{groupName} ({group.length})</div>
+                </div>
+              ))
+            ) : (
+              // Render Normal Grid for Mane, Scene, and Main
+              displayCards.map(card => (
+                <div 
+                  key={card.id} 
+                  className="card-item" 
+                  onClick={() => addCardToDeck(card)}
+                  onMouseEnter={() => setHoveredCard(card)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                >
+                  <img 
+                    src={card.image_url} 
+                    alt={card.name} 
+                    loading="lazy" 
+                    onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-card.png'; }} 
+                  />
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>
 
       {/* Right Column: Active Deck */}
       <div className="deck-panel-section">
-        <h2 className="section-title">Your Deck</h2>
         
+        {/* Dynamic Element Banner */}
+        <div className={`element-banner ${deckElement ? deckElement.toLowerCase() : 'unaligned'}`}>
+          {deckElement ? `Current Element: ${deckElement}` : 'Awaiting Mane Character...'}
+        </div>
+
         <div className="deck-meta-inputs">
           <input 
             type="text" 
@@ -253,7 +274,6 @@ export default function DeckBuilder() {
 
         <div className="deck-header-stats">
           <span>Cards: <strong>{totalCards}</strong> / 70</span>
-          <button onClick={clearDeck} className="clear-deck-btn">Reset Deck</button>
         </div>
 
         <div className="deck-zones-container">
@@ -297,7 +317,7 @@ export default function DeckBuilder() {
 
         </div>
 
-        <button onClick={saveDeckToBackend} disabled={saving} className="save-deck-btn bubble-btn">
+        <button onClick={() => {}} disabled={saving || mainDeck.length < 50} className="save-deck-btn bubble-btn">
           {saving ? 'Saving...' : '✨ Save Deck ✨'}
         </button>
       </div>
