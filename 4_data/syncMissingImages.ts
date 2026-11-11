@@ -8,6 +8,7 @@ dotenv.config();
 const WIKI_API = 'https://kayoumylittleponycardgame.miraheze.org/w/api.php';
 const TARGET_WIDTH = 480;
 const WEBP_QUALITY = 80;
+const cleanPubUrl = (process.env.R2_PUBLIC_URL || '').replace(/^https?:\/\//, '');
 
 const r2Client = new S3Client({
   region: 'auto',
@@ -33,32 +34,52 @@ async function fetchFileUrlFromWiki(filename: string): Promise<string | null> {
       }
     }
   } catch (err: any) {
-    // Ignore errors for missing files
+    // Suppress errors to keep terminal clean
   }
   return null;
 }
 
 async function recoverMissingImages() {
-  console.log('[RECOVERY] Initializing missing image sync...');
+  console.log('[SMART RECOVERY] Initializing missing image sync...');
   const client = await pool.connect();
   
   try {
     const res = await client.query('SELECT id FROM game.cards ORDER BY id');
     const cards = res.rows;
-    console.log(`[RECOVERY] Found ${cards.length} cards in database. Checking Wiki for assets...`);
+    console.log(`[SMART RECOVERY] Checking ${cards.length} cards against Cloudflare R2...`);
 
     let uploadedCount = 0;
     let failedCount = 0;
+    let skippedCount = 0;
 
     for (const card of cards) {
       const cardId = card.id;
-      const rawWikiFileName = cardId.replace('-S', ''); // Revert Shining ID to Wiki filename format
       const r2Key = `cards/${cardId}.webp`;
+      const publicR2Url = `https://${cleanPubUrl}/${r2Key}`;
 
+      // 1. Check if image already exists in your R2 bucket
       try {
-        let targetUrl = await fetchFileUrlFromWiki(`${rawWikiFileName}.png`);
-        
-        if (targetUrl) {
+        const checkRes = await fetch(publicR2Url, { method: 'HEAD' });
+        if (checkRes.ok) {
+          skippedCount++;
+          continue; // Image exists, skip processing
+        }
+      } catch (err) {
+         // Network error on check, proceed to try downloading anyway
+      }
+
+      // 2. If missing, try different file extensions on the Wiki
+      const rawWikiFileName = cardId.replace('-S', ''); 
+      const extensions = ['png', 'jpg', 'jpeg'];
+      let targetUrl: string | null = null;
+
+      for (const ext of extensions) {
+        targetUrl = await fetchFileUrlFromWiki(`${rawWikiFileName}.${ext}`);
+        if (targetUrl) break; // Stop checking if we found a match
+      }
+      
+      if (targetUrl && !/[\u4e00-\u9fa5]/.test(targetUrl)) {
+        try {
           const imgRes = await fetch(targetUrl, { headers: { 'User-Agent': 'EquestriaClashEngine/1.0' } });
           if (imgRes.ok) {
             const arrayBuffer = await imgRes.arrayBuffer();
@@ -75,21 +96,27 @@ async function recoverMissingImages() {
             }));
             
             uploadedCount++;
-            if (uploadedCount % 25 === 0) console.log(`[RECOVERY] Uploaded ${uploadedCount} images...`);
+            console.log(`[RECOVERED] Successfully grabbed and uploaded ${cardId}`);
           } else {
             failedCount++;
+            console.log(`[FAILED] Wiki returned bad response for ${cardId}`);
           }
-        } else {
+        } catch (err) {
           failedCount++;
+          console.log(`[FAILED] Error processing ${cardId}`);
         }
-      } catch (err) {
+      } else {
         failedCount++;
+        console.log(`[NOT FOUND] No image found on Wiki for ${cardId}`);
       }
 
-      await delay(500); // 500ms delay to prevent Wiki/R2 rate limits
+      await delay(400); // Safer delay
     }
 
-    console.log(`[SUCCESS] Recovery complete. Uploaded ${uploadedCount} missing images. ${failedCount} files were not found on the wiki.`);
+    console.log(`\n[SUCCESS] Smart Recovery complete.`);
+    console.log(`- Skipped (Already in R2): ${skippedCount}`);
+    console.log(`- Uploaded Missing Images: ${uploadedCount}`);
+    console.log(`- Still Missing/Failed: ${failedCount}`);
   } catch (err) {
     console.error('[ERROR]', err);
   } finally {

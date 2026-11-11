@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './DeckBuilder.css';
 
 interface Card {
@@ -31,15 +31,13 @@ export default function DeckBuilder() {
   const deckElement = maneCharacter?.element || null;
   
   const [deckName, setDeckName] = useState('My Sparkle Deck');
-  const [isPublic, setIsPublic] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRarity, setSelectedRarity] = useState<string | 'ALL'>('ALL');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
-  // Hover Inspector State
+  // STABLE HOVER STATE WITH DELAY
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const hoverTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     fetch('https://mlp-tcg-engine.onrender.com/api/cards')
@@ -54,8 +52,17 @@ export default function DeckBuilder() {
       });
   }, []);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    setMousePos({ x: e.clientX, y: e.clientY });
+  // Intentional Hover Logic (600ms delay)
+  const handleMouseEnter = (card: Card) => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => {
+      setHoveredCard(card);
+    }, 600); 
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    setHoveredCard(null);
   };
 
   const addCardToDeck = (card: Card) => {
@@ -63,7 +70,7 @@ export default function DeckBuilder() {
 
     if (buildPhase === 'MANE') {
       setManeCharacter(card);
-      setBuildPhase('STORY'); // Auto-advance
+      setBuildPhase('STORY'); 
     } 
     else if (buildPhase === 'SCENE') {
       if (sceneDeck.length >= 15) return alert('Scene Deck is full (15/15).');
@@ -73,7 +80,7 @@ export default function DeckBuilder() {
       
       const newSceneDeck = [...sceneDeck, card];
       setSceneDeck(newSceneDeck);
-      if (newSceneDeck.length === 15) setBuildPhase('MAIN'); // Auto-advance
+      if (newSceneDeck.length === 15) setBuildPhase('MAIN'); 
     } 
     else if (buildPhase === 'MAIN') {
       if (mainDeck.length >= 50) return alert('Main Deck is full (50/50).');
@@ -87,7 +94,7 @@ export default function DeckBuilder() {
   const addStoryGroup = (group: Card[]) => {
     if (storyDeck.length + group.length > 4) return alert('Story Deck can only hold 4 cards.');
     setStoryDeck([...storyDeck, ...group]);
-    setBuildPhase('SCENE'); // Auto-advance
+    setBuildPhase('SCENE'); 
   };
 
   const removeCard = (zone: string, index: number) => {
@@ -106,9 +113,8 @@ export default function DeckBuilder() {
     if (zone === 'main') setMainDeck(mainDeck.filter((_, i) => i !== index));
   };
 
-  // --- STRICT FILTERING LOGIC ---
   const baseFilteredCards = cards.filter(card => {
-    if (card.id.includes('-S')) return false; // Hide alternate arts from base builder
+    if (card.id.includes('-S')) return false; 
     const matchesSearch = card.name.toLowerCase().includes(searchQuery.toLowerCase()) || card.id.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRarity = selectedRarity === 'ALL' || card.rarity === selectedRarity;
     return matchesSearch && matchesRarity;
@@ -124,47 +130,66 @@ export default function DeckBuilder() {
   } else if (buildPhase === 'MAIN') {
     displayCards = baseFilteredCards.filter(c => 
       ['Character', 'Friend Character', 'Event', 'Item'].includes(c.card_type) && 
-      (c.element === deckElement || !c.element) // Must match element OR be colorless
+      (c.element === deckElement || !c.element) 
     );
   }
 
-  // --- STORY STACKING LOGIC ---
   const storyGroups = displayCards.reduce((acc, card) => {
-    // Group stories by their base name (stripping numerals like I, II, III, IV)
     const baseName = card.name.replace(/\s+(I|II|III|IV|V)$/i, '').trim();
     if (!acc[baseName]) acc[baseName] = [];
     acc[baseName].push(card);
-    acc[baseName].sort((a, b) => a.id.localeCompare(b.id)); // Keep sequential order
+    acc[baseName].sort((a, b) => a.id.localeCompare(b.id)); 
     return acc;
   }, {} as Record<string, Card[]>);
 
   const totalCards = (maneCharacter ? 1 : 0) + storyDeck.length + sceneDeck.length + mainDeck.length;
 
   return (
-    <div className="deck-builder-container" onMouseMove={handleMouseMove}>
+    <div className="deck-builder-container">
       
-      {/* Floating Inspector Popup */}
+      {/* MTG STYLE FIXED INSPECTOR POPUP */}
       {hoveredCard && (
-        <div className="card-popup" style={{ left: mousePos.x + 20, top: mousePos.y + 20 }}>
-          <img src={hoveredCard.image_url} alt={hoveredCard.name} />
-          <div className="card-popup-details">
-            <div className="popup-title">{hoveredCard.name}</div>
-            <div className="popup-type">{hoveredCard.card_type} • {hoveredCard.id}</div>
-            
-            <div className="popup-stats-grid">
-              {['Character', 'Friend Character', 'Event', 'Item'].includes(hoveredCard.card_type) && (
-                <div className="stat-box cost-box">Cost: {hoveredCard.cost}</div>
-              )}
-              {['Character', 'Friend Character'].includes(hoveredCard.card_type) && (
-                <div className="stat-box power-box">Power: {hoveredCard.power}</div>
-              )}
-              {hoveredCard.element && (
-                <div className={`stat-box element-box ${hoveredCard.element.toLowerCase()}`}>{hoveredCard.element}</div>
-              )}
+        <div className="inspector-overlay">
+          <div className="inspector-modal">
+            <div className="inspector-image-container">
+              <img src={hoveredCard.image_url} alt={hoveredCard.name} />
             </div>
+            <div className="inspector-data-panel">
+              <div className="inspector-header">
+                <h2>{hoveredCard.name}</h2>
+                {['Character', 'Friend Character', 'Event', 'Item'].includes(hoveredCard.card_type) && (
+                   <div className="cost-badge">{hoveredCard.cost}</div>
+                )}
+              </div>
+              
+              <div className="inspector-meta-row">
+                <div className="meta-block">
+                  <span className="meta-label">TYPE</span>
+                  <span className="meta-value">{hoveredCard.card_type}</span>
+                </div>
+                <div className="meta-block right-align">
+                  <span className="meta-label">RARITY</span>
+                  <span className="meta-value">{hoveredCard.rarity}</span>
+                </div>
+              </div>
 
-            <div className="popup-effect">{hoveredCard.effect_text || 'No effect.'}</div>
-            <div className="popup-traits">Traits: {hoveredCard.traits || 'None'}</div>
+              <div className="inspector-rules-text">
+                <div className="meta-label">RULES TEXT</div>
+                <p>{hoveredCard.effect_text || 'No abilities.'}</p>
+              </div>
+
+              {['Character', 'Friend Character'].includes(hoveredCard.card_type) && (
+                <div className="inspector-power-row">
+                  <span className="meta-label">POWER</span>
+                  <span className="power-value">{hoveredCard.power}</span>
+                </div>
+              )}
+
+              <div className="inspector-footer">
+                <span className="set-id">{hoveredCard.id}</span>
+                {hoveredCard.element && <span className={`element-tag ${hoveredCard.element.toLowerCase()}`}>{hoveredCard.element}</span>}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -172,7 +197,6 @@ export default function DeckBuilder() {
       {/* Left Column: Phase-Based Card Library */}
       <div className="card-library-section">
         
-        {/* Phase Tracker */}
         <div className="phase-tracker">
           <button className={`phase-btn ${buildPhase === 'MANE' ? 'active' : ''}`} onClick={() => setBuildPhase('MANE')}>1. Mane</button>
           <button className={`phase-btn ${buildPhase === 'STORY' ? 'active' : ''}`} onClick={() => maneCharacter && setBuildPhase('STORY')} disabled={!maneCharacter}>2. Story</button>
@@ -191,12 +215,8 @@ export default function DeckBuilder() {
           <select value={selectedRarity} onChange={e => setSelectedRarity(e.target.value)} className="rarity-select input-bubble">
             <option value="ALL">All Rarities</option>
             <option value="C">Common</option>
-            <option value="U">Uncommon</option>
             <option value="SR">Silver Rare</option>
-            <option value="SPR">Sapphire Rare</option>
-            <option value="CR">Colorful Rare</option>
-            <option value="GR">Gold Rare</option>
-            <option value="RR">Ruby Rare</option>
+            <option value="SSR">Super Secret Rare</option>
           </select>
         </div>
 
@@ -205,14 +225,13 @@ export default function DeckBuilder() {
         ) : (
           <div className="card-grid">
             {buildPhase === 'STORY' ? (
-              // Render Stories as Splaying Stacks
               Object.entries(storyGroups).map(([groupName, group]) => (
                 <div 
                   key={groupName} 
                   className="story-stack" 
                   onClick={() => addStoryGroup(group)}
-                  onMouseEnter={() => setHoveredCard(group[0])} // Hover shows the first stage
-                  onMouseLeave={() => setHoveredCard(null)}
+                  onMouseEnter={() => handleMouseEnter(group[0])}
+                  onMouseLeave={handleMouseLeave}
                 >
                   {group.map((card, index) => (
                     <img 
@@ -221,28 +240,21 @@ export default function DeckBuilder() {
                       src={card.image_url} 
                       alt={card.name} 
                       style={{ zIndex: 4 - index }}
-                      onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-card.png'; }}
                     />
                   ))}
-                  <div className="story-stack-label">{groupName} ({group.length})</div>
+                  <div className="story-stack-label">{groupName}</div>
                 </div>
               ))
             ) : (
-              // Render Normal Grid for Mane, Scene, and Main
               displayCards.map(card => (
                 <div 
                   key={card.id} 
                   className="card-item" 
                   onClick={() => addCardToDeck(card)}
-                  onMouseEnter={() => setHoveredCard(card)}
-                  onMouseLeave={() => setHoveredCard(null)}
+                  onMouseEnter={() => handleMouseEnter(card)}
+                  onMouseLeave={handleMouseLeave}
                 >
-                  <img 
-                    src={card.image_url} 
-                    alt={card.name} 
-                    loading="lazy" 
-                    onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-card.png'; }} 
-                  />
+                  <img src={card.image_url} alt={card.name} loading="lazy" />
                 </div>
               ))
             )}
@@ -252,8 +264,6 @@ export default function DeckBuilder() {
 
       {/* Right Column: Active Deck */}
       <div className="deck-panel-section">
-        
-        {/* Dynamic Element Banner */}
         <div className={`element-banner ${deckElement ? deckElement.toLowerCase() : 'unaligned'}`}>
           {deckElement ? `Current Element: ${deckElement}` : 'Awaiting Mane Character...'}
         </div>
@@ -263,13 +273,9 @@ export default function DeckBuilder() {
             type="text" 
             value={deckName} 
             onChange={e => setDeckName(e.target.value)} 
-            placeholder="Name your fabulous deck!"
+            placeholder="Name your deck!"
             className="deck-name-input input-bubble"
           />
-          <label className="public-checkbox">
-            <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} />
-            Make Public
-          </label>
         </div>
 
         <div className="deck-header-stats">
@@ -277,7 +283,6 @@ export default function DeckBuilder() {
         </div>
 
         <div className="deck-zones-container">
-          
           <div className="deck-zone">
             <h3>Mane Character (1)</h3>
             {maneCharacter ? (
@@ -314,12 +319,7 @@ export default function DeckBuilder() {
               </div>
             ))}
           </div>
-
         </div>
-
-        <button onClick={() => {}} disabled={saving || mainDeck.length < 50} className="save-deck-btn bubble-btn">
-          {saving ? 'Saving...' : '✨ Save Deck ✨'}
-        </button>
       </div>
     </div>
   );
