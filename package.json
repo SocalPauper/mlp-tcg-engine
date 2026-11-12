@@ -7,8 +7,10 @@
     "dev": "npx tsx watch 2_backend/index.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1163.0",
+    "@aws-sdk/client-s3": "^3.1167.0",
+    "@types/cheerio": "^0.22.35",
     "bcrypt": "^5.1.1",
+    "cheerio": "^1.2.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
@@ -26,6 +28,7 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.11.30",
     "@types/pg": "^8.11.4",
+    "@types/sharp": "^0.31.1",
     "@types/ws": "^8.5.10"
   }
 }
