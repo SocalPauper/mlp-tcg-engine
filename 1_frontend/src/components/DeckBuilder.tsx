@@ -142,12 +142,18 @@ export default function DeckBuilder() {
     );
   }
 
-  // Group story cards cleanly by arc name
+  // ROBUST HYBRID GROUPING: Combines base name normalization and set-prefix clustering
   const storyGroups = displayCards.reduce((acc, card) => {
-    const baseName = card.name.split(/[-–]/)[0].trim();
-    if (!acc[baseName]) acc[baseName] = [];
-    acc[baseName].push(card);
-    acc[baseName].sort((a, b) => a.id.localeCompare(b.id)); 
+    const cleanName = card.name
+      .replace(/[-–]\s*(Part\s*\d+|Chapter\s*\d+|\d+|I|II|III|IV|V)$/i, '')
+      .split(/[-–]/)[0]
+      .trim();
+
+    const groupKey = `${card.set_code}-${cleanName}`;
+
+    if (!acc[groupKey]) acc[groupKey] = [];
+    acc[groupKey].push(card);
+    acc[groupKey].sort((a, b) => a.id.localeCompare(b.id)); 
     return acc;
   }, {} as Record<string, Card[]>);
 
@@ -234,25 +240,28 @@ export default function DeckBuilder() {
         ) : (
           <div className="card-grid">
             {buildPhase === 'STORY' ? (
-              Object.entries(storyGroups).map(([groupName, group]) => (
-                <div 
-                  key={groupName} 
-                  className="story-stack" 
-                  onClick={() => addStoryGroup(group)}
-                >
-                  {group.map((card) => (
-                    <img 
-                      key={card.id}
-                      className="story-card-layer"
-                      src={card.image_url} 
-                      alt={card.name} 
-                      onMouseEnter={() => handleMouseEnter(card)}
-                      onMouseLeave={handleMouseLeave}
-                    />
-                  ))}
-                  <div className="story-stack-label">{groupName} ({group.length}/4)</div>
-                </div>
-              ))
+              Object.entries(storyGroups).map(([groupKey, group]) => {
+                const displayName = group[0]?.name ? group[0].name.split(/[-–]/)[0].trim() : groupKey;
+                return (
+                  <div 
+                    key={groupKey} 
+                    className="story-stack" 
+                    onClick={() => addStoryGroup(group)}
+                  >
+                    {group.map((card) => (
+                      <img 
+                        key={card.id}
+                        className="story-card-layer"
+                        src={card.image_url} 
+                        alt={card.name} 
+                        onMouseEnter={() => handleMouseEnter(card)}
+                        onMouseLeave={handleMouseLeave}
+                      />
+                    ))}
+                    <div className="story-stack-label">{displayName} ({group.length}/4)</div>
+                  </div>
+                );
+              })
             ) : (
               displayCards.map(card => (
                 <div 
