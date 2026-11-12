@@ -145,28 +145,26 @@ export default function DeckBuilder() {
     );
   }
 
-  // STRICT RIGID 4-CARD CHUNKING: Group by set and chunk every 4 sorted story cards into exact arcs
-  const rawStoryGroups = displayCards.reduce((acc, card) => {
-    const cleanName = card.name
-      .replace(/[-–]\s*(Part\s*\d+|Chapter\s*\d+|\d+|I|II|III|IV|V|Story\s*\d+)$/i, '')
-      .split(/[-–]/)[0]
-      .trim();
-
-    const groupKey = `${card.set_code}-${cleanName}`;
-    if (!acc[groupKey]) acc[groupKey] = [];
-    acc[groupKey].push(card);
-    return acc;
-  }, {} as Record<string, Card[]>);
-
-  // Flatten and chunk into strict groups of 4 cards max per stack
+  // HYBRID ALGORITHM: Contiguous ID Block & Set Prefix Grouping
+  const sortedStories = [...displayCards].sort((a, b) => a.id.localeCompare(b.id));
   const storyGroups: Record<string, Card[]> = {};
-  Object.entries(rawStoryGroups).forEach(([baseKey, groupCards]) => {
-    groupCards.sort((a, b) => a.id.localeCompare(b.id));
-    for (let i = 0; i < groupCards.length; i += 4) {
-      const chunk = groupCards.slice(i, i + 4);
-      const chunkKey = `${baseKey}-part${Math.floor(i / 4) + 1}`;
-      storyGroups[chunkKey] = chunk;
+
+  sortedStories.forEach(card => {
+    const match = card.id.match(/^([A-Z0-9]+)-C(\d+)/);
+    let groupKey = '';
+
+    if (match) {
+      const setPrefix = match[1];
+      const cardNum = parseInt(match[2], 10);
+      const blockId = Math.floor((cardNum - 1) / 4);
+      groupKey = `${setPrefix}-Block-${blockId}`;
+    } else {
+      const cleanName = card.name.split(/[-–]/)[0].trim();
+      groupKey = `${card.set_code}-${cleanName}`;
     }
+
+    if (!storyGroups[groupKey]) storyGroups[groupKey] = [];
+    storyGroups[groupKey].push(card);
   });
 
   const totalCards = (maneCharacter ? 1 : 0) + storyDeck.length + sceneDeck.length + mainDeck.length;
