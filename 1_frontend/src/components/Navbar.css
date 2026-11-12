@@ -1,36 +1,119 @@
-.app-navbar {
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap');
+
+.mlp-navbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: #18181b;
-  padding: 12px 24px;
-  border-bottom: 1px solid #29292e;
-  color: #fff;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  padding: 10px 24px;
+  border-bottom: 3px solid rgba(255, 102, 163, 0.3);
+  box-shadow: 0 4px 20px rgba(156, 39, 176, 0.08);
+  font-family: 'Nunito', sans-serif;
+  width: 100vw;
+  box-sizing: border-box;
+  z-index: 1000;
+  position: relative;
 }
 
 .nav-brand {
-  font-weight: bold;
-  font-size: 18px;
+  font-weight: 900;
+  font-size: 20px;
   cursor: pointer;
-  color: #00b37e;
+  background: linear-gradient(135deg, #ff66a3, #9c27b0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  transition: transform 0.2s;
 }
 
-.nav-links {
+.nav-brand:hover {
+  transform: scale(1.03);
+}
+
+/* Centered Rainbow Arc Tabs */
+.nav-tabs-rainbow-arc {
   display: flex;
-  gap: 12px;
+  gap: 10px;
+  align-items: center;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
-.nav-link-btn {
-  background: transparent;
-  border: none;
-  color: #c4c4cc;
-  padding: 6px 12px;
-  border-radius: 4px;
+.nav-tab-btn {
+  background: #ffffff;
+  border: 2px solid transparent;
+  padding: 8px 18px;
+  border-radius: 20px;
   cursor: pointer;
-  font-weight: bold;
+  font-weight: 800;
+  font-size: 14px;
+  font-family: 'Nunito', sans-serif;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.03);
 }
 
-.nav-link-btn.active, .nav-link-btn:hover {
-  background: #29292e;
+/* Rainbow Pastel Motif Colors */
+.tab-magic { color: #7c4dff; border-color: #b388ff; }
+.tab-magic.active, .tab-magic:hover { background: #b388ff; color: #fff; transform: translateY(-2px); }
+
+.tab-honesty { color: #f57c00; border-color: #ffb74d; }
+.tab-honesty.active, .tab-honesty:hover { background: #ffb74d; color: #fff; transform: translateY(-2px); }
+
+.tab-kindness { color: #ec407a; border-color: #f48fb1; }
+.tab-kindness.active, .tab-kindness:hover { background: #f48fb1; color: #fff; transform: translateY(-2px); }
+
+.tab-laughter { color: #00acc1; border-color: #4dd0e1; }
+.tab-laughter.active, .tab-laughter:hover { background: #4dd0e1; color: #fff; transform: translateY(-2px); }
+
+.tab-loyalty { color: #1e88e5; border-color: #64b5f6; }
+.tab-loyalty.active, .tab-loyalty:hover { background: #64b5f6; color: #fff; transform: translateY(-2px); }
+
+.tab-admin { color: #d32f2f; border-color: #ef9a9a; background: #ffebee; }
+.tab-admin.active, .tab-admin:hover { background: #e53935; color: #fff; transform: translateY(-2px); }
+
+/* Top Right Auth Widget */
+.nav-auth-container {
+  display: flex;
+  align-items: center;
+}
+
+.user-profile-widget {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f3e5f5;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 2px solid #e1bee7;
+}
+
+.user-welcome {
+  font-weight: 800;
+  font-size: 13px;
+  color: #4a148c;
+}
+
+.auth-action-btn {
+  background: linear-gradient(135deg, #ff66a3, #e91e63);
   color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 14px;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  box-shadow: 0 4px 10px rgba(255, 102, 163, 0.3);
+}
+
+.auth-action-btn:hover {
+  opacity: 0.9;
+}
+
+.logout-btn {
+  background: #757575;
+  box-shadow: none;
+  padding: 4px 10px;
+  font-size: 11px;
 }

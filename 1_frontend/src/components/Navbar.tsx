@@ -10,47 +10,51 @@ interface NavbarProps {
 
 export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: NavbarProps) {
   const { user, logout } = useAuth();
+  
+  // Check if user has administrator privileges (adjust based on your auth user object schema)
+  const isAdmin = user && (user.role === 'admin' || user.isSafeMode === false);
 
   return (
     <nav className="mlp-navbar">
       <div className="nav-brand" onClick={() => setCurrentTab('hub')}>
-        ✨ Equestria Clash TCG
+        ✨ Equestria Clash
       </div>
 
-      <div className="nav-tabs">
+      <div className="nav-tabs-rainbow-arc">
         <button 
-          className={`nav-btn ${currentTab === 'hub' ? 'active' : ''}`}
+          className={`nav-tab-btn tab-magic ${currentTab === 'hub' ? 'active' : ''}`}
           onClick={() => setCurrentTab('hub')}
         >
           Main Hub
         </button>
         <button 
-          className={`nav-btn ${currentTab === 'deckBuilder' ? 'active' : ''}`}
+          className={`nav-tab-btn tab-honesty ${currentTab === 'deckBuilder' ? 'active' : ''}`}
           onClick={() => setCurrentTab('deckBuilder')}
         >
           Deck Builder
         </button>
         <button 
-          className={`nav-btn ${currentTab === 'community' ? 'active' : ''}`}
+          className={`nav-tab-btn tab-kindness ${currentTab === 'community' ? 'active' : ''}`}
           onClick={() => setCurrentTab('community')}
         >
-          Community Decks
+          Community
         </button>
         <button 
-          className={`nav-btn ${currentTab === 'standings' ? 'active' : ''}`}
+          className={`nav-tab-btn tab-laughter ${currentTab === 'standings' ? 'active' : ''}`}
           onClick={() => setCurrentTab('standings')}
         >
           Standings
         </button>
         <button 
-          className={`nav-btn ${currentTab === 'fanPage' ? 'active' : ''}`}
+          className={`nav-tab-btn tab-loyalty ${currentTab === 'fanPage' ? 'active' : ''}`}
           onClick={() => setCurrentTab('fanPage')}
         >
           Fan Page
         </button>
-        {user && user.isSafeMode === false /* Or admin flag */ && (
+        
+        {isAdmin && (
           <button 
-            className={`nav-btn admin-badge ${currentTab === 'admin' ? 'active' : ''}`}
+            className={`nav-tab-btn tab-admin ${currentTab === 'admin' ? 'active' : ''}`}
             onClick={() => setCurrentTab('admin')}
           >
             🛡️ Admin
@@ -58,11 +62,11 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
         )}
       </div>
 
-      <div className="nav-auth">
+      <div className="nav-auth-container">
         {user ? (
           <div className="user-profile-widget">
-            <span>Hi, {user.displayName || user.username}</span>
-            <button onClick={logout} className="auth-action-btn">Logout</button>
+            <span className="user-welcome">Hi, {user.displayName || user.username}</span>
+            <button onClick={logout} className="auth-action-btn logout-btn">Logout</button>
           </div>
         ) : (
           <button onClick={onOpenAuth} className="auth-action-btn login-cta">
