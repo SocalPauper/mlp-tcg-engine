@@ -134,7 +134,10 @@ export default function DeckBuilder() {
       c.name.includes(' – ')
     );
   } else if (buildPhase === 'SCENE') {
-    displayCards = baseFilteredCards.filter(c => c.card_type === 'Scene' && (c.element === deckElement || !c.element));
+    displayCards = baseFilteredCards.filter(c => 
+      c.card_type === 'Scene' && 
+      (c.element === deckElement || !c.element)
+    );
   } else if (buildPhase === 'MAIN') {
     displayCards = baseFilteredCards.filter(c => 
       ['Character', 'Friend Character', 'Event', 'Item'].includes(c.card_type) && 
@@ -142,14 +145,23 @@ export default function DeckBuilder() {
     );
   }
 
-  // ROBUST HYBRID GROUPING: Combines base name normalization and set-prefix clustering
+  // FOOLPROOF SET-BLOCK GROUPING: Groups story cards strictly by set code and 4-card ID numeric blocks
   const storyGroups = displayCards.reduce((acc, card) => {
-    const cleanName = card.name
-      .replace(/[-–]\s*(Part\s*\d+|Chapter\s*\d+|\d+|I|II|III|IV|V)$/i, '')
-      .split(/[-–]/)[0]
-      .trim();
-
-    const groupKey = `${card.set_code}-${cleanName}`;
+    const match = card.id.match(/^([A-Z0-9]+)-C(\d+)$/);
+    let groupKey = '';
+    
+    if (match) {
+      const setPrefix = match[1];
+      const cardNum = parseInt(match[2], 10);
+      const blockIndex = Math.floor((cardNum - 25) / 4);
+      groupKey = `${setPrefix}-StoryArc-${blockIndex >= 0 ? blockIndex : cardNum}`;
+    } else {
+      const cleanName = card.name
+        .replace(/[-–]\s*(Part\s*\d+|Chapter\s*\d+|\d+|I|II|III|IV|V|Story\s*\d+)$/i, '')
+        .split(/[-–]/)[0]
+        .trim();
+      groupKey = `${card.set_code}-${cleanName}`;
+    }
 
     if (!acc[groupKey]) acc[groupKey] = [];
     acc[groupKey].push(card);
