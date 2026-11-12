@@ -40,7 +40,7 @@ export default function DeckBuilder() {
   const [importText, setImportText] = useState('');
 
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
-  const hoverTimer = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     fetch('https://mlp-tcg-engine.onrender.com/api/cards')
@@ -55,16 +55,22 @@ export default function DeckBuilder() {
       });
   }, []);
 
-  const handleMouseEnter = (card: Card) => {
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    hoverTimer.current = setTimeout(() => {
-      setHoveredCard(card);
-    }, 600); 
+  const handleContextMenu = (e: React.MouseEvent, card: Card) => {
+    e.preventDefault();
+    setHoveredCard(card);
   };
 
-  const handleMouseLeave = () => {
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    setHoveredCard(null);
+  const handleTouchStart = (card: Card) => {
+    longPressTimer.current = setTimeout(() => {
+      setHoveredCard(card);
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
   };
 
   const addCardToDeck = (card: Card) => {
@@ -153,13 +159,18 @@ export default function DeckBuilder() {
       c.name.includes(' – ')
     );
   } else if (buildPhase === 'SCENE') {
+    // STRICT ELEMENT FILTER FOR SCENES: Only Everyday, NULL, or matching deckElement
     displayCards = baseFilteredCards.filter(c => 
       c.card_type === 'Scene' && 
       (c.element === 'Everyday' || !c.element || c.element === deckElement)
     );
   } else if (buildPhase === 'MAIN') {
     displayCards = baseFilteredCards.filter(c => {
-      const isValidType = ['Character', 'Friend Character', 'Event', 'Item'].includes(c.card_type);
+      const isValidType = ['Character', 'Friend Character', 'Event', 'Item'].includes(c.card_type) && 
+                          c.card_type !== 'Story' && 
+                          !c.name.includes(' - ') && 
+                          !c.name.includes(' – ');
+      
       const matchesMainType = selectedMainType === 'ALL' || c.card_type === selectedMainType;
       const matchesElement = c.element === deckElement || !c.element || c.element === 'Everyday';
       return isValidType && matchesMainType && matchesElement;
@@ -170,18 +181,8 @@ export default function DeckBuilder() {
   const storyGroups: Record<string, Card[]> = {};
 
   sortedStories.forEach(card => {
-    const match = card.id.match(/^([A-Z0-9]+)-C(\d+)/);
-    let groupKey = '';
-
-    if (match) {
-      const setPrefix = match[1];
-      const cardNum = parseInt(match[2], 10);
-      const blockId = Math.floor((cardNum - 1) / 4);
-      groupKey = `${setPrefix}-Block-${blockId}`;
-    } else {
-      const cleanName = card.name.split(/[-–]/)[0].trim();
-      groupKey = `${card.set_code}-${cleanName}`;
-    }
+    const cleanBaseName = card.name.split(/[-–]/)[0].trim().toLowerCase();
+    const groupKey = `${card.set_code}-${cleanBaseName}`;
 
     if (!storyGroups[groupKey]) storyGroups[groupKey] = [];
     storyGroups[groupKey].push(card);
@@ -272,7 +273,6 @@ export default function DeckBuilder() {
   return (
     <div className="deck-builder-container">
       
-      {/* IMPORT MODAL */}
       {importModalOpen && (
         <div className="inspector-overlay" style={{ pointerEvents: 'auto' }}>
           <div className="inspector-modal" style={{ flexDirection: 'column', padding: '30px', height: 'auto', width: '500px' }}>
@@ -292,10 +292,11 @@ export default function DeckBuilder() {
         </div>
       )}
 
-      {/* INSPECTOR POPUP */}
+      {/* CLEANED UP INSPECTOR POPUP WITH CLEAR LABEL/DATA DIVISIONS */}
       {hoveredCard && (
-        <div className="inspector-overlay">
+        <div className="inspector-overlay" style={{ pointerEvents: 'auto' }}>
           <div className="inspector-modal">
+            <button className="inspector-close-btn" onClick={() => setHoveredCard(null)}>✕</button>
             <div className="inspector-image-container">
               <img src={hoveredCard.image_url} alt={hoveredCard.name} />
             </div>
@@ -318,6 +319,15 @@ export default function DeckBuilder() {
                 </div>
               </div>
 
+              {hoveredCard.element && (
+                <div className="inspector-meta-row" style={{ marginTop: '-10px' }}>
+                  <div className="meta-block">
+                    <span className="meta-label">ELEMENT</span>
+                    <span className="meta-value element-badge-text" style={{ color: 'var(--mlp-pink)' }}>{hoveredCard.element}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="inspector-rules-text">
                 <div className="meta-label">RULES TEXT</div>
                 <p>{hoveredCard.effect_text || 'No abilities.'}</p>
@@ -339,7 +349,6 @@ export default function DeckBuilder() {
         </div>
       )}
 
-      {/* Left Column: Library */}
       <div className="card-library-section">
         <div className="phase-tracker">
           <button className={`phase-btn ${buildPhase === 'MANE' ? 'active' : ''}`} onClick={() => setBuildPhase('MANE')}>1. Mane</button>
@@ -381,15 +390,20 @@ export default function DeckBuilder() {
               Object.entries(storyGroups).map(([groupKey, group]) => {
                 const displayName = group[0]?.name ? group[0].name.split(/[-–]/)[0].trim() : groupKey;
                 return (
-                  <div key={groupKey} className="story-stack" onClick={() => addStoryGroup(group)}>
+                  <div 
+                    key={groupKey} 
+                    className="story-stack" 
+                    onClick={() => addStoryGroup(group)}
+                    onContextMenu={(e) => handleContextMenu(e, group[0])}
+                    onTouchStart={() => handleTouchStart(group[0])}
+                    onTouchEnd={handleTouchEnd}
+                  >
                     {group.map((card) => (
                       <img 
                         key={card.id}
                         className="story-card-layer"
                         src={card.image_url} 
                         alt={card.name} 
-                        onMouseEnter={() => handleMouseEnter(card)}
-                        onMouseLeave={handleMouseLeave}
                       />
                     ))}
                     <div className="story-stack-label">{displayName} ({group.length}/4)</div>
@@ -402,8 +416,9 @@ export default function DeckBuilder() {
                   key={card.id} 
                   className="card-item" 
                   onClick={() => addCardToDeck(card)}
-                  onMouseEnter={() => handleMouseEnter(card)}
-                  onMouseLeave={handleMouseLeave}
+                  onContextMenu={(e) => handleContextMenu(e, card)}
+                  onTouchStart={() => handleTouchStart(card)}
+                  onTouchEnd={handleTouchEnd}
                 >
                   <img src={card.image_url} alt={card.name} loading="lazy" />
                 </div>
@@ -413,10 +428,8 @@ export default function DeckBuilder() {
         )}
       </div>
 
-      {/* Right Column: Active Deck */}
       <div className="deck-panel-section">
         
-        {/* Decorated Element Banner */}
         <div className={`decorated-element-banner ${deckElement ? deckElement.toLowerCase() : 'unaligned'}`}>
           <div className="banner-glow-effect"></div>
           <span className="banner-star">✨</span>
@@ -424,7 +437,6 @@ export default function DeckBuilder() {
           <span className="banner-star">✨</span>
         </div>
 
-        {/* Wider Name with Label & Pencil */}
         <div className="deck-name-container">
           <label className="deck-name-label">Deck Name ✏️</label>
           <input 
@@ -436,7 +448,6 @@ export default function DeckBuilder() {
           />
         </div>
 
-        {/* Public / Private Toggle Switch */}
         <div className="deck-visibility-bar">
           <label className="visibility-switch">
             <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} />
@@ -490,7 +501,6 @@ export default function DeckBuilder() {
           </div>
         </div>
 
-        {/* Save, Import, Export Buttons */}
         <div className="deck-actions-bar">
           <button className="action-btn save-btn" onClick={handleSaveDeck}>Save Deck 💾</button>
           <button className="action-btn import-btn" onClick={() => setImportModalOpen(true)}>Import 📥</button>
