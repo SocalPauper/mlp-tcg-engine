@@ -177,12 +177,24 @@ export default function DeckBuilder() {
     });
   }
 
+// ROBUST ID-BLOCK STORY GROUPING: Groups story cards strictly by set and 4-card contiguous numerical blocks
   const sortedStories = [...displayCards].sort((a, b) => a.id.localeCompare(b.id));
   const storyGroups: Record<string, Card[]> = {};
 
   sortedStories.forEach(card => {
-    const cleanBaseName = card.name.split(/[-–]/)[0].trim().toLowerCase();
-    const groupKey = `${card.set_code}-${cleanBaseName}`;
+    const match = card.id.match(/^([A-Z0-9]+)-C(\d+)/i);
+    let groupKey = '';
+
+    if (match) {
+      const setPrefix = match[1];
+      const cardNum = parseInt(match[2], 10);
+      // Groups every 4 cards into a story arc block (e.g. C25-C28 -> block 6)
+      const blockId = Math.floor((cardNum - 25) / 4); 
+      groupKey = `${setPrefix}-StoryBlock-${blockId >= 0 ? blockId : cardNum}`;
+    } else {
+      const cleanBaseName = card.name.split(/[-–]/)[0].trim().toLowerCase();
+      groupKey = `${card.set_code}-${cleanBaseName}`;
+    }
 
     if (!storyGroups[groupKey]) storyGroups[groupKey] = [];
     storyGroups[groupKey].push(card);
