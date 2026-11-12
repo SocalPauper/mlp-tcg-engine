@@ -159,7 +159,6 @@ export default function DeckBuilder() {
       c.name.includes(' – ')
     );
   } else if (buildPhase === 'SCENE') {
-    // STRICT ELEMENT FILTER FOR SCENES: Only Everyday, NULL, or matching deckElement
     displayCards = baseFilteredCards.filter(c => 
       c.card_type === 'Scene' && 
       (c.element === 'Everyday' || !c.element || c.element === deckElement)
@@ -177,10 +176,8 @@ export default function DeckBuilder() {
     });
   }
 
-// UNIVERSAL CHUNKED STORY GROUPING: Groups story cards by set code, chunking every 4 sequential cards together
+  // UNIVERSAL CHUNKED STORY GROUPING
   const storyGroups: Record<string, Card[]> = {};
-  
-  // Group display cards by set_code first
   const setBuckets: Record<string, Card[]> = {};
   displayCards.forEach(card => {
     const setCode = card.set_code || 'BP01';
@@ -188,10 +185,8 @@ export default function DeckBuilder() {
     setBuckets[setCode].push(card);
   });
 
-  // For each set, sort cards by ID and chunk into groups of 4
   Object.entries(setBuckets).forEach(([setCode, setCardList]) => {
     const sorted = setCardList.sort((a, b) => a.id.localeCompare(b.id));
-    
     for (let i = 0; i < sorted.length; i += 4) {
       const chunk = sorted.slice(i, i + 4);
       const baseName = chunk[0].name.split(/[-–]/)[0].trim();
@@ -304,7 +299,6 @@ export default function DeckBuilder() {
         </div>
       )}
 
-      {/* CLEANED UP INSPECTOR POPUP WITH CLEAR LABEL/DATA DIVISIONS */}
       {hoveredCard && (
         <div className="inspector-overlay" style={{ pointerEvents: 'auto' }}>
           <div className="inspector-modal">
@@ -320,41 +314,41 @@ export default function DeckBuilder() {
                 )}
               </div>
               
-              <div className="inspector-meta-row">
+              <div className="inspector-meta-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', margin: '15px 0' }}>
                 <div className="meta-block">
-                  <span className="meta-label">TYPE</span>
-                  <span className="meta-value">{hoveredCard.card_type}</span>
+                  <span className="meta-label" style={{ display: 'block', fontSize: '11px', color: '#888', marginBottom: '4px' }}>TYPE</span>
+                  <span className="meta-value" style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>{hoveredCard.card_type}</span>
                 </div>
-                <div className="meta-block right-align">
-                  <span className="meta-label">RARITY</span>
-                  <span className="meta-value">{hoveredCard.rarity}</span>
+                <div className="meta-block">
+                  <span className="meta-label" style={{ display: 'block', fontSize: '11px', color: '#888', marginBottom: '4px' }}>RARITY</span>
+                  <span className="meta-value" style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>{hoveredCard.rarity}</span>
                 </div>
               </div>
 
               {hoveredCard.element && (
-                <div className="inspector-meta-row" style={{ marginTop: '-10px' }}>
-                  <div className="meta-block">
-                    <span className="meta-label">ELEMENT</span>
-                    <span className="meta-value element-badge-text" style={{ color: 'var(--mlp-pink)' }}>{hoveredCard.element}</span>
-                  </div>
+                <div className="inspector-meta-block" style={{ marginBottom: '15px' }}>
+                  <span className="meta-label" style={{ display: 'block', fontSize: '11px', color: '#888', marginBottom: '4px' }}>ELEMENT</span>
+                  <span className="meta-value" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--mlp-pink)' }}>{hoveredCard.element}</span>
                 </div>
               )}
 
-              <div className="inspector-rules-text">
-                <div className="meta-label">RULES TEXT</div>
-                <p>{hoveredCard.effect_text || 'No abilities.'}</p>
+              <div className="inspector-rules-text" style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px', marginBottom: '15px' }}>
+                <span className="meta-label" style={{ display: 'block', fontSize: '11px', color: '#888', marginBottom: '6px' }}>RULES TEXT</span>
+                <p style={{ fontSize: '13px', color: '#ddd', lineHeight: '1.4', margin: 0 }}>
+                  {hoveredCard.effect_text || (hoveredCard.id.includes('ER') ? 'Inspo Boost: Your matching characters get +1 Inspiration until the end of this contact.' : 'No abilities.')}
+                </p>
               </div>
 
               {['Character', 'Friend Character'].includes(hoveredCard.card_type) && (
-                <div className="inspector-power-row">
-                  <span className="meta-label">POWER</span>
-                  <span className="power-value">{hoveredCard.power}</span>
+                <div className="inspector-power-row" style={{ marginBottom: '15px' }}>
+                  <span className="meta-label" style={{ display: 'block', fontSize: '11px', color: '#888', marginBottom: '4px' }}>POWER</span>
+                  <span className="power-value" style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>{hoveredCard.power}</span>
                 </div>
               )}
 
-              <div className="inspector-footer">
-                <span className="set-id">{hoveredCard.id}</span>
-                {hoveredCard.element && <span className={`element-tag ${hoveredCard.element.toLowerCase()}`}>{hoveredCard.element}</span>}
+              <div className="inspector-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', borderTop: '1px solid #333', paddingTop: '12px' }}>
+                <span className="set-id" style={{ fontSize: '12px', color: '#aaa', fontFamily: 'monospace' }}>{hoveredCard.id}</span>
+                {hoveredCard.element && <span className={`element-tag ${hoveredCard.element.toLowerCase()}`} style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', background: '#333', color: '#fff' }}>{hoveredCard.element}</span>}
               </div>
             </div>
           </div>
