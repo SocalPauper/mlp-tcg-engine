@@ -21,7 +21,6 @@ type BuildPhase = 'MANE' | 'STORY' | 'SCENE' | 'MAIN';
 export default function DeckBuilder() {
   const [cards, setCards] = useState<Card[]>([]);
   
-  // Strict Deck Zones
   const [maneCharacter, setManeCharacter] = useState<Card | null>(null);
   const [storyDeck, setStoryDeck] = useState<Card[]>([]);
   const [sceneDeck, setSceneDeck] = useState<Card[]>([]);
@@ -35,7 +34,6 @@ export default function DeckBuilder() {
   const [selectedRarity, setSelectedRarity] = useState<string | 'ALL'>('ALL');
   const [loading, setLoading] = useState(true);
 
-  // STABLE HOVER STATE WITH DELAY
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const hoverTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -52,7 +50,6 @@ export default function DeckBuilder() {
       });
   }, []);
 
-  // Intentional Hover Logic (600ms delay)
   const handleMouseEnter = (card: Card) => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
     hoverTimer.current = setTimeout(() => {
@@ -122,11 +119,22 @@ export default function DeckBuilder() {
 
   let displayCards: Card[] = [];
   if (buildPhase === 'MANE') {
-    displayCards = baseFilteredCards.filter(c => c.card_type === 'Mane Character');
+    displayCards = baseFilteredCards.filter(c => 
+      c.card_type === 'Mane Character' && 
+      !c.name.includes(' - ') && 
+      !c.name.includes(' – ') &&
+      !c.name.includes('Stage') &&
+      !c.id.includes('ST')
+    );
   } else if (buildPhase === 'STORY') {
-    displayCards = baseFilteredCards.filter(c => c.card_type === 'Story' && c.element === deckElement);
+    displayCards = baseFilteredCards.filter(c => 
+      c.card_type === 'Story' || 
+      /-(?:C2[5-9]|C[3-4]\d)/.test(c.id) ||
+      c.name.includes(' - ') || 
+      c.name.includes(' – ')
+    );
   } else if (buildPhase === 'SCENE') {
-    displayCards = baseFilteredCards.filter(c => c.card_type === 'Scene' && c.element === deckElement);
+    displayCards = baseFilteredCards.filter(c => c.card_type === 'Scene' && (c.element === deckElement || !c.element));
   } else if (buildPhase === 'MAIN') {
     displayCards = baseFilteredCards.filter(c => 
       ['Character', 'Friend Character', 'Event', 'Item'].includes(c.card_type) && 
@@ -134,8 +142,9 @@ export default function DeckBuilder() {
     );
   }
 
+  // Group story cards cleanly by arc name
   const storyGroups = displayCards.reduce((acc, card) => {
-    const baseName = card.name.replace(/\s+(I|II|III|IV|V)$/i, '').trim();
+    const baseName = card.name.split(/[-–]/)[0].trim();
     if (!acc[baseName]) acc[baseName] = [];
     acc[baseName].push(card);
     acc[baseName].sort((a, b) => a.id.localeCompare(b.id)); 
@@ -230,19 +239,18 @@ export default function DeckBuilder() {
                   key={groupName} 
                   className="story-stack" 
                   onClick={() => addStoryGroup(group)}
-                  onMouseEnter={() => handleMouseEnter(group[0])}
-                  onMouseLeave={handleMouseLeave}
                 >
-                  {group.map((card, index) => (
+                  {group.map((card) => (
                     <img 
                       key={card.id}
                       className="story-card-layer"
                       src={card.image_url} 
                       alt={card.name} 
-                      style={{ zIndex: 4 - index }}
+                      onMouseEnter={() => handleMouseEnter(card)}
+                      onMouseLeave={handleMouseLeave}
                     />
                   ))}
-                  <div className="story-stack-label">{groupName}</div>
+                  <div className="story-stack-label">{groupName} ({group.length}/4)</div>
                 </div>
               ))
             ) : (
