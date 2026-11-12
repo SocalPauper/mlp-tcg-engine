@@ -11,7 +11,7 @@ interface NavbarProps {
 export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: NavbarProps) {
   const { user, logout } = useAuth();
   
-  // Check if user has administrator privileges (adjust based on your auth user object schema)
+  // Check if user has administrator privileges
   const isAdmin = user && (user.role === 'admin' || user.isSafeMode === false);
 
   return (
@@ -27,11 +27,12 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
         >
           Main Hub
         </button>
+        {/* CHANGED: Deck Builder is now The Stable */}
         <button 
-          className={`nav-tab-btn tab-honesty ${currentTab === 'deckBuilder' ? 'active' : ''}`}
-          onClick={() => setCurrentTab('deckBuilder')}
+          className={`nav-tab-btn tab-honesty ${currentTab === 'stable' ? 'active' : ''}`}
+          onClick={() => setCurrentTab('stable')}
         >
-          Deck Builder
+          The Stable
         </button>
         <button 
           className={`nav-tab-btn tab-kindness ${currentTab === 'community' ? 'active' : ''}`}

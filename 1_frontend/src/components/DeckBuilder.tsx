@@ -18,7 +18,13 @@ interface Card {
 
 type BuildPhase = 'MANE' | 'STORY' | 'SCENE' | 'MAIN';
 
-export default function DeckBuilder() {
+interface DeckBuilderProps {
+  deckId: string | null;
+  mode: 'CREATE' | 'EDIT' | 'VIEW' | 'COPY';
+  onClose: () => void;
+}
+
+export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps) {
   const [cards, setCards] = useState<Card[]>([]);
   
   const [maneCharacter, setManeCharacter] = useState<Card | null>(null);
@@ -36,12 +42,16 @@ export default function DeckBuilder() {
   const [selectedMainType, setSelectedMainType] = useState<string | 'ALL'>('ALL');
   const [loading, setLoading] = useState(true);
 
+  // Read-only flag for Starter Decks or VIEW mode
+  const [isStarter, setIsStarter] = useState(mode === 'VIEW');
+
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importText, setImportText] = useState('');
 
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
+  // 1. Fetch entire card catalog on mount
   useEffect(() => {
     fetch('https://mlp-tcg-engine.onrender.com/api/cards')
       .then(res => res.json())
@@ -54,6 +64,40 @@ export default function DeckBuilder() {
         setLoading(false);
       });
   }, []);
+
+  // 2. Fetch existing deck data if editing, viewing, or copying
+  useEffect(() => {
+    if (deckId && cards.length > 0) {
+      const token = localStorage.getItem('token');
+      fetch(`https://mlp-tcg-engine.onrender.com/api/decks/${deckId}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
+        .then(res => {
+          if (!res.ok) throw new Error('Deck not found');
+          return res.json();
+        })
+        .then(deckData => {
+          setDeckName(mode === 'COPY' ? `${deckData.name} (Copy)` : deckData.name);
+          setIsPublic(deckData.is_public);
+          setIsStarter(deckData.is_starter || mode === 'VIEW');
+          
+          if (deckData.mane_character) {
+            const mane = cards.find(c => c.id === deckData.mane_character);
+            if (mane) setManeCharacter(mane);
+          }
+          
+          const hydrateCards = (idArray: string[]) => 
+            idArray.map(id => cards.find(c => c.id === id)).filter(Boolean) as Card[];
+            
+          setStoryDeck(hydrateCards(deckData.story_deck || []));
+          setSceneDeck(hydrateCards(deckData.scene_deck || []));
+          setMainDeck(hydrateCards(deckData.main_deck || []));
+          
+          setBuildPhase('MAIN');
+        })
+        .catch(err => console.error('Error fetching deck:', err));
+    }
+  }, [deckId, cards, mode]);
 
   const handleContextMenu = (e: React.MouseEvent, card: Card) => {
     e.preventDefault();
@@ -74,6 +118,8 @@ export default function DeckBuilder() {
   };
 
   const addCardToDeck = (card: Card) => {
+    if (isStarter) return;
+
     const baseId = card.id.replace('-S', '');
 
     if (buildPhase === 'MANE') {
@@ -104,13 +150,17 @@ export default function DeckBuilder() {
   };
 
   const addStoryGroup = (group: Card[]) => {
+    if (isStarter) return; 
     if (storyDeck.length + group.length > 4) return alert('Story Deck can only hold 4 cards.');
+    
     const newStoryDeck = [...storyDeck, ...group];
     setStoryDeck(newStoryDeck);
     if (newStoryDeck.length === 4) setBuildPhase('SCENE'); 
   };
 
   const removeCard = (zone: string, index: number) => {
+    if (isStarter) return; 
+
     if (zone === 'mane') {
       const confirmReset = window.confirm('Removing your Mane Character will reset your deck element and clear all other cards. Continue?');
       if (confirmReset) {
@@ -133,6 +183,12 @@ export default function DeckBuilder() {
     } else if (zone === 'main') {
       setMainDeck(mainDeck.filter((_, i) => i !== index));
     }
+  };
+
+  const handleCopyDeck = () => {
+    setIsStarter(false);
+    setDeckName(`${deckName} (Copy)`);
+    alert('Deck copied! You can now make changes and save it to your account.');
   };
 
   const baseFilteredCards = cards.filter(card => {
@@ -176,7 +232,6 @@ export default function DeckBuilder() {
     });
   }
 
-  // UNIVERSAL CHUNKED STORY GROUPING
   const storyGroups: Record<string, Card[]> = {};
   const setBuckets: Record<string, Card[]> = {};
   displayCards.forEach(card => {
@@ -210,8 +265,13 @@ export default function DeckBuilder() {
       scene_deck: sceneDeck.map(c => c.id),
       main_deck: mainDeck.map(c => c.id)
     };
-    fetch('https://mlp-tcg-engine.onrender.com/api/decks', {
-      method: 'POST',
+    
+    // If editing an existing deck, use PUT, otherwise POST
+    const endpoint = (mode === 'EDIT' && deckId) ? `/api/decks/${deckId}` : '/api/decks';
+    const method = (mode === 'EDIT' && deckId) ? 'PUT' : 'POST';
+
+    fetch(`https://mlp-tcg-engine.onrender.com${endpoint}`, {
+      method,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
@@ -219,7 +279,10 @@ export default function DeckBuilder() {
       body: JSON.stringify(deckPayload)
     })
     .then(res => res.json())
-    .then(() => alert('Deck successfully saved to your account!'))
+    .then(() => {
+      alert('Deck successfully saved!');
+      onClose(); // Auto-return to the Hub after saving
+    })
     .catch(() => alert('Failed to save deck.'));
   };
 
@@ -391,7 +454,7 @@ export default function DeckBuilder() {
         {loading ? (
           <div className="loading-sparkles">Gathering cards... ✨</div>
         ) : (
-          <div className="card-grid">
+          <div className="card-grid" style={{ opacity: isStarter ? 0.5 : 1, pointerEvents: isStarter ? 'none' : 'auto' }}>
             {buildPhase === 'STORY' ? (
               Object.entries(storyGroups).map(([groupKey, group]) => {
                 const displayName = group[0]?.name ? group[0].name.split(/[-–]/)[0].trim() : groupKey;
@@ -436,6 +499,31 @@ export default function DeckBuilder() {
 
       <div className="deck-panel-section">
         
+        {/* Navigation Return Button */}
+        <button 
+          onClick={onClose} 
+          style={{ 
+            background: 'rgba(156, 39, 176, 0.1)', 
+            color: 'var(--mlp-purple)', 
+            border: '2px solid var(--mlp-purple)', 
+            padding: '8px 16px', 
+            borderRadius: '12px', 
+            fontWeight: 'bold', 
+            cursor: 'pointer', 
+            marginBottom: '16px',
+            alignSelf: 'flex-start'
+          }}
+        >
+          🔙 Return to Stable
+        </button>
+
+        {isStarter && (
+          <div style={{ background: 'var(--mlp-purple)', color: 'white', padding: '12px', borderRadius: '12px', textAlign: 'center', fontWeight: 'bold', marginBottom: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
+            This deck is Read-Only. <br/>
+            <span style={{ fontSize: '13px', fontWeight: 'normal' }}>Copy it to make changes.</span>
+          </div>
+        )}
+
         <div className={`decorated-element-banner ${deckElement ? deckElement.toLowerCase() : 'unaligned'}`}>
           <div className="banner-glow-effect"></div>
           <span className="banner-star">✨</span>
@@ -451,12 +539,13 @@ export default function DeckBuilder() {
             onChange={e => setDeckName(e.target.value)} 
             placeholder="Name your deck!"
             className="deck-name-input input-bubble"
+            disabled={isStarter}
           />
         </div>
 
         <div className="deck-visibility-bar">
           <label className="visibility-switch">
-            <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} />
+            <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} disabled={isStarter} />
             <span className="slider round"></span>
           </label>
           <span className="visibility-label">{isPublic ? 'Public Deck 🌍' : 'Private Deck 🔒'}</span>
@@ -472,7 +561,7 @@ export default function DeckBuilder() {
             {maneCharacter ? (
                <div className="deck-row mane-row" onClick={() => removeCard('mane', 0)}>
                  <span>{maneCharacter.name}</span>
-                 <span className="remove-tag">✕</span>
+                 {!isStarter && <span className="remove-tag">✕</span>}
                </div>
             ) : <div className="empty-zone">Select a Mane Character</div>}
           </div>
@@ -482,7 +571,7 @@ export default function DeckBuilder() {
             {storyDeck.length > 0 ? (
               storyDeck.map((c, i) => (
                 <div key={i} className="deck-row">
-                  <span>{c.name}</span>{i === storyDeck.length - 1 && <span className="remove-tag">✕</span>}
+                  <span>{c.name}</span>{!isStarter && i === storyDeck.length - 1 && <span className="remove-tag">✕</span>}
                 </div>
               ))
             ) : <div className="empty-zone">Select Story Cards</div>}
@@ -492,7 +581,7 @@ export default function DeckBuilder() {
             <h3>Scene Deck ({sceneDeck.length}/15)</h3>
             {sceneDeck.map((c, i) => (
               <div key={i} className="deck-row" onClick={() => removeCard('scene', i)}>
-                <span>{c.name}</span><span className="remove-tag">✕</span>
+                <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
               </div>
             ))}
           </div>
@@ -501,15 +590,21 @@ export default function DeckBuilder() {
             <h3>Main Deck ({mainDeck.length}/50)</h3>
             {mainDeck.map((c, i) => (
               <div key={i} className="deck-row" onClick={() => removeCard('main', i)}>
-                <span>{c.name}</span><span className="remove-tag">✕</span>
+                <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
               </div>
             ))}
           </div>
         </div>
 
         <div className="deck-actions-bar">
-          <button className="action-btn save-btn" onClick={handleSaveDeck}>Save Deck 💾</button>
-          <button className="action-btn import-btn" onClick={() => setImportModalOpen(true)}>Import 📥</button>
+          {isStarter ? (
+            <button className="action-btn save-btn" onClick={handleCopyDeck} style={{ background: 'var(--mlp-pink)' }}>Copy to Edit 📝</button>
+          ) : (
+            <>
+              <button className="action-btn save-btn" onClick={handleSaveDeck}>Save 💾</button>
+              <button className="action-btn import-btn" onClick={() => setImportModalOpen(true)}>Import 📥</button>
+            </>
+          )}
           <button className="action-btn export-btn" onClick={handleExportDeck}>Export 📤</button>
         </div>
 

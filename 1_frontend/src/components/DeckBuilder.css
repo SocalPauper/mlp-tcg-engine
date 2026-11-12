@@ -359,3 +359,49 @@ input:checked + .slider:before { transform: translateX(24px); }
   border-radius: 10px;
   border: 1px dashed #ddd;
 }
+
+/* MOBILE RESPONSIVENESS */
+@media (max-width: 768px) {
+  .deck-builder-container {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    height: auto !important;
+  }
+
+  .card-library-section {
+    flex: none;
+    height: 60vh;
+    border-right: none;
+    border-bottom: 3px solid rgba(255, 255, 255, 0.6);
+  }
+
+  .deck-panel-section {
+    flex: none;
+    min-width: 100%;
+    padding: 16px;
+  }
+
+  .filters-bar {
+    flex-wrap: wrap;
+  }
+
+  .input-bubble {
+    flex: 1 1 100%;
+  }
+
+  .inspector-modal {
+    flex-direction: column;
+    height: 85vh;
+    overflow-y: auto;
+  }
+
+  .inspector-image-container {
+    flex: 0 0 auto;
+    padding: 15px;
+  }
+  
+  .inspector-image-container img {
+    max-height: 250px;
+    width: auto;
+  }
+}

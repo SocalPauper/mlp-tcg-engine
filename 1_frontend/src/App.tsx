@@ -3,6 +3,7 @@ import axios from 'axios';
 import { API_BASE_URL } from './config';
 import Navbar from './components/Navbar';
 import MainHub from './components/MainHub';
+import StableHub from './components/StableHub';
 import DeckBuilder from './components/DeckBuilder';
 import AdminPanel from './components/AdminPanel';
 import './index.css';
@@ -16,6 +17,7 @@ interface User {
   displayName: string;
   isSafeMode: boolean;
   isVerified: boolean;
+  role?: string;
 }
 
 interface AuthContextType {
@@ -78,14 +80,26 @@ export const useAuth = () => {
   return context;
 };
 
-// Inner App component so it is fully wrapped by AuthProvider
+type BuilderMode = 'CREATE' | 'EDIT' | 'VIEW' | 'COPY';
+
 function AppContent() {
   const [currentTab, setCurrentTab] = useState<string>('hub');
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const { login, register } = useAuth();
+  const { user, login, register } = useAuth();
+
+  // State to track if the DeckBuilder is open, and what deck it's editing
+  const [builderConfig, setBuilderConfig] = useState<{ id: string | null, mode: BuilderMode } | null>(null);
+
+  const handleTabChange = (tab: string) => {
+    setCurrentTab(tab);
+    // If they click away from the Stable tab, close the builder
+    if (tab !== 'stable') {
+      setBuilderConfig(null);
+    }
+  };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,11 +119,27 @@ function AppContent() {
 
   return (
     <div className="app-container">
-      <Navbar currentTab={currentTab} setCurrentTab={setCurrentTab} onOpenAuth={() => setShowAuthModal(true)} />
+      <Navbar currentTab={currentTab} setCurrentTab={handleTabChange} onOpenAuth={() => setShowAuthModal(true)} />
 
       <main className="main-content-area">
         {currentTab === 'hub' && <MainHub />}
-        {currentTab === 'deckBuilder' && <DeckBuilder />}
+        
+        {/* Routing for The Stable vs Deck Builder */}
+        {currentTab === 'stable' && (
+          builderConfig ? (
+            <DeckBuilder 
+              deckId={builderConfig.id} 
+              mode={builderConfig.mode}
+              onClose={() => setBuilderConfig(null)} 
+            />
+          ) : (
+            <StableHub 
+              currentUserId={user?.id?.toString() || ''} 
+              onOpenBuilder={(id, mode) => setBuilderConfig({ id, mode })} 
+            />
+          )
+        )}
+
         {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
         {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
         {currentTab === 'fanPage' && <div className="placeholder-tab"><h2>Fan Art & Lore Page Coming Soon</h2></div>}

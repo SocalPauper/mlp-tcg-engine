@@ -123,3 +123,33 @@
   font-style: italic;
   font-size: 13px;
 }
+
+/* MOBILE RESPONSIVENESS */
+@media (max-width: 768px) {
+  .hub-grid {
+    grid-template-columns: 1fr; /* Stack Lobbies on top of Chat */
+    gap: 15px;
+  }
+
+  .create-room-box {
+    flex-direction: column;
+  }
+  
+  .create-room-box button {
+    width: 100%;
+  }
+
+  .lobby-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .lobby-actions {
+    width: 100%;
+  }
+
+  .lobby-actions button {
+    flex: 1;
+  }
+}
