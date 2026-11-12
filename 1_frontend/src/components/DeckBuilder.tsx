@@ -177,27 +177,27 @@ export default function DeckBuilder() {
     });
   }
 
-// ROBUST ID-BLOCK STORY GROUPING: Groups story cards strictly by set and 4-card contiguous numerical blocks
-  const sortedStories = [...displayCards].sort((a, b) => a.id.localeCompare(b.id));
+// UNIVERSAL CHUNKED STORY GROUPING: Groups story cards by set code, chunking every 4 sequential cards together
   const storyGroups: Record<string, Card[]> = {};
+  
+  // Group display cards by set_code first
+  const setBuckets: Record<string, Card[]> = {};
+  displayCards.forEach(card => {
+    const setCode = card.set_code || 'BP01';
+    if (!setBuckets[setCode]) setBuckets[setCode] = [];
+    setBuckets[setCode].push(card);
+  });
 
-  sortedStories.forEach(card => {
-    const match = card.id.match(/^([A-Z0-9]+)-C(\d+)/i);
-    let groupKey = '';
-
-    if (match) {
-      const setPrefix = match[1];
-      const cardNum = parseInt(match[2], 10);
-      // Groups every 4 cards into a story arc block (e.g. C25-C28 -> block 6)
-      const blockId = Math.floor((cardNum - 25) / 4); 
-      groupKey = `${setPrefix}-StoryBlock-${blockId >= 0 ? blockId : cardNum}`;
-    } else {
-      const cleanBaseName = card.name.split(/[-–]/)[0].trim().toLowerCase();
-      groupKey = `${card.set_code}-${cleanBaseName}`;
+  // For each set, sort cards by ID and chunk into groups of 4
+  Object.entries(setBuckets).forEach(([setCode, setCardList]) => {
+    const sorted = setCardList.sort((a, b) => a.id.localeCompare(b.id));
+    
+    for (let i = 0; i < sorted.length; i += 4) {
+      const chunk = sorted.slice(i, i + 4);
+      const baseName = chunk[0].name.split(/[-–]/)[0].trim();
+      const groupKey = `${setCode}-Chunk-${Math.floor(i / 4)}-${baseName}`;
+      storyGroups[groupKey] = chunk;
     }
-
-    if (!storyGroups[groupKey]) storyGroups[groupKey] = [];
-    storyGroups[groupKey].push(card);
   });
 
   const totalCards = (maneCharacter ? 1 : 0) + storyDeck.length + sceneDeck.length + mainDeck.length;
