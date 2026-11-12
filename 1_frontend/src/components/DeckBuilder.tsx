@@ -241,7 +241,7 @@ export default function DeckBuilder() {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('---')) continue;
       
-      const match = trimmed.match(/^(?:(\d+)x?\s+)?([A-Z0-9-]+)\s+(.*)$/i) \vert{}\vert{} trimmed.match(/^([A-Z0-9-]+)\s+(.*)$/i);
+      const match = trimmed.match(/^(?:(\d+)x?\s+)?([A-Z0-9-]+)\s+(.*)$/i) || trimmed.match(/^([A-Z0-9-]+)\s+(.*)$/i);
       if (match) {
         const cardId = match[2] || match[1];
         const qty = match[1] && !isNaN(Number(match[1])) ? parseInt(match[1], 10) : 1;
@@ -416,7 +416,7 @@ export default function DeckBuilder() {
       {/* Right Column: Active Deck */}
       <div className="deck-panel-section">
         
-        {/* REQUEST 1: Decorated Element Banner */}
+        {/* Decorated Element Banner */}
         <div className={`decorated-element-banner ${deckElement ? deckElement.toLowerCase() : 'unaligned'}`}>
           <div className="banner-glow-effect"></div>
           <span className="banner-star">✨</span>
@@ -424,7 +424,7 @@ export default function DeckBuilder() {
           <span className="banner-star">✨</span>
         </div>
 
-        {/* REQUEST 2: Wider Deck Name with Label and Edit Pencil */}
+        {/* Wider Name with Label & Pencil */}
         <div className="deck-name-container">
           <label className="deck-name-label">Deck Name ✏️</label>
           <input 
@@ -436,7 +436,7 @@ export default function DeckBuilder() {
           />
         </div>
 
-        {/* REQUEST 4: Public / Private Toggle */}
+        {/* Public / Private Toggle Switch */}
         <div className="deck-visibility-bar">
           <label className="visibility-switch">
             <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} />
@@ -490,7 +490,7 @@ export default function DeckBuilder() {
           </div>
         </div>
 
-        {/* REQUEST 5, 6, 7: Save, Import, Export Buttons */}
+        {/* Save, Import, Export Buttons */}
         <div className="deck-actions-bar">
           <button className="action-btn save-btn" onClick={handleSaveDeck}>Save Deck 💾</button>
           <button className="action-btn import-btn" onClick={() => setImportModalOpen(true)}>Import 📥</button>
