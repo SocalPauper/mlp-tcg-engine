@@ -71,9 +71,14 @@ export default function DeckBuilder() {
     } 
     else if (buildPhase === 'SCENE') {
       if (sceneDeck.length >= 15) return alert('Scene Deck is full (15/15).');
+      
       const copies = sceneDeck.filter(c => c.id.replace('-S', '') === baseId).length;
-      const isBasic = card.traits?.toLowerCase().includes('everyday');
-      if (!isBasic && copies >= 3) return alert('You can only have 3 copies of a non-basic Scene.');
+      const isNeutral = !card.element; // NULL element scenes are neutral
+
+      // Neutral scenes can exceed 3 copies; element-specific non-neutral scenes are strictly capped at 3
+      if (!isNeutral && copies >= 3) {
+        return alert('You can only have up to 3 copies of an element-specific Scene.');
+      }
       
       const newSceneDeck = [...sceneDeck, card];
       setSceneDeck(newSceneDeck);
@@ -134,9 +139,10 @@ export default function DeckBuilder() {
       c.name.includes(' – ')
     );
   } else if (buildPhase === 'SCENE') {
+    // Show neutral (NULL element) scenes AND scenes matching the mane character element
     displayCards = baseFilteredCards.filter(c => 
       c.card_type === 'Scene' && 
-      (c.element === deckElement || !c.element)
+      (!c.element || c.element === deckElement)
     );
   } else if (buildPhase === 'MAIN') {
     displayCards = baseFilteredCards.filter(c => 
