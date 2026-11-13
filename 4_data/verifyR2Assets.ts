@@ -50,16 +50,31 @@ async function uploadToR2(buffer: Buffer, fileName: string): Promise<string> {
   return `${R2_PUBLIC_BASE}/cards/${fileName}`;
 }
 
-async function processAndUploadImage(url: string, fileName: string): Promise<string | null> {
+async function processAndUploadImage(url: string, fileName: string, cardId: string): Promise<string | null> {
   try {
     const imgRes = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!imgRes.ok) return null;
     
     const buffer = Buffer.from(await imgRes.arrayBuffer());
+    const image = sharp(buffer);
+    const metadata = await image.metadata();
     
-    // Convert to WebP and resize to unified 600x840 TCG standard
-    const webpBuffer = await sharp(buffer)
-      .resize(600, 840, { fit: 'cover', position: 'center' })
+    // Whitelist horizontal Scene cards (C06-C09, ER) and Prop cards (SPR)
+    const isLandscapeScene = cardId.match(/-(C0[6-9]|ER\d+|SPR\d+)$/i);
+    
+    // ANTI-GRID FILTER: Reject landscape images UNLESS they are recognized Scene/Prop cards
+    if (metadata.width && metadata.height && metadata.width >= metadata.height) {
+      if (!isLandscapeScene) {
+        console.log(`[FILTER] Rejected landscape/grid image from ${url}`);
+        return null; 
+      }
+    }
+    
+    const targetWidth = isLandscapeScene ? 840 : 600;
+    const targetHeight = isLandscapeScene ? 600 : 840;
+    
+    const webpBuffer = await image
+      .resize(targetWidth, targetHeight, { fit: 'cover', position: 'center' })
       .webp({ quality: 85 })
       .toBuffer();
     
@@ -71,80 +86,103 @@ async function processAndUploadImage(url: string, fileName: string): Promise<str
 }
 
 function getMlpMerchDetailUrls(cardId: string): string[] {
-  // Normalize card ID, translate ※ to 'x', and drop '-S' (foil marker)
   const normalized = cardId.toLowerCase().replace(/※/g, 'x').replace(/-s$/i, '');
+  const rawSuffix = cardId.replace(/[^a-zA-Z0-9-]/g, '').split('-').pop() || '';
   const cleanNum = normalized.replace(/[^a-z0-9]/g, '');
   
   let prefix = '';
-  let numberPart = cleanNum;
+  let numberPart = rawSuffix;
   const urls: string[] = [];
 
-  if (cleanNum.startsWith('bp01')) { prefix = 'bpfw'; numberPart = cleanNum.substring(4); }
-  else if (cleanNum.startsWith('bp02')) { prefix = 'bpd'; numberPart = cleanNum.substring(4); }
-  else if (cleanNum.startsWith('bp03')) { prefix = 'bpnn'; numberPart = cleanNum.substring(4); }
-  else if (cleanNum.startsWith('bp04')) { prefix = 'bphwe'; numberPart = cleanNum.substring(4); }
-  else if (cleanNum.startsWith('sd01a')) { prefix = 'fbts'; numberPart = cleanNum.substring(5); urls.push(`https://data.mlpmerch.com/kayou-cards/details/kctcgfbt${numberPart}/`); } 
-  else if (cleanNum.startsWith('sd01b')) { prefix = 'fbf'; numberPart = cleanNum.substring(5); }
-  else if (cleanNum.startsWith('sd01c')) { prefix = 'fbppc'; numberPart = cleanNum.substring(5); urls.push(`https://data.mlpmerch.com/kayou-cards/details/kctcgfbpp${numberPart}/`); } 
-  else if (cleanNum.startsWith('sd01d')) { prefix = 'fba'; numberPart = cleanNum.substring(5); }
-  else if (cleanNum.startsWith('sd01e')) { prefix = 'fbrd'; numberPart = cleanNum.substring(5); }
-  else if (cleanNum.startsWith('sd01f')) { prefix = 'fbr'; numberPart = cleanNum.substring(5); }
-  else if (cleanNum.startsWith('sd01')) { prefix = 'fbbp'; numberPart = cleanNum.substring(4); }
+  if (normalized.startsWith('bp01-')) { prefix = 'bpfw'; numberPart = cleanNum.substring(4); }
+  else if (normalized.startsWith('bp02-')) { prefix = 'bpd'; numberPart = cleanNum.substring(4); }
+  else if (normalized.startsWith('bp03-')) { prefix = 'bpnn'; numberPart = cleanNum.substring(4); }
+  else if (normalized.startsWith('bp04-')) { prefix = 'bphwe'; numberPart = cleanNum.substring(4); }
+  else if (normalized.startsWith('sd01a-')) { 
+    prefix = 'fbts'; 
+    numberPart = cleanNum.substring(5); 
+    urls.push(`https://data.mlpmerch.com/kayou-cards/details/kctcgfbt${numberPart}/`); 
+  } 
+  else if (normalized.startsWith('sd01b-')) { prefix = 'fbf'; numberPart = cleanNum.substring(5); }
+  else if (normalized.startsWith('sd01c-')) { 
+    prefix = 'fbppc'; 
+    numberPart = cleanNum.substring(5); 
+    urls.push(`https://data.mlpmerch.com/kayou-cards/details/kctcgfbpp${numberPart}/`); 
+  } 
+  else if (normalized.startsWith('sd01d-')) { prefix = 'fba'; numberPart = cleanNum.substring(5); }
+  else if (normalized.startsWith('sd01e-')) { prefix = 'fbrd'; numberPart = cleanNum.substring(5); }
+  else if (normalized.startsWith('sd01f-')) { prefix = 'fbr'; numberPart = cleanNum.substring(5); }
+  else if (normalized.startsWith('sd01-')) { 
+    numberPart = rawSuffix;
+    
+    // Brute-force across starter deck detail pages exclusively (No master gallery pages)
+    if (numberPart.toLowerCase().startsWith('er') || numberPart.toLowerCase().startsWith('rr')) {
+      const allPrefixes = ['fbts', 'fbf', 'fbppc', 'fba', 'fbrd', 'fbr', 'fbbp'];
+      for (const pfx of allPrefixes) {
+        urls.push(`https://data.mlpmerch.com/kayou-cards/details/kctcg${pfx}${numberPart}/`);
+      }
+    } else {
+      prefix = 'fbbp'; 
+      urls.push(`https://data.mlpmerch.com/kayou-cards/details/kctcgfbbp${numberPart}/`);
+      
+      const numOnly = numberPart.replace(/[^0-9]/g, '');
+      if (numOnly) {
+        urls.push(`https://data.mlpmerch.com/kayou-cards/details/kctcgfbbp${numOnly}/`);
+        urls.push(`https://data.mlpmerch.com/kayou-cards/details/kctcgfbbp${parseInt(numOnly, 10)}/`);
+      }
+    }
+  }
 
-  if (prefix) {
+  if (prefix && !normalized.startsWith('sd01-')) {
     urls.unshift(`https://data.mlpmerch.com/kayou-cards/details/kctcg${prefix}${numberPart}/`);
   }
   
   return urls;
 }
 
-async function scrapeMlpMerch(cardId: string): Promise<{ front: string | null, back: string | null }> {
-  try {
-    const urls = getMlpMerchDetailUrls(cardId);
-    
-    for (const detailUrl of urls) {
+async function scrapeMlpMerch(cardId: string): Promise<{ fronts: string[], back: string | null }> {
+  const urls = getMlpMerchDetailUrls(cardId);
+  const candidates: string[] = [];
+  let backUrl: string | null = null;
+
+  const cleanIdForSuffix = cardId.toLowerCase().replace(/-s$/i, '');
+  const cardSuffix = cleanIdForSuffix.split('-').pop() || '';
+
+  for (const detailUrl of urls) {
+    try {
       const res = await fetch(detailUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-      if (res.ok) {
-        const html = await res.text();
-        const $ = cheerio.load(html);
-        
-        let frontUrl: string | null = null;
-        let backUrl: string | null = null;
-        const potentialImages: string[] = [];
-
-        $('img').each((_, el) => {
-          const src = $(el).attr('src') || $(el).attr('data-src') || '';
-          if (src.includes('blogger.googleusercontent.com')) {
-            potentialImages.push(src);
-          }
-        });
-
-        for (let img of potentialImages) {
-          // Force max resolution by replacing the thumbnail size directory with /s1600/
-          const parts = img.split('/');
+      if (!res.ok) continue;
+      
+      const html = await res.text();
+      const $ = cheerio.load(html);
+      
+      $('img').each((_, el) => {
+        let src = $(el).attr('src') || $(el).attr('data-src') || '';
+        if (src.includes('blogger.googleusercontent.com')) {
+          
+          const parts = src.split('/');
           if (parts.length > 2) {
             parts[parts.length - 2] = 's1600';
-            img = parts.join('/');
+            src = parts.join('/');
           }
           
-          const lowerImg = img.toLowerCase();
-          // Filter out generic Blogger icons
-          if (lowerImg.includes('kayou') || lowerImg.includes('mlp') || lowerImg.includes('card')) {
-            if (!frontUrl) {
-              frontUrl = img;
-            } else if (!backUrl && img !== frontUrl) {
-              backUrl = img;
-            }
+          const lowerImg = src.toLowerCase();
+          
+          if ((lowerImg.includes('kayou') || lowerImg.includes('mlp')) && 
+              (lowerImg.includes(`-${cardSuffix}`) || lowerImg.includes(`${cardSuffix}.`))) {
+            if (!candidates.includes(src)) candidates.push(src);
+          }
+          
+          if (!backUrl && lowerImg.includes('back')) {
+            backUrl = src;
           }
         }
-
-        if (frontUrl) return { front: frontUrl, back: backUrl };
-      }
+      });
+    } catch (err) {
+      continue;
     }
-  } catch (err) {
-    console.error(`[ERROR] MLPMerch scrape failed for ${cardId}:`, err);
   }
-  return { front: null, back: null };
+  return { fronts: candidates, back: backUrl };
 }
 
 async function scrapeTcgMatch(cardId: string): Promise<string | null> {
@@ -184,7 +222,6 @@ async function scrapeTcgMatch(cardId: string): Promise<string | null> {
 
     if (highResImage && (await testUrl(highResImage))) return highResImage;
   } catch (err) {
-    // Silent fail to next fallback
   }
   return null;
 }
@@ -222,7 +259,6 @@ async function scrapeWikiArt(cardId: string, cardName: string): Promise<string |
       if (wikiImg && (await testUrl(wikiImg))) return wikiImg;
     }
   } catch {
-    // Wiki fallback error
   }
   return null;
 }
@@ -242,42 +278,47 @@ async function runPipeline() {
     if (card.image_url) continue;
 
     console.log(`\n--- Processing [${cardId}] ${card.name} ---`);
+    let finalAssetUrl: string | null = null;
 
-    let rawAssetUrls = await scrapeMlpMerch(cardId);
-    let frontAssetUrl = rawAssetUrls.front;
-
-    if (rawAssetUrls.back && !isCardBackUploaded) {
+    const mlpData = await scrapeMlpMerch(cardId);
+    
+    if (mlpData.back && !isCardBackUploaded) {
       console.log(`[INIT] Uploading global CardBack.webp...`);
-      const backUpload = await processAndUploadImage(rawAssetUrls.back, 'CardBack.webp');
+      const backUpload = await processAndUploadImage(mlpData.back, 'CardBack.webp', 'BACK');
       if (backUpload) {
         isCardBackUploaded = true;
         console.log(`[SUCCESS] CardBack.webp secured in R2.`);
       }
     }
 
-    if (frontAssetUrl) {
-      console.log(`[MLPMERCH] Retrieved pristine scan from data.mlpmerch.com.`);
-    } else {
-      frontAssetUrl = await scrapeTcgMatch(cardId);
-      if (frontAssetUrl) {
-        console.log(`[TCGMATCH] MLPMerch missed. Retrieved scan from TCGmatch.`);
-      } else {
-        console.log(`[WIKI] MLPMerch and TCGmatch missed. Falling back to Miraheze Wiki...`);
-        frontAssetUrl = await scrapeWikiArt(cardId, card.name);
+    for (const candidate of mlpData.fronts) {
+      finalAssetUrl = await processAndUploadImage(candidate, fileName, cardId);
+      if (finalAssetUrl) {
+        console.log(`[MLPMERCH] Retrieved pristine scan. Uploaded to R2.`);
+        break; 
       }
     }
 
-    let finalAssetUrl: string | null = null;
+    if (!finalAssetUrl) {
+      const tcgUrl = await scrapeTcgMatch(cardId);
+      if (tcgUrl) {
+        console.log(`[TCGMATCH] MLPMerch missed/rejected. Trying TCGmatch...`);
+        finalAssetUrl = await processAndUploadImage(tcgUrl, fileName, cardId);
+      }
+    }
 
-    if (frontAssetUrl) {
-      console.log(`[OPTIMIZER] Converting to WebP and uploading to R2...`);
-      finalAssetUrl = await processAndUploadImage(frontAssetUrl, fileName);
-      if (finalAssetUrl) uploadedCount++;
+    if (!finalAssetUrl) {
+      console.log(`[WIKI] TCGmatch missed/rejected. Falling back to Miraheze Wiki...`);
+      const wikiUrl = await scrapeWikiArt(cardId, card.name);
+      if (wikiUrl) {
+        finalAssetUrl = await processAndUploadImage(wikiUrl, fileName, cardId);
+      }
     }
 
     if (finalAssetUrl) {
       await pool.query('UPDATE game.cards SET image_url = $1 WHERE id = $2', [finalAssetUrl, cardId]);
       console.log(`[DB] Associated ${cardId} with R2 asset.`);
+      uploadedCount++;
     } else {
       console.log(`[WARNING] Could not locate or generate asset for ${cardId}`);
       missingCount++;
