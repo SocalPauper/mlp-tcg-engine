@@ -6,7 +6,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'mlp_tcg_super_secret_key_2026';
 // Extend Express Request interface to include user payload
 export interface AuthenticatedRequest extends Request {
   user?: {
-    userId: number;
+    id: string; // Changed to match UUID string
     username: string;
     isSafeMode: boolean;
     isVerifiedAdult: boolean;

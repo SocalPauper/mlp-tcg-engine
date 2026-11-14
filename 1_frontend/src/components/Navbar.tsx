@@ -13,6 +13,9 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
   
   // Check if user has administrator privileges
   const isAdmin = user && (user.role === 'admin' || user.isSafeMode === false);
+  
+  // Safely extract points, defaulting to the 500 starting balance if not yet fetched
+  const displayPoints = user?.reward_points !== undefined ? user.reward_points : 500;
 
   return (
     <nav className="mlp-navbar">
@@ -27,7 +30,6 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
         >
           Main Hub
         </button>
-        {/* CHANGED: Deck Builder is now The Stable */}
         <button 
           className={`nav-tab-btn tab-honesty ${currentTab === 'stable' ? 'active' : ''}`}
           onClick={() => setCurrentTab('stable')}
@@ -65,9 +67,14 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
 
       <div className="nav-auth-container">
         {user ? (
-          <div className="user-profile-widget">
-            <span className="user-welcome">Hi, {user.displayName || user.username}</span>
-            <button onClick={logout} className="auth-action-btn logout-btn">Logout</button>
+          <div className="user-profile-group">
+            <div className="points-badge" title="Reward Bits">
+              <span>⭐</span> {displayPoints} Bits
+            </div>
+            <div className="user-profile-widget">
+              <span className="user-welcome">Hi, {user.displayName || user.username}</span>
+              <button onClick={logout} className="auth-action-btn logout-btn">Logout</button>
+            </div>
           </div>
         ) : (
           <button onClick={onOpenAuth} className="auth-action-btn login-cta">

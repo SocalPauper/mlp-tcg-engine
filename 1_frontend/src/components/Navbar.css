@@ -78,6 +78,26 @@
   align-items: center;
 }
 
+.user-profile-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.points-badge {
+  background: linear-gradient(135deg, #ffd700, #ff8c00);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: 900;
+  font-size: 13px;
+  box-shadow: 0 4px 10px rgba(255, 140, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
 .user-profile-widget {
   display: flex;
   align-items: center;

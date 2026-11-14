@@ -12,6 +12,7 @@
   --el-laughter: #4dd0e1;
   --el-generosity: #e0e0e0;
   --el-loyalty: #64b5f6;
+  --mlp-gold: #ffd700;
 }
 
 .deck-builder-container {
@@ -152,8 +153,8 @@ input:checked + .slider:before { transform: translateX(24px); }
   position: fixed;
   top: 0; left: 0;
   width: 100vw; height: 100vh;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
   z-index: 9999;
   display: flex;
   justify-content: center;
@@ -377,6 +378,82 @@ input:checked + .slider:before { transform: translateX(24px); }
   border: 1px dashed #ddd;
 }
 
+/* ------------------------------------- */
+/* UNLOCK MODAL CELEBRATION EFFECTS      */
+/* ------------------------------------- */
+.unlock-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: radial-gradient(circle at center, #2e1e4a 0%, #11091a 100%);
+  border: 3px solid var(--mlp-gold);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(255, 215, 0, 0.3), inset 0 0 40px rgba(255, 215, 0, 0.1);
+  width: 900px;
+  max-width: 95vw;
+  max-height: 90vh;
+  padding: 40px;
+  overflow-y: auto;
+  position: relative;
+}
+
+.unlock-title {
+  color: var(--mlp-gold);
+  font-size: 32px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 30px;
+  text-shadow: 0 0 15px rgba(255, 215, 0, 0.8), 0 0 30px rgba(255, 215, 0, 0.4);
+  animation: pulseGold 2s infinite;
+}
+
+.unlocked-cards-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 30px;
+  margin-bottom: 40px;
+}
+
+.unlocked-card-item img {
+  width: 220px;
+  border-radius: 12px;
+  box-shadow: 0 0 25px 5px rgba(255, 215, 0, 0.5);
+  animation: float 4s ease-in-out infinite;
+  border: 2px solid rgba(255, 215, 0, 0.8);
+}
+
+.glow-btn {
+  background: linear-gradient(135deg, #ffd700, #ff8c00);
+  color: #fff;
+  font-size: 18px;
+  padding: 14px 40px;
+  border-radius: 30px;
+  border: none;
+  box-shadow: 0 8px 20px rgba(255, 140, 0, 0.5);
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  transition: all 0.2s;
+  pointer-events: auto;
+}
+
+.glow-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 25px rgba(255, 140, 0, 0.7);
+}
+
+@keyframes pulseGold {
+  0% { opacity: 0.8; text-shadow: 0 0 15px rgba(255, 215, 0, 0.8); }
+  50% { opacity: 1; text-shadow: 0 0 25px rgba(255, 215, 0, 1), 0 0 40px rgba(255, 215, 0, 0.6); }
+  100% { opacity: 0.8; text-shadow: 0 0 15px rgba(255, 215, 0, 0.8); }
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-15px); }
+  100% { transform: translateY(0px); }
+}
+
 /* MOBILE RESPONSIVENESS */
 @media (max-width: 768px) {
   .deck-builder-container {
@@ -384,41 +461,22 @@ input:checked + .slider:before { transform: translateX(24px); }
     overflow-y: auto !important;
     height: auto !important;
   }
-
   .card-library-section {
     flex: none;
     height: 60vh;
     border-right: none;
     border-bottom: 3px solid rgba(255, 255, 255, 0.6);
   }
-
   .deck-panel-section {
     flex: none;
     min-width: 100%;
     padding: 16px;
   }
-
-  .filters-bar {
-    flex-wrap: wrap;
-  }
-
-  .input-bubble {
-    flex: 1 1 100%;
-  }
-
-  .inspector-modal {
-    flex-direction: column;
-    height: 85vh;
-    overflow-y: auto;
-  }
-
-  .inspector-image-container {
-    flex: 0 0 auto;
-    padding: 15px;
-  }
-  
-  .inspector-image-container img {
-    max-height: 250px;
-    width: auto;
-  }
+  .filters-bar { flex-wrap: wrap; }
+  .input-bubble { flex: 1 1 100%; }
+  .inspector-modal { flex-direction: column; height: 85vh; overflow-y: auto; }
+  .inspector-image-container { flex: 0 0 auto; padding: 15px; }
+  .inspector-image-container img { max-height: 250px; width: auto; }
+  .unlock-modal { padding: 20px; }
+  .unlocked-card-item img { width: 140px; }
 }

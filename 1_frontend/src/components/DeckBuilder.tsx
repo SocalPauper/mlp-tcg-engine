@@ -27,6 +27,12 @@ interface DeckBuilderProps {
 export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps) {
   const [cards, setCards] = useState<Card[]>([]);
   
+  // Progress & Inventory States
+  const [unlockedCardIds, setUnlockedCardIds] = useState<string[]>([]);
+  const [newlyUnlockedCards, setNewlyUnlockedCards] = useState<Card[]>([]);
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+
+  // Deck Structure States
   const [maneCharacter, setManeCharacter] = useState<Card | null>(null);
   const [storyDeck, setStoryDeck] = useState<Card[]>([]);
   const [sceneDeck, setSceneDeck] = useState<Card[]>([]);
@@ -35,6 +41,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [buildPhase, setBuildPhase] = useState<BuildPhase>('MANE');
   const deckElement = maneCharacter?.element || null;
   
+  // UI Meta States
   const [deckName, setDeckName] = useState('My Sparkle Deck');
   const [isPublic, setIsPublic] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,6 +56,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
+  // 1. Fetch entire card catalog
   useEffect(() => {
     fetch('https://mlp-tcg-engine.onrender.com/api/cards')
       .then(res => res.json())
@@ -62,6 +70,39 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       });
   }, []);
 
+  // 2. Fetch User Inventory & New Alerts (Depends on cards being loaded)
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token && cards.length > 0) {
+      fetch('https://mlp-tcg-engine.onrender.com/api/users/me/collection', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          // Map all owned cards for the lock logic
+          const ownedIds = data.map((item: any) => item.card_id);
+          setUnlockedCardIds(ownedIds);
+
+          // Find cards the user hasn't been alerted about yet
+          const unalertedItems = data.filter((item: any) => item.user_alerted === false);
+          if (unalertedItems.length > 0) {
+            const newCards = unalertedItems
+              .map((item: any) => cards.find(c => c.id === item.card_id))
+              .filter(Boolean) as Card[];
+            
+            if (newCards.length > 0) {
+              setNewlyUnlockedCards(newCards);
+              setShowUnlockModal(true);
+            }
+          }
+        }
+      })
+      .catch(err => console.error('Failed to load collection:', err));
+    }
+  }, [cards]);
+
+  // 3. Fetch existing deck data if editing/viewing
   useEffect(() => {
     if (deckId && cards.length > 0) {
       const token = localStorage.getItem('token');
@@ -95,6 +136,39 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     }
   }, [deckId, cards, mode]);
 
+  // --- Logic Helpers ---
+
+  const handleAcknowledgeUnlocks = () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    // Acknowledge these cards on the backend so the modal doesn't pop up again
+    fetch('https://mlp-tcg-engine.onrender.com/api/users/me/collection/acknowledge', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(() => {
+      setShowUnlockModal(false);
+      setNewlyUnlockedCards([]);
+    })
+    .catch(console.error);
+  };
+
+  const isCardLocked = (card: Card) => {
+    // Starter Deck base cards are always free
+    if (card.id.startsWith('SD01')) return false;
+
+    // If the user owns it, it's unlocked
+    if (unlockedCardIds.includes(card.id)) return false;
+
+    // Otherwise, premium hits and alternates are locked by default
+    const premiumRarities = ['RR', 'CR', 'GR', 'SPR'];
+    if (premiumRarities.includes(card.rarity) || card.id.includes('-S')) return true;
+
+    // Commons, Uncommons, SR, ER are base tiers (unlocked by default)
+    return false;
+  };
+
   const handleContextMenu = (e: React.MouseEvent, card: Card) => {
     e.preventDefault();
     setHoveredCard(card);
@@ -115,7 +189,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   const addCardToDeck = (card: Card) => {
     if (isStarter) return;
-    if (card.id.includes('-S')) return alert('You must unlock this alternate art first!');
+    if (isCardLocked(card)) return alert('You must unlock this rare card from a pack first!');
 
     const baseId = card.id.replace('-S', '');
 
@@ -147,7 +221,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   const addStoryGroup = (group: Card[]) => {
     if (isStarter) return; 
-    if (group.some(c => c.id.includes('-S'))) return alert('You must unlock this alternate art first!');
+    if (group.some(c => isCardLocked(c))) return alert('You must unlock this alternate art first!');
     if (storyDeck.length + group.length > 4) return alert('Story Deck can only hold 4 cards.');
     
     const newStoryDeck = [...storyDeck, ...group];
@@ -179,6 +253,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     setDeckName(`${deckName} (Copy)`);
     alert('Deck copied! You can now make changes and save it to your account.');
   };
+
+  // --- Rendering Helpers ---
 
   const baseFilteredCards = cards.filter(card => {
     const matchesSearch = card.name.toLowerCase().includes(searchQuery.toLowerCase()) || card.id.toLowerCase().includes(searchQuery.toLowerCase());
@@ -229,7 +305,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   });
 
   Object.entries(setBuckets).forEach(([setCode, setCardList]) => {
-    // Separate standard art and alt art so they don't get mixed into the same 4-card stack
     const normalCards = setCardList.filter(c => !c.id.includes('-S')).sort((a, b) => a.id.localeCompare(b.id));
     const altCards = setCardList.filter(c => c.id.includes('-S')).sort((a, b) => a.id.localeCompare(b.id));
     
@@ -338,7 +413,27 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   return (
     <div className="deck-builder-container">
+
+      {/* --- UNLOCK CELEBRATION MODAL --- */}
+      {showUnlockModal && newlyUnlockedCards.length > 0 && (
+        <div className="inspector-overlay" style={{ pointerEvents: 'auto', zIndex: 10000 }}>
+          <div className="unlock-modal">
+            <h2 className="unlock-title">✨ New Rares Unlocked! ✨</h2>
+            <div className="unlocked-cards-grid">
+              {newlyUnlockedCards.map(c => (
+                <div key={c.id} className="unlocked-card-item">
+                  <img src={c.image_url} alt={c.name} />
+                </div>
+              ))}
+            </div>
+            <button className="phase-btn active glow-btn" onClick={handleAcknowledgeUnlocks}>
+              Awesome!
+            </button>
+          </div>
+        </div>
+      )}
       
+      {/* Import Modal */}
       {importModalOpen && (
         <div className="inspector-overlay" style={{ pointerEvents: 'auto' }}>
           <div className="inspector-modal" style={{ flexDirection: 'column', padding: '30px', height: 'auto', width: '500px' }}>
@@ -358,6 +453,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         </div>
       )}
 
+      {/* Card Inspector Tooltip */}
       {hoveredCard && (
         <div className="inspector-overlay" style={{ pointerEvents: 'auto' }}>
           <div className="inspector-modal">
@@ -414,6 +510,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         </div>
       )}
 
+      {/* Main Library */}
       <div className="card-library-section">
         <div className="phase-tracker">
           <button className={`phase-btn ${buildPhase === 'MANE' ? 'active' : ''}`} onClick={() => setBuildPhase('MANE')}>1. Mane</button>
@@ -454,7 +551,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             {buildPhase === 'STORY' ? (
               Object.entries(storyGroups).map(([groupKey, group]) => {
                 const displayName = group[0]?.name ? group[0].name.split(/[-–]/)[0].trim() : groupKey;
-                const isLocked = group.some(c => c.id.includes('-S'));
+                const isLocked = group.some(c => isCardLocked(c));
                 return (
                   <div 
                     key={groupKey} 
@@ -482,13 +579,13 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
               })
             ) : (
               displayCards.map(card => {
-                const isLocked = card.id.includes('-S');
+                const isLocked = isCardLocked(card);
                 return (
                   <div 
                     key={card.id} 
                     className={`card-item ${isLocked ? 'locked' : ''}`} 
                     onClick={() => {
-                      if (isLocked) alert('You must unlock this alternate art first!');
+                      if (isLocked) alert('You must unlock this rare card from a pack first!');
                       else addCardToDeck(card);
                     }}
                     onContextMenu={(e) => handleContextMenu(e, card)}
@@ -506,7 +603,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       </div>
 
       <div className="deck-panel-section">
-        
         <button 
           onClick={onClose} 
           style={{ 
