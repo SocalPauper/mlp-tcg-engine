@@ -24,7 +24,7 @@
   overflow: hidden !important;
 }
 
-/* REQUEST 1: Decorated Element Banner */
+/* Decorated Element Banner */
 .decorated-element-banner {
   position: relative;
   padding: 14px 20px;
@@ -51,7 +51,7 @@
 .decorated-element-banner.loyalty { background: linear-gradient(135deg, #64b5f6, #1e88e5); }
 .decorated-element-banner.unaligned { background: linear-gradient(135deg, #ce93d8, #ab47bc); }
 
-/* REQUEST 2: Wider Name with Label & Pencil */
+/* Wider Name with Label & Pencil */
 .deck-name-container {
   display: flex;
   flex-direction: column;
@@ -75,7 +75,7 @@
   box-shadow: 0 4px 12px rgba(156, 39, 176, 0.1);
 }
 
-/* REQUEST 4: Public / Private Toggle Switch */
+/* Public / Private Toggle Switch */
 .deck-visibility-bar {
   display: flex;
   align-items: center;
@@ -123,7 +123,7 @@ input:checked + .slider:before { transform: translateX(24px); }
   color: #666;
 }
 
-/* REQUEST 5, 6, 7: Action Buttons Bar */
+/* Action Buttons Bar */
 .deck-actions-bar {
   display: flex;
   gap: 8px;
@@ -286,6 +286,21 @@ input:checked + .slider:before { transform: translateX(24px); }
 .card-item img { width: 100%; border-radius: 8px; aspect-ratio: 5/7; object-fit: cover; display: block; }
 .card-item:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(255, 102, 163, 0.3); }
 
+/* Locked Alternate Art Cards */
+.card-item.locked img { filter: grayscale(100%) brightness(0.4); }
+.card-item.locked { cursor: not-allowed; position: relative; }
+.card-item.locked:hover { transform: none; box-shadow: none; }
+.lock-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 40px;
+  opacity: 0.9;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+}
+
 .story-stack {
   position: relative;
   width: 100%;
@@ -314,6 +329,8 @@ input:checked + .slider:before { transform: translateX(24px); }
 .story-stack:hover .story-card-layer:nth-child(2) { transform: translateX(-14%) rotate(-5deg) scale(1.02); z-index: 6; }
 .story-stack:hover .story-card-layer:nth-child(3) { transform: translateX(14%) rotate(5deg) scale(1.02); z-index: 7; }
 .story-stack:hover .story-card-layer:nth-child(4) { transform: translateX(42%) rotate(14deg) scale(1.02); z-index: 8; }
+
+.story-stack.locked .story-card-layer { filter: grayscale(100%) brightness(0.4); }
 
 .story-stack-label {
   position: absolute;

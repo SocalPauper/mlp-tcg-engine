@@ -42,16 +42,13 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [selectedMainType, setSelectedMainType] = useState<string | 'ALL'>('ALL');
   const [loading, setLoading] = useState(true);
 
-  // Read-only flag for Starter Decks or VIEW mode
   const [isStarter, setIsStarter] = useState(mode === 'VIEW');
-
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importText, setImportText] = useState('');
 
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // 1. Fetch entire card catalog on mount
   useEffect(() => {
     fetch('https://mlp-tcg-engine.onrender.com/api/cards')
       .then(res => res.json())
@@ -65,7 +62,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       });
   }, []);
 
-  // 2. Fetch existing deck data if editing, viewing, or copying
   useEffect(() => {
     if (deckId && cards.length > 0) {
       const token = localStorage.getItem('token');
@@ -119,12 +115,13 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   const addCardToDeck = (card: Card) => {
     if (isStarter) return;
+    if (card.id.includes('-S')) return alert('You must unlock this alternate art first!');
 
     const baseId = card.id.replace('-S', '');
 
     if (buildPhase === 'MANE') {
       setManeCharacter(card);
-      setBuildPhase('STORY'); 
+      if (storyDeck.length === 0) setBuildPhase('STORY'); 
     } 
     else if (buildPhase === 'SCENE') {
       if (sceneDeck.length >= 15) return alert('Scene Deck is full (15/15).');
@@ -138,7 +135,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       
       const newSceneDeck = [...sceneDeck, card];
       setSceneDeck(newSceneDeck);
-      if (newSceneDeck.length === 15) setBuildPhase('MAIN'); 
     } 
     else if (buildPhase === 'MAIN') {
       if (mainDeck.length >= 50) return alert('Main Deck is full (50/50).');
@@ -151,35 +147,28 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   const addStoryGroup = (group: Card[]) => {
     if (isStarter) return; 
+    if (group.some(c => c.id.includes('-S'))) return alert('You must unlock this alternate art first!');
     if (storyDeck.length + group.length > 4) return alert('Story Deck can only hold 4 cards.');
     
     const newStoryDeck = [...storyDeck, ...group];
     setStoryDeck(newStoryDeck);
-    if (newStoryDeck.length === 4) setBuildPhase('SCENE'); 
   };
 
   const removeCard = (zone: string, index: number) => {
     if (isStarter) return; 
 
     if (zone === 'mane') {
-      const confirmReset = window.confirm('Removing your Mane Character will reset your deck element and clear all other cards. Continue?');
+      const confirmReset = window.confirm('Removing your Mane Character will clear all other cards to prevent element conflicts. Continue?');
       if (confirmReset) {
         setManeCharacter(null);
         setStoryDeck([]);
         setSceneDeck([]);
         setMainDeck([]);
-        setBuildPhase('MANE');
       }
     } else if (zone === 'story') {
       setStoryDeck([]);
-      setSceneDeck([]);
-      setMainDeck([]);
-      setBuildPhase('STORY');
     } else if (zone === 'scene') {
       setSceneDeck(sceneDeck.filter((_, i) => i !== index));
-      if (sceneDeck.length - 1 < 15 && buildPhase === 'MAIN') {
-        setBuildPhase('SCENE');
-      }
     } else if (zone === 'main') {
       setMainDeck(mainDeck.filter((_, i) => i !== index));
     }
@@ -192,7 +181,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   };
 
   const baseFilteredCards = cards.filter(card => {
-    if (card.id.includes('-S')) return false; 
     const matchesSearch = card.name.toLowerCase().includes(searchQuery.toLowerCase()) || card.id.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRarity = selectedRarity === 'ALL' || card.rarity === selectedRarity;
     return matchesSearch && matchesRarity;
@@ -217,7 +205,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   } else if (buildPhase === 'SCENE') {
     displayCards = baseFilteredCards.filter(c => 
       c.card_type === 'Scene' && 
-      (c.element === 'Everyday' || !c.element || c.element === deckElement)
+      (c.element === 'Everyday' || !c.element || c.element === deckElement || !deckElement)
     );
   } else if (buildPhase === 'MAIN') {
     displayCards = baseFilteredCards.filter(c => {
@@ -227,7 +215,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                           !c.name.includes(' – ');
       
       const matchesMainType = selectedMainType === 'ALL' || c.card_type === selectedMainType;
-      const matchesElement = c.element === deckElement || !c.element || c.element === 'Everyday';
+      const matchesElement = c.element === deckElement || !c.element || c.element === 'Everyday' || !deckElement;
       return isValidType && matchesMainType && matchesElement;
     });
   }
@@ -241,13 +229,22 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   });
 
   Object.entries(setBuckets).forEach(([setCode, setCardList]) => {
-    const sorted = setCardList.sort((a, b) => a.id.localeCompare(b.id));
-    for (let i = 0; i < sorted.length; i += 4) {
-      const chunk = sorted.slice(i, i + 4);
-      const baseName = chunk[0].name.split(/[-–]/)[0].trim();
-      const groupKey = `${setCode}-Chunk-${Math.floor(i / 4)}-${baseName}`;
-      storyGroups[groupKey] = chunk;
-    }
+    // Separate standard art and alt art so they don't get mixed into the same 4-card stack
+    const normalCards = setCardList.filter(c => !c.id.includes('-S')).sort((a, b) => a.id.localeCompare(b.id));
+    const altCards = setCardList.filter(c => c.id.includes('-S')).sort((a, b) => a.id.localeCompare(b.id));
+    
+    const chunkArray = (arr: Card[], isAlt: boolean) => {
+      for (let i = 0; i < arr.length; i += 4) {
+        const chunk = arr.slice(i, i + 4);
+        if (chunk.length === 0) continue;
+        const baseName = chunk[0].name.split(/[-–]/)[0].trim();
+        const groupKey = `${setCode}-Chunk-${Math.floor(i / 4)}-${baseName}${isAlt ? '-Alt' : ''}`;
+        storyGroups[groupKey] = chunk;
+      }
+    };
+
+    chunkArray(normalCards, false);
+    chunkArray(altCards, true);
   });
 
   const totalCards = (maneCharacter ? 1 : 0) + storyDeck.length + sceneDeck.length + mainDeck.length;
@@ -266,7 +263,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       main_deck: mainDeck.map(c => c.id)
     };
     
-    // If editing an existing deck, use PUT, otherwise POST
     const endpoint = (mode === 'EDIT' && deckId) ? `/api/decks/${deckId}` : '/api/decks';
     const method = (mode === 'EDIT' && deckId) ? 'PUT' : 'POST';
 
@@ -281,7 +277,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     .then(res => res.json())
     .then(() => {
       alert('Deck successfully saved!');
-      onClose(); // Auto-return to the Hub after saving
+      onClose(); 
     })
     .catch(() => alert('Failed to save deck.'));
   };
@@ -421,9 +417,9 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       <div className="card-library-section">
         <div className="phase-tracker">
           <button className={`phase-btn ${buildPhase === 'MANE' ? 'active' : ''}`} onClick={() => setBuildPhase('MANE')}>1. Mane</button>
-          <button className={`phase-btn ${buildPhase === 'STORY' ? 'active' : ''}`} onClick={() => maneCharacter && setBuildPhase('STORY')} disabled={!maneCharacter}>2. Story</button>
-          <button className={`phase-btn ${buildPhase === 'SCENE' ? 'active' : ''}`} onClick={() => maneCharacter && setBuildPhase('SCENE')} disabled={!maneCharacter}>3. Scenes</button>
-          <button className={`phase-btn ${buildPhase === 'MAIN' ? 'active' : ''}`} onClick={() => maneCharacter && setBuildPhase('MAIN')} disabled={!maneCharacter}>4. Main Deck</button>
+          <button className={`phase-btn ${buildPhase === 'STORY' ? 'active' : ''}`} onClick={() => setBuildPhase('STORY')}>2. Story</button>
+          <button className={`phase-btn ${buildPhase === 'SCENE' ? 'active' : ''}`} onClick={() => setBuildPhase('SCENE')}>3. Scenes</button>
+          <button className={`phase-btn ${buildPhase === 'MAIN' ? 'active' : ''}`} onClick={() => setBuildPhase('MAIN')}>4. Main Deck</button>
         </div>
 
         <div className="filters-bar">
@@ -458,11 +454,15 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             {buildPhase === 'STORY' ? (
               Object.entries(storyGroups).map(([groupKey, group]) => {
                 const displayName = group[0]?.name ? group[0].name.split(/[-–]/)[0].trim() : groupKey;
+                const isLocked = group.some(c => c.id.includes('-S'));
                 return (
                   <div 
                     key={groupKey} 
-                    className="story-stack" 
-                    onClick={() => addStoryGroup(group)}
+                    className={`story-stack ${isLocked ? 'locked' : ''}`} 
+                    onClick={() => {
+                      if (isLocked) alert('You must unlock this alternate art first!');
+                      else addStoryGroup(group);
+                    }}
                     onContextMenu={(e) => handleContextMenu(e, group[0])}
                     onTouchStart={() => handleTouchStart(group[0])}
                     onTouchEnd={handleTouchEnd}
@@ -475,23 +475,31 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                         alt={card.name} 
                       />
                     ))}
-                    <div className="story-stack-label">{displayName} ({group.length}/4)</div>
+                    {isLocked && <div className="lock-icon">🔒</div>}
+                    <div className="story-stack-label">{displayName} {isLocked ? '(Locked)' : `(${group.length}/4)`}</div>
                   </div>
                 );
               })
             ) : (
-              displayCards.map(card => (
-                <div 
-                  key={card.id} 
-                  className="card-item" 
-                  onClick={() => addCardToDeck(card)}
-                  onContextMenu={(e) => handleContextMenu(e, card)}
-                  onTouchStart={() => handleTouchStart(card)}
-                  onTouchEnd={handleTouchEnd}
-                >
-                  <img src={card.image_url} alt={card.name} loading="lazy" />
-                </div>
-              ))
+              displayCards.map(card => {
+                const isLocked = card.id.includes('-S');
+                return (
+                  <div 
+                    key={card.id} 
+                    className={`card-item ${isLocked ? 'locked' : ''}`} 
+                    onClick={() => {
+                      if (isLocked) alert('You must unlock this alternate art first!');
+                      else addCardToDeck(card);
+                    }}
+                    onContextMenu={(e) => handleContextMenu(e, card)}
+                    onTouchStart={() => handleTouchStart(card)}
+                    onTouchEnd={handleTouchEnd}
+                  >
+                    <img src={card.image_url} alt={card.name} loading="lazy" />
+                    {isLocked && <div className="lock-icon">🔒</div>}
+                  </div>
+                );
+              })
             )}
           </div>
         )}
@@ -499,7 +507,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
       <div className="deck-panel-section">
         
-        {/* Navigation Return Button */}
         <button 
           onClick={onClose} 
           style={{ 
@@ -566,12 +573,12 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             ) : <div className="empty-zone">Select a Mane Character</div>}
           </div>
 
-          <div className="deck-zone" onClick={() => storyDeck.length > 0 && removeCard('story', 0)}>
+          <div className="deck-zone">
             <h3>Story Deck ({storyDeck.length}/4)</h3>
             {storyDeck.length > 0 ? (
               storyDeck.map((c, i) => (
-                <div key={i} className="deck-row">
-                  <span>{c.name}</span>{!isStarter && i === storyDeck.length - 1 && <span className="remove-tag">✕</span>}
+                <div key={i} className="deck-row" onClick={() => removeCard('story', i)}>
+                  <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
                 </div>
               ))
             ) : <div className="empty-zone">Select Story Cards</div>}
