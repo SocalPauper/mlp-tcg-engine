@@ -6,7 +6,7 @@ import { initDatabase, pool } from '../4_data/db.js';
 import authRouter from './routes/auth.js';
 import cardsRouter from './routes/cards.js';
 import decksRouter from './routes/decks.js';
-import shopsRouter from './routes/shops.js'; // Added shops router
+import shopsRouter from './routes/shops.js';
 
 const app = express();
 
@@ -23,10 +23,14 @@ async function startServer() {
   try {
     await initDatabase();
 
-    // 1. Updated users table to UUID and added reward_points
+    // 1. Ensure schemas exist
     await pool.query(`
       CREATE SCHEMA IF NOT EXISTS auth;
+      CREATE SCHEMA IF NOT EXISTS game;
+    `);
 
+    // 2. Provision auth.users with UUID primary key
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS auth.users (
         id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
         username VARCHAR(100) UNIQUE NOT NULL,
@@ -44,7 +48,21 @@ async function startServer() {
       );
     `);
 
-    // 2. Deck structure
+    // Safety check: If auth.users was previously created as integer (serial), convert it to UUID safely
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'auth' AND table_name = 'users' AND column_name = 'id' AND data_type = 'integer'
+        ) THEN
+          ALTER TABLE public.user_cards DROP CONSTRAINT IF EXISTS user_cards_user_id_fkey;
+          ALTER TABLE auth.users ALTER COLUMN id TYPE UUID USING gen_random_uuid();
+        END IF;
+      END $$;
+    `);
+
+    // 3. Deck structure
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth.decks (
         id VARCHAR(255) PRIMARY KEY,
@@ -58,9 +76,9 @@ async function startServer() {
       );
     `);
 
-    // 3. Added user_cards inventory table
+    // 4. Game inventory table (housed in the game schema)
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS public.user_cards (
+      CREATE TABLE IF NOT EXISTS game.user_cards (
         user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
         card_id VARCHAR(50) REFERENCES game.cards(id) ON DELETE CASCADE,
         quantity INT DEFAULT 1,
@@ -70,13 +88,14 @@ async function startServer() {
       );
     `);
 
+    console.log('[DATABASE] Initialization and schema hardening complete.');
   } catch (err: any) {
     console.error('[DATABASE INIT ERROR]', err.message);
   }
 
   // Mount Routes
   app.use('/api/auth', authRouter);
-  app.use('/api/users', authRouter); // Alias to support /api/users/me endpoints
+  app.use('/api/users', authRouter);
   app.use('/api/shop', shopsRouter);
   app.use('/api', cardsRouter);
   app.use('/api', decksRouter);
