@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { pool } from '../../4_data/db.js';
 import { sendVerificationEmail } from '../services/mailer.js';
-import { authenticateToken, AuthenticatedRequest } from '../authMiddleware.js';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/authMiddleware.js';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'mlp_tcg_super_secret_key_2026';
