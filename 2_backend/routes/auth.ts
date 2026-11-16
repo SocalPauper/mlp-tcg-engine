@@ -25,7 +25,7 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
         email: user.email,
         isSafeMode: user.is_safe_mode,
         isVerified: user.is_verified,
-        reward_points: user.reward_points
+        reward_points: user.reward_points ?? 500
       }
     });
   } catch (err) {
@@ -62,13 +62,17 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing required registration fields.' });
   }
 
+  const client = await pool.connect();
   try {
-    const existing = await pool.query(
+    await client.query('BEGIN');
+
+    const existing = await client.query(
       'SELECT id FROM auth.users WHERE username = $1 OR ($2::text IS NOT NULL AND email = $2)',
       [username, email || null]
     );
 
     if (existing.rows.length > 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'Username or email already in use.' });
     }
 
@@ -79,13 +83,30 @@ router.post('/register', async (req, res) => {
     const isVerified = !email;
     const isSafeMode = !(!email && age >= 13);
 
-    const insertResult = await pool.query(
-      `INSERT INTO auth.users (username, display_name, email, password_hash, age, verification_token, is_verified, is_safe_mode)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, username, display_name, email, reward_points`,
+    // Insert new user with default 500 reward points
+    const insertResult = await client.query(
+      `INSERT INTO auth.users (username, display_name, email, password_hash, age, verification_token, is_verified, is_safe_mode, reward_points)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 500) RETURNING id, username, display_name, email, reward_points`,
       [username, displayName, email || null, passwordHash, age, verificationToken, isVerified, isSafeMode]
     );
 
     const newUser = insertResult.rows[0];
+
+    // Seed starter collection in public.user_cards (all SD01 starter deck cards & Everyday scenes)
+    const starterCardsRes = await client.query(
+      `SELECT id FROM game.cards WHERE id LIKE 'SD01%' OR element = 'Everyday' OR rarity = 'C'`
+    );
+    
+    for (const card of starterCardsRes.rows) {
+      await client.query(
+        `INSERT INTO public.user_cards (user_id, card_id, quantity, user_alerted)
+         VALUES ($1, $2, 3, TRUE)
+         ON CONFLICT (user_id, card_id) DO NOTHING`,
+        [newUser.id, card.id]
+      );
+    }
+
+    await client.query('COMMIT');
 
     // Issue token upon registration so user is instantly logged in
     const token = jwt.sign(
@@ -110,13 +131,16 @@ router.post('/register', async (req, res) => {
         id: newUser.id,
         username: newUser.username,
         displayName: newUser.display_name,
-        reward_points: newUser.reward_points
+        reward_points: newUser.reward_points ?? 500
       }
     });
 
   } catch (err: any) {
+    await client.query('ROLLBACK');
     console.error('Registration error:', err);
     return res.status(500).json({ success: false, message: 'Internal server error during registration.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -151,7 +175,6 @@ router.post('/login', async (req, res) => {
       currentSafeMode = false;
     }
 
-    // Generate JWT Token
     const token = jwt.sign(
       { 
         id: user.id, 
@@ -175,7 +198,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         isSafeMode: currentSafeMode,
         isVerified: user.is_verified,
-        reward_points: user.reward_points
+        reward_points: user.reward_points ?? 500
       }
     });
   } catch (err: any) {

@@ -11,14 +11,11 @@ interface NavbarProps {
 export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: NavbarProps) {
   const { user, logout } = useAuth();
   
-  // Check if user has administrator privileges
   const isAdmin = user && (user.role === 'admin' || user.isSafeMode === false);
-  
-  // Safely extract points, defaulting to the 500 starting balance if not yet fetched
   const displayPoints = user?.reward_points !== undefined ? user.reward_points : 500;
 
   return (
-    <nav className="mlp-navbar">
+    <nav className="mlp-navbar" style={{ position: 'sticky', top: 0, zIndex: 1000 }}>
       <div className="nav-brand" onClick={() => setCurrentTab('hub')}>
         ✨ Equestria Clash
       </div>
@@ -33,8 +30,10 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
         <button 
           className={`nav-tab-btn tab-honesty ${currentTab === 'stable' ? 'active' : ''}`}
           onClick={() => setCurrentTab('stable')}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1.2', padding: '6px 16px' }}
         >
-          The Stable
+          <span>The Stable</span>
+          <span style={{ fontSize: '10px', opacity: 0.85, fontWeight: 700 }}>(Decks)</span>
         </button>
         <button 
           className={`nav-tab-btn tab-kindness ${currentTab === 'community' ? 'active' : ''}`}
@@ -68,8 +67,8 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
       <div className="nav-auth-container">
         {user ? (
           <div className="user-profile-group">
-            <div className="points-badge" title="Reward Bits">
-              <span>⭐</span> {displayPoints} Bits
+            <div className="points-badge" title="Pony Points">
+              <span>⭐</span> {displayPoints} Pony Points
             </div>
             <div className="user-profile-widget">
               <span className="user-welcome">Hi, {user.displayName || user.username}</span>

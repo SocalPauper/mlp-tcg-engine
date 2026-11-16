@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext'; // adjust path if your context is elsewhere
+import { useAuth } from '../App';
 import './AuthModal.css';
 
 interface AuthModalProps {
@@ -7,7 +7,7 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ onClose }: AuthModalProps) {
-  const [isLogin, setIsLogin] = useState(false); // Set to false to default to Create Account like your screenshot
+  const [isLogin, setIsLogin] = useState(false);
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -35,12 +35,12 @@ export default function AuthModal({ onClose }: AuthModalProps) {
         await register({
           username: formData.username,
           displayName: formData.displayName,
-          age: parseInt(formData.age, 10),
+          age: parseInt(formData.age, 10) || 18,
           email: formData.email,
           password: formData.password
         });
       }
-      onClose(); // Close modal on success
+      onClose();
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || 'Authentication failed.');
     } finally {
@@ -50,7 +50,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
 
   return (
     <div className="auth-modal-overlay" onClick={onClose}>
-      <div className="auth-modal" onClick={e => e.stopPropagation()}>
+      <div className="auth-modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
         <h2>{isLogin ? 'Sign In' : 'Create Account'}</h2>
         
         {error && (
@@ -92,7 +92,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
               <input 
                 type="email" 
                 name="email" 
-                placeholder="Email (Required for Safe Mode removal)" 
+                placeholder="Email (Optional)" 
                 value={formData.email} 
                 onChange={handleChange} 
               />
@@ -122,7 +122,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
               marginTop: '8px'
             }}
           >
-            {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Register')}
+            {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Register Account')}
           </button>
         </form>
 
