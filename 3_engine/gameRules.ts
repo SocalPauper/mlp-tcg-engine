@@ -357,12 +357,23 @@ export function playCardFromHand(
   };
 }
 
+/**
+ * Strict Rule-Based Scene Inspiration Validation:
+ * Only returns eligible=true if the Scene card has an Inspo Boost ability AND its target
+ * character/element condition matches `targetCharacter` (e.g. "Applejack" only matches Applejack).
+ */
 export function canSceneInspireCharacter(
   scene: SceneCardInPlay,
   targetCharacter: CardDefinition | null
 ): { eligible: boolean; boostAmount: number; reason?: string } {
-  if (!scene.isFaceUp || scene.isLockedFaceDown || !targetCharacter) {
-    return { eligible: false, boostAmount: 0 };
+  if (scene.isLockedFaceDown) {
+    return { eligible: false, boostAmount: 0, reason: 'First-Turn Locked Scene' };
+  }
+  if (!scene.isFaceUp) {
+    return { eligible: false, boostAmount: 0, reason: 'Already flipped face-down' };
+  }
+  if (!targetCharacter) {
+    return { eligible: false, boostAmount: 0, reason: 'No character in active lane' };
   }
 
   const text = String(scene.card.effectText || '');
@@ -374,26 +385,55 @@ export function canSceneInspireCharacter(
     return {
       eligible: false,
       boostAmount: 0,
-      reason: 'This Scene does not have an Inspo Boost ability.',
+      reason: 'No Inspo Boost ability on this Scene.',
     };
   }
 
   const boostMatch = text.match(/\+(\d+)\s*Inspiration/i);
   const boostAmount = boostMatch ? parseInt(boostMatch[1], 10) : 1;
 
-  const charBracketMatch = text.match(/[｢\[]([^｣\]]+)[｣\]]/);
+  const actualCharName = String(targetCharacter.name || '').toLowerCase();
+
+  // 1. Check bracketed character requirement: e.g., [Applejack], ｢Twilight Sparkle｣, 「Rainbow Dash」
+  const charBracketMatch = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
   if (charBracketMatch) {
     const requiredName = charBracketMatch[1].trim().toLowerCase();
-    const actualName = String(targetCharacter.name || '').toLowerCase();
-    if (!actualName.includes(requiredName)) {
+    if (!actualCharName.includes(requiredName)) {
       return {
         eligible: false,
         boostAmount: 0,
-        reason: `Only boosts ${charBracketMatch[1]}`,
+        reason: `Only boosts ${charBracketMatch[1].trim()}`,
       };
+    }
+  } else {
+    // 2. Also check unbracketed named pony requirements: e.g., "Your Applejack gets +1 Inspiration" or "Boost Applejack"
+    const namedPonies = [
+      'Twilight Sparkle',
+      'Rainbow Dash',
+      'Applejack',
+      'Rarity',
+      'Fluttershy',
+      'Pinkie Pie',
+      'Spike',
+      'Princess Celestia',
+      'Princess Luna',
+      'Princess Cadance',
+      'Starlight Glimmer',
+      'Trixie',
+    ];
+    for (const pony of namedPonies) {
+      const ponyRegex = new RegExp(`\\b${pony}\\b`, 'i');
+      if (ponyRegex.test(text) && !actualCharName.includes(pony.toLowerCase())) {
+        return {
+          eligible: false,
+          boostAmount: 0,
+          reason: `Only boosts ${pony}`,
+        };
+      }
     }
   }
 
+  // 3. Check element-specific requirement if stated (e.g., "Your Magic character" or "Your Honesty character")
   const elements = ['magic', 'loyalty', 'honesty', 'generosity', 'kindness', 'laughter'];
   for (const el of elements) {
     const elRegex = new RegExp(`your\\s+${el}\\s+character`, 'i');
@@ -609,6 +649,7 @@ export function passInspireInContact(
     attackerTotalPower: atkPower,
     defenderTotalPower: defPower,
     outcome,
+    acknowledgedBy: [] as ('0' | '1')[],
   };
 
   let nextAtkPlayer: PlayerState = {
@@ -654,19 +695,54 @@ export function passInspireInContact(
     };
   }
 
-  const nextQueue = state.contactState.laneQueue.slice(1);
+  // Enter CLASH_HOLD so both players watch the full Clash slam animation BEFORE advancing lanes or switching turns!
+  const remainingQueue = state.contactState.laneQueue.slice(1);
+  return {
+    ...state,
+    phase: 'CLASH_HOLD',
+    contactState: null,
+    pendingLaneQueueAfterReveal: remainingQueue,
+    players: {
+      ...state.players,
+      [attackerId]: nextAtkPlayer,
+      [defenderId]: nextDefPlayer,
+    },
+    lastClashEvent: clashEvent,
+  };
+}
+
+/**
+ * Called by each client once the Clash slam animation completes on their screen.
+ * Waits until BOTH players finish watching the combat animation before resuming the lane queue or ending the turn.
+ */
+export function acknowledgeClashAnimation(
+  state: KayouGameState,
+  playerId: '0' | '1'
+): KayouGameState {
+  if (state.phase !== 'CLASH_HOLD' || !state.lastClashEvent) return state;
+  if (state.lastClashEvent.acknowledgedBy.includes(playerId)) return state;
+
+  const updatedAck = [...state.lastClashEvent.acknowledgedBy, playerId];
+
+  if (updatedAck.length < 2) {
+    return {
+      ...state,
+      lastClashEvent: {
+        ...state.lastClashEvent,
+        acknowledgedBy: updatedAck,
+      },
+    };
+  }
+
+  const queueToResume = state.pendingLaneQueueAfterReveal || [];
   return advanceToNextAttackLane(
     {
       ...state,
-      players: {
-        ...state.players,
-        [attackerId]: nextAtkPlayer,
-        [defenderId]: nextDefPlayer,
-      },
-      lastClashEvent: clashEvent,
+      lastClashEvent: null,
+      pendingLaneQueueAfterReveal: null,
     },
-    attackerId,
-    nextQueue
+    state.turnPlayerId,
+    queueToResume
   );
 }
 
@@ -731,10 +807,6 @@ function executePrePlanEffectAndReturnToHand(
   return { updatedAttacker, updatedDefender, hasPrePlanTrigger, effectSummary };
 }
 
-/**
- * Executes any printed promotion effect when a Story stage is revealed/progressed
- * (e.g., "When promoted to this stage, draw 1 card" or "+1 Inspiration").
- */
 function executeStoryPromotionEffect(
   attacker: PlayerState,
   defender: PlayerState,
@@ -841,7 +913,6 @@ export function resolveBreakthroughChoice(
       attacker = updatedAttacker;
       defender = updatedDefender;
 
-      // Hold turn/lane progression in REVEAL_HOLD until BOTH players acknowledge the Story card!
       return {
         ...state,
         phase: 'REVEAL_HOLD',
@@ -893,8 +964,6 @@ export function resolveBreakthroughChoice(
     );
   }
 
-  // INTERVENE_PLAN: Flip opponent's lowest sequential Plan card, reveal to both players,
-  // place into defender's hand, and HOLD turn transition until BOTH players acknowledge!
   const sequentialStageIdx = defender.storyStages.findIndex(
     (s) => s.planCard !== null && !s.isPlanRevealed
   );
@@ -964,7 +1033,6 @@ export function acknowledgePlanReveal(
 
   const updatedAck = [...state.lastPlanRevealEvent.acknowledgedBy, playerId];
 
-  // Wait until BOTH players acknowledge before continuing lanes or switching turns
   if (updatedAck.length < 2) {
     return {
       ...state,
@@ -996,7 +1064,6 @@ export function acknowledgeStoryReveal(
 
   const updatedAck = [...state.lastStoryRevealEvent.acknowledgedBy, playerId];
 
-  // Wait until BOTH players acknowledge the revealed Story card before advancing
   if (updatedAck.length < 2) {
     return {
       ...state,
@@ -1009,7 +1076,6 @@ export function acknowledgeStoryReveal(
 
   const revealEvent = state.lastStoryRevealEvent;
 
-  // If this was Story Stage 4, trigger the Victory Screen now that both players saw it!
   if (revealEvent.isGameWinningStage) {
     return {
       ...state,
@@ -1060,16 +1126,22 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
   const startingPlayer = state.players[nextPlayerId];
   const newTurnsTaken = startingPlayer.turnsTaken + 1;
 
+  // Draw 1 Main Deck card
   const drawnMain = startingPlayer.mainDeck.slice(0, 1);
   const restMain = startingPlayer.mainDeck.slice(1);
-
-  const drawnScene = startingPlayer.sceneDeck.slice(0, 1);
-  const restScene = startingPlayer.sceneDeck.slice(1);
 
   const readiedExistingScenes: SceneCardInPlay[] = startingPlayer.sceneArea.map((s) => ({
     ...s,
     isExhausted: false,
   }));
+
+  // Rule 3: On Player 2's first turn (newTurnsTaken === 1), they do NOT draw/flip a Scene card
+  // so both players start their first turn with exactly 2 Scene cards.
+  const shouldFlipNewScene = newTurnsTaken > 1;
+  const drawnScene = shouldFlipNewScene ? startingPlayer.sceneDeck.slice(0, 1) : [];
+  const restScene = shouldFlipNewScene
+    ? startingPlayer.sceneDeck.slice(1)
+    : startingPlayer.sceneDeck;
 
   const addedScenes: SceneCardInPlay[] = drawnScene.map((c) => ({
     card: c,

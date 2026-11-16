@@ -14,6 +14,7 @@ import {
   startContactPhase,
   inspireInContact,
   passInspireInContact,
+  acknowledgeClashAnimation,
   resolveBreakthroughChoice,
   acknowledgePlanReveal,
   acknowledgeStoryReveal,
@@ -516,6 +517,8 @@ export class GameManager {
         return inspireInContact(state, playerId, payload.sceneIndex);
       case 'PASS_INSPIRE':
         return passInspireInContact(state, playerId);
+      case 'ACK_CLASH_ANIMATION':
+        return acknowledgeClashAnimation(state, playerId);
       case 'BREAKTHROUGH_CHOICE':
         return resolveBreakthroughChoice(state, playerId, payload.choice);
       case 'ACK_PLAN_REVEAL':

@@ -68,6 +68,7 @@ export interface LiveGameState {
     | 'MAIN_PHASE'
     | 'CONTACT_INSPIRE'
     | 'CONTACT_RESOLUTION'
+    | 'CLASH_HOLD'
     | 'BREAKTHROUGH_CHOICE'
     | 'REVEAL_HOLD'
     | 'GAME_OVER';
@@ -92,6 +93,7 @@ export interface LiveGameState {
     attackerTotalPower: number;
     defenderTotalPower: number;
     outcome: 'ATTACKER_WINS' | 'DEFENDER_WINS' | 'TIE';
+    acknowledgedBy: ('0' | '1')[];
   } | null;
   lastPlanRevealEvent: {
     id: number;
@@ -146,6 +148,10 @@ function cleanCardText(text?: string): string {
   return text.replace(/\{\{[^}]*$/g, '').replace(/\{\{|\}\}/g, '').trim();
 }
 
+/**
+ * Strict target check so Scene Inspiration Boosts ONLY highlight/activate when the active
+ * lane's character satisfies the Scene card's printed target condition (e.g., Applejack only).
+ */
 function checkSceneInspireEligibility(
   scene: SceneCardInPlay,
   targetChar: CardDefinition | null
@@ -169,19 +175,45 @@ function checkSceneInspireEligibility(
     return { eligible: false, reason: 'No Inspo Boost text on card' };
   }
 
-  const charBracketMatch = text.match(/[｢\[]([^｣\]]+)[｣\]]/);
+  const actualCharName = String(targetChar.name || '').toLowerCase();
+
+  // 1. Bracketed character requirement: [Applejack], ｢Twilight Sparkle｣, 「Rainbow Dash」
+  const charBracketMatch = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
   if (charBracketMatch) {
     const requiredName = charBracketMatch[1].trim().toLowerCase();
-    if (!String(targetChar.name || '').toLowerCase().includes(requiredName)) {
-      return { eligible: false, reason: `Requires ${charBracketMatch[1]}` };
+    if (!actualCharName.includes(requiredName)) {
+      return { eligible: false, reason: `Only boosts ${charBracketMatch[1].trim()}` };
+    }
+  } else {
+    // 2. Unbracketed named pony requirement: e.g., "Your Applejack gets +1 Inspiration" or "Boost Applejack"
+    const namedPonies = [
+      'Twilight Sparkle',
+      'Rainbow Dash',
+      'Applejack',
+      'Rarity',
+      'Fluttershy',
+      'Pinkie Pie',
+      'Spike',
+      'Princess Celestia',
+      'Princess Luna',
+      'Princess Cadance',
+      'Starlight Glimmer',
+      'Trixie',
+    ];
+    for (const pony of namedPonies) {
+      const ponyRegex = new RegExp(`\\b${pony}\\b`, 'i');
+      if (ponyRegex.test(text) && !actualCharName.includes(pony.toLowerCase())) {
+        return { eligible: false, reason: `Only boosts ${pony}` };
+      }
     }
   }
 
+  // 3. Element-specific requirement
   const elements = ['magic', 'loyalty', 'honesty', 'generosity', 'kindness', 'laughter'];
   for (const el of elements) {
     const elRegex = new RegExp(`your\\s+${el}\\s+character`, 'i');
     if (elRegex.test(text) && String(targetChar.element || '').toLowerCase() !== el) {
-      return { eligible: false, reason: `Requires ${el.toUpperCase()} character` };
+      return { eligible: false, reason: `Only boosts ${el.toUpperCase()} characters` };
     }
   }
 
@@ -194,7 +226,6 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [inspectedCard, setInspectedCard] = useState<CardDefinition | null>(null);
   const [powerBreakdown, setPowerBreakdown] = useState<PowerBreakdownDetails | null>(null);
-  const [visibleClashId, setVisibleClashId] = useState<number | null>(null);
 
   const [turnBannerText, setTurnBannerText] = useState<string | null>(null);
   const prevTurnKeyRef = useRef<string | null>(null);
@@ -220,9 +251,9 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     (s) => s.planCard !== null && !s.isPlanRevealed
   );
 
-  // Autofocus camera & show Turn Transition Banner ONLY when in active turn phases (never during REVEAL_HOLD)
+  // Autofocus camera & show Turn Transition Banner ONLY when all hold states (CLASH_HOLD / REVEAL_HOLD) have finished
   useEffect(() => {
-    if (gameState.phase === 'REVEAL_HOLD') return;
+    if (gameState.phase === 'REVEAL_HOLD' || gameState.phase === 'CLASH_HOLD') return;
 
     if (gameState.turnPlayerId === mySeat) {
       setCameraFocus('ME');
@@ -260,16 +291,17 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     }
   }, [gameState.phase, isSpectator]);
 
-  // Show Clash showdown popup for 3.8 seconds
+  // Play Clash showdown animation for 3.8s, then signal ACK_CLASH_ANIMATION so turn/lane waits for animation completion
   useEffect(() => {
-    if (gameState.lastClashEvent && gameState.lastClashEvent.id !== visibleClashId) {
-      setVisibleClashId(gameState.lastClashEvent.id);
-      const timer = setTimeout(() => {
-        setVisibleClashId(null);
-      }, 3800);
-      return () => clearTimeout(timer);
+    if (gameState.phase === 'CLASH_HOLD' && gameState.lastClashEvent && !isSpectator) {
+      if (!gameState.lastClashEvent.acknowledgedBy.includes(mySeat)) {
+        const timer = setTimeout(() => {
+          sendAction('ACK_CLASH_ANIMATION');
+        }, 3800);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [gameState.lastClashEvent?.id]);
+  }, [gameState.phase, gameState.lastClashEvent?.id, isSpectator, mySeat]);
 
   const sendAction = (action: string, payload: any = {}) => {
     if (isSpectator || ws.readyState !== WebSocket.OPEN) return;
@@ -590,8 +622,8 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
 
   return (
     <div className="kayou-playmat-wrapper">
-      {/* Turn Transition Banner ("Your Turn" / "Opponent's Turn") */}
-      {turnBannerText && gameState.phase !== 'REVEAL_HOLD' && (
+      {/* Turn Transition Banner (Only fires after all Clash / Reveal animations finish) */}
+      {turnBannerText && gameState.phase !== 'REVEAL_HOLD' && gameState.phase !== 'CLASH_HOLD' && (
         <div className="turn-transition-banner-overlay">
           <div className="turn-transition-banner">{turnBannerText}</div>
         </div>
@@ -689,7 +721,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 3. Dedicated Inspiration Boost Popup */}
+      {/* 3. Dedicated Inspiration Boost Popup (Only highlights Scenes matching active lane character target) */}
       {showInspireModalForMe && gameState.contactState && (
         <div className="inspector-backdrop">
           <div className="inspire-popup-modal">
@@ -697,10 +729,10 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
               ✨ Inspiration Boost Step — {gameState.contactState.activeLane.toUpperCase()} Lane Clash
             </h3>
             <div style={{ fontSize: '13px', color: '#fbcfe8', textAlign: 'center' }}>
+              Active Character: <strong>{myCharacterInClashLane?.name || 'None'}</strong>
+              <br />
               Current Clash Power: <strong>⚡ {gameState.contactState.attackerPower}</strong> (Attacker) vs{' '}
               <strong>⚡ {gameState.contactState.defenderPower}</strong> (Defender)
-              <br />
-              Select an eligible face-up Scene card below to flip face-down for Inspiration, or Pass:
             </div>
 
             <div className="inspire-scenes-grid">
@@ -752,8 +784,8 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 4. Extended Clash Slam Showdown Animation Overlay */}
-      {visibleClashId && gameState.lastClashEvent && (
+      {/* 4. Clash Slam Showdown Animation Overlay (Holds turn/lane queue until animation completes) */}
+      {gameState.phase === 'CLASH_HOLD' && gameState.lastClashEvent && (
         <div className="clash-showdown-overlay">
           <h2 style={{ color: '#fde047', fontSize: '24px', marginBottom: '18px' }}>
             ⚔️ {gameState.lastClashEvent.lane.toUpperCase()} LANE CLASH!

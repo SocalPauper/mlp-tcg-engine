@@ -85,6 +85,7 @@ export type GamePhase =
   | 'MAIN_PHASE'
   | 'CONTACT_INSPIRE'
   | 'CONTACT_RESOLUTION'
+  | 'CLASH_HOLD'
   | 'BREAKTHROUGH_CHOICE'
   | 'REVEAL_HOLD'
   | 'GAME_OVER';
@@ -108,6 +109,7 @@ export interface ClashAnimationEvent {
   attackerTotalPower: number;
   defenderTotalPower: number;
   outcome: 'ATTACKER_WINS' | 'DEFENDER_WINS' | 'TIE';
+  acknowledgedBy: ('0' | '1')[];
 }
 
 export interface PlanRevealEvent {
