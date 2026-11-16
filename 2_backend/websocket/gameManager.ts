@@ -16,6 +16,7 @@ import {
   passInspireInContact,
   resolveBreakthroughChoice,
   acknowledgePlanReveal,
+  acknowledgeStoryReveal,
   endTurn,
 } from '../../3_engine/gameRules.js';
 import { pool } from '../../4_data/db.js';
@@ -519,6 +520,8 @@ export class GameManager {
         return resolveBreakthroughChoice(state, playerId, payload.choice);
       case 'ACK_PLAN_REVEAL':
         return acknowledgePlanReveal(state, playerId);
+      case 'ACK_STORY_REVEAL':
+        return acknowledgeStoryReveal(state, playerId);
       case 'END_TURN':
         return endTurn(state, playerId);
       default:

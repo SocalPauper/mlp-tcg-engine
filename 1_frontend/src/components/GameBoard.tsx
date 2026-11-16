@@ -69,6 +69,7 @@ export interface LiveGameState {
     | 'CONTACT_INSPIRE'
     | 'CONTACT_RESOLUTION'
     | 'BREAKTHROUGH_CHOICE'
+    | 'REVEAL_HOLD'
     | 'GAME_OVER';
   firstPlayerId: '0' | '1';
   turnPlayerId: '0' | '1';
@@ -102,6 +103,16 @@ export interface LiveGameState {
     triggeredEffectSummary: string | null;
     acknowledgedBy: ('0' | '1')[];
   } | null;
+  lastStoryRevealEvent: {
+    id: number;
+    stage: 1 | 2 | 3 | 4;
+    attackerId: '0' | '1';
+    attackerName: string;
+    storyCard: CardDefinition;
+    triggeredEffectSummary: string | null;
+    acknowledgedBy: ('0' | '1')[];
+    isGameWinningStage: boolean;
+  } | null;
   announcements: { type: string; message: string; timestamp: number }[];
 }
 
@@ -119,6 +130,20 @@ interface GameBoardProps {
   gameState: LiveGameState;
   seat: '0' | '1' | 'spectator';
   onLeaveMatch: () => void;
+}
+
+function isStoryCard(card: CardDefinition | null): boolean {
+  if (!card) return false;
+  return (
+    card.type === 'Story' ||
+    String(card.name || '').includes(' - ') ||
+    String(card.name || '').includes(' – ')
+  );
+}
+
+function cleanCardText(text?: string): string {
+  if (!text) return '';
+  return text.replace(/\{\{[^}]*$/g, '').replace(/\{\{|\}\}/g, '').trim();
 }
 
 function checkSceneInspireEligibility(
@@ -171,7 +196,6 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
   const [powerBreakdown, setPowerBreakdown] = useState<PowerBreakdownDetails | null>(null);
   const [visibleClashId, setVisibleClashId] = useState<number | null>(null);
 
-  // Turn transition announcement banner ("Your Turn" / "Opponent's Turn")
   const [turnBannerText, setTurnBannerText] = useState<string | null>(null);
   const prevTurnKeyRef = useRef<string | null>(null);
 
@@ -196,8 +220,10 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     (s) => s.planCard !== null && !s.isPlanRevealed
   );
 
-  // Autofocus camera & show Turn Transition Banner when turn changes
+  // Autofocus camera & show Turn Transition Banner ONLY when in active turn phases (never during REVEAL_HOLD)
   useEffect(() => {
+    if (gameState.phase === 'REVEAL_HOLD') return;
+
     if (gameState.turnPlayerId === mySeat) {
       setCameraFocus('ME');
     } else {
@@ -205,10 +231,9 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     }
 
     if (
-      gameState.phase !== 'WAITING_FOR_PLAYERS' &&
-      gameState.phase !== 'VS_INTRO' &&
-      gameState.phase !== 'MULLIGAN' &&
-      gameState.phase !== 'GAME_OVER'
+      gameState.phase === 'MAIN_PHASE' ||
+      gameState.phase === 'CONTACT_INSPIRE' ||
+      gameState.phase === 'BREAKTHROUGH_CHOICE'
     ) {
       const turnKey = `${gameState.turnNumber}-${gameState.turnPlayerId}`;
       if (prevTurnKeyRef.current !== turnKey) {
@@ -332,7 +357,6 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
             >
               {slot.character ? (
                 <>
-                  {/* Total Power Pill ABOVE card with clickable subscript explaining modifiers */}
                   <div
                     className={`total-power-above-badge ${isBuffed ? 'buffed' : ''}`}
                     title="Click to view Total Power breakdown"
@@ -567,7 +591,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
   return (
     <div className="kayou-playmat-wrapper">
       {/* Turn Transition Banner ("Your Turn" / "Opponent's Turn") */}
-      {turnBannerText && (
+      {turnBannerText && gameState.phase !== 'REVEAL_HOLD' && (
         <div className="turn-transition-banner-overlay">
           <div className="turn-transition-banner">{turnBannerText}</div>
         </div>
@@ -665,7 +689,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 3. Dedicated Inspiration Boost Popup (Shown to Active Prompted Player — Attacker or Defender) */}
+      {/* 3. Dedicated Inspiration Boost Popup */}
       {showInspireModalForMe && gameState.contactState && (
         <div className="inspector-backdrop">
           <div className="inspire-popup-modal">
@@ -776,7 +800,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 5. Sequential Plan Revealed Popup (Awaits Both Players' Acknowledgment) */}
+      {/* 5A. Sequential Plan Revealed Popup (Holds turn transition until BOTH players acknowledge) */}
       {gameState.lastPlanRevealEvent && (
         <div className="inspector-backdrop">
           <div
@@ -791,7 +815,9 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
             <img
               src={gameState.lastPlanRevealEvent.revealedCard.imageUrl}
               alt={gameState.lastPlanRevealEvent.revealedCard.name}
-              className="plan-reveal-card-flip"
+              className={`plan-reveal-card-flip ${
+                isStoryCard(gameState.lastPlanRevealEvent.revealedCard) ? 'story-landscape' : ''
+              }`}
             />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
@@ -814,7 +840,8 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
               </h3>
 
               <p style={{ fontSize: '13px', lineHeight: 1.45, color: '#f3e8ff', margin: 0 }}>
-                {gameState.lastPlanRevealEvent.revealedCard.effectText || 'No Pre-Plan trigger.'}
+                {cleanCardText(gameState.lastPlanRevealEvent.revealedCard.effectText) ||
+                  'No Pre-Plan trigger.'}
               </p>
 
               {gameState.lastPlanRevealEvent.triggeredEffectSummary && (
@@ -852,6 +879,85 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
                       type="button"
                       className="action-bar-btn primary"
                       onClick={() => sendAction('ACK_PLAN_REVEAL')}
+                    >
+                      ✅ Acknowledge &amp; Continue
+                    </button>
+                  ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5B. Story Stage Progressed Reveal Popup (Landscape 7:5 Story Card + Printed Effect + Both-Player Ack) */}
+      {gameState.lastStoryRevealEvent && (
+        <div className="inspector-backdrop">
+          <div className="plan-reveal-modal has-trap">
+            <div className="trap-exclamation-burst">
+              📖 STORY STAGE {gameState.lastStoryRevealEvent.stage} COMPLETED!
+            </div>
+
+            <img
+              src={gameState.lastStoryRevealEvent.storyCard.imageUrl}
+              alt={gameState.lastStoryRevealEvent.storyCard.name}
+              className="plan-reveal-card-flip story-landscape"
+            />
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+              <div
+                style={{
+                  background: '#ec4899',
+                  color: '#fff',
+                  fontSize: '11px',
+                  fontWeight: 900,
+                  padding: '2px 10px',
+                  borderRadius: '10px',
+                  alignSelf: 'flex-start',
+                }}
+              >
+                ✨ {gameState.lastStoryRevealEvent.attackerName} PROGRESSED STORY ({gameState.lastStoryRevealEvent.stage}/4)
+              </div>
+
+              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '18px' }}>
+                {gameState.lastStoryRevealEvent.storyCard.name}
+              </h3>
+
+              <p style={{ fontSize: '13px', lineHeight: 1.45, color: '#f3e8ff', margin: 0 }}>
+                {cleanCardText(gameState.lastStoryRevealEvent.storyCard.effectText) ||
+                  'No printed promotion effect.'}
+              </p>
+
+              {gameState.lastStoryRevealEvent.triggeredEffectSummary && (
+                <div
+                  style={{
+                    background: 'rgba(52, 211, 153, 0.16)',
+                    border: '1.5px solid #34d399',
+                    borderRadius: '8px',
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    color: '#34d399',
+                    fontWeight: 800,
+                  }}
+                >
+                  ✨ {gameState.lastStoryRevealEvent.triggeredEffectSummary}
+                </div>
+              )}
+
+              <div className="ack-status-row">
+                <span style={{ fontSize: '11px', color: '#d8b4fe' }}>
+                  Confirmed: {gameState.lastStoryRevealEvent.acknowledgedBy.length} / 2 Players
+                </span>
+
+                {!isSpectator &&
+                  (gameState.lastStoryRevealEvent.acknowledgedBy.includes(mySeat) ? (
+                    <span style={{ fontSize: '12px', color: '#fde047', fontWeight: 800 }}>
+                      ✅ Waiting for {opp.displayName}...
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="action-bar-btn primary"
+                      onClick={() => sendAction('ACK_STORY_REVEAL')}
                     >
                       ✅ Acknowledge &amp; Continue
                     </button>
@@ -907,7 +1013,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* Power Breakdown Popover Modal (Triggered by clicking Total Power subscript above lane card) */}
+      {/* Power Breakdown Popover Modal */}
       {powerBreakdown && (
         <div className="inspector-backdrop" onClick={() => setPowerBreakdown(null)}>
           <div
@@ -974,10 +1080,13 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* Card Inspector Modal */}
+      {/* Card Inspector Modal (Landscape 7:5 ONLY for Story cards, Portrait 5:7 for all others) */}
       {inspectedCard && (
         <div className="inspector-backdrop" onClick={() => setInspectedCard(null)}>
-          <div className="inspector-card-box" onClick={(e) => e.stopPropagation()}>
+          <div
+            className={`inspector-card-box ${isStoryCard(inspectedCard) ? 'story-landscape' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <img src={inspectedCard.imageUrl} alt={inspectedCard.name} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '17px' }}>{inspectedCard.name}</h3>
@@ -985,7 +1094,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
                 {inspectedCard.type} • {inspectedCard.element} • Cost: {inspectedCard.cost} • Power: {inspectedCard.power}
               </div>
               <p style={{ fontSize: '13px', lineHeight: 1.45, color: '#f3e8ff', margin: 0 }}>
-                {inspectedCard.effectText || 'No special ability text.'}
+                {cleanCardText(inspectedCard.effectText) || 'No special ability text.'}
               </p>
               <button
                 type="button"

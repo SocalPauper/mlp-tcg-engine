@@ -86,6 +86,7 @@ export type GamePhase =
   | 'CONTACT_INSPIRE'
   | 'CONTACT_RESOLUTION'
   | 'BREAKTHROUGH_CHOICE'
+  | 'REVEAL_HOLD'
   | 'GAME_OVER';
 
 export type LaneKey = 'left' | 'center' | 'right';
@@ -120,6 +121,17 @@ export interface PlanRevealEvent {
   acknowledgedBy: ('0' | '1')[];
 }
 
+export interface StoryRevealEvent {
+  id: number;
+  stage: 1 | 2 | 3 | 4;
+  attackerId: '0' | '1';
+  attackerName: string;
+  storyCard: CardDefinition;
+  triggeredEffectSummary: string | null;
+  acknowledgedBy: ('0' | '1')[];
+  isGameWinningStage: boolean;
+}
+
 export interface PublicAnnouncement {
   type: string;
   message: string;
@@ -142,7 +154,9 @@ export interface KayouGameState {
   winnerId: '0' | '1' | null;
   players: Record<'0' | '1', PlayerState>;
   contactState: ContactCombatState | null;
+  pendingLaneQueueAfterReveal: LaneKey[] | null;
   lastClashEvent: ClashAnimationEvent | null;
   lastPlanRevealEvent: PlanRevealEvent | null;
+  lastStoryRevealEvent: StoryRevealEvent | null;
   announcements: PublicAnnouncement[];
 }

@@ -61,8 +61,10 @@ export function createWaitingMatch(): KayouGameState {
       '1': createEmptyPlayer('1', 'Player 2'),
     },
     contactState: null,
+    pendingLaneQueueAfterReveal: null,
     lastClashEvent: null,
     lastPlanRevealEvent: null,
+    lastStoryRevealEvent: null,
     announcements: [],
   };
 }
@@ -127,8 +129,10 @@ export function startSeatedMatch(
       '1': setupPlayer('1', p1Name, deck1),
     },
     contactState: null,
+    pendingLaneQueueAfterReveal: null,
     lastClashEvent: null,
     lastPlanRevealEvent: null,
+    lastStoryRevealEvent: null,
     announcements: [
       {
         type: 'SYSTEM',
@@ -459,7 +463,6 @@ function advanceToNextAttackLane(
 
     const defSlot = defender.adventureArea[lane];
 
-    // If an opponent's character is blocking/intercepting in this lane -> enter Contact Inspire/Clash
     if (defSlot.character) {
       return {
         ...state,
@@ -475,7 +478,6 @@ function advanceToNextAttackLane(
       };
     }
 
-    // ONLY when attacking an open, unblocked lane -> prompt Intervene Plan or Progress Story
     return {
       ...state,
       phase: 'BREAKTHROUGH_CHOICE',
@@ -494,6 +496,7 @@ function advanceToNextAttackLane(
     {
       ...state,
       contactState: null,
+      pendingLaneQueueAfterReveal: null,
     },
     attackerId
   );
@@ -608,9 +611,6 @@ export function passInspireInContact(
     outcome,
   };
 
-  // Mark this lane as having completed its Clash action for the turn.
-  // Rule 1: Because a defending character blocked/intercepted, the Clash IS the action for this lane—
-  // the attacker cannot also Intervene or Progress Story in this lane this turn.
   let nextAtkPlayer: PlayerState = {
     ...atkPlayer,
     actedLanesThisTurn: [...atkPlayer.actedLanesThisTurn, lane],
@@ -654,7 +654,6 @@ export function passInspireInContact(
     };
   }
 
-  // Advance directly to the next lane in queue (no Breakthrough choice after a blocked Clash)
   const nextQueue = state.contactState.laneQueue.slice(1);
   return advanceToNextAttackLane(
     {
@@ -679,6 +678,10 @@ export function canProgressNextStoryStage(attacker: PlayerState, defender: Playe
   return Boolean(opponentPairedStage.isPlanRevealed || !opponentPairedStage.planCard);
 }
 
+function sanitizeCardText(raw: string): string {
+  return raw.replace(/\{\{[^}]*$/g, '').replace(/\{\{|\}\}/g, '').trim();
+}
+
 function executePrePlanEffectAndReturnToHand(
   attacker: PlayerState,
   defender: PlayerState,
@@ -690,7 +693,7 @@ function executePrePlanEffectAndReturnToHand(
   hasPrePlanTrigger: boolean;
   effectSummary: string | null;
 } {
-  const text = String(revealedCard.effectText || '');
+  const text = sanitizeCardText(String(revealedCard.effectText || ''));
   const hasPrePlanTrigger = /Pre-Plan|Scheme|When revealed as a Plan|Plan:/i.test(text);
 
   let updatedAttacker = { ...attacker };
@@ -728,6 +731,65 @@ function executePrePlanEffectAndReturnToHand(
   return { updatedAttacker, updatedDefender, hasPrePlanTrigger, effectSummary };
 }
 
+/**
+ * Executes any printed promotion effect when a Story stage is revealed/progressed
+ * (e.g., "When promoted to this stage, draw 1 card" or "+1 Inspiration").
+ */
+function executeStoryPromotionEffect(
+  attacker: PlayerState,
+  defender: PlayerState,
+  storyCard: CardDefinition,
+  activeLane: LaneKey
+): {
+  updatedAttacker: PlayerState;
+  updatedDefender: PlayerState;
+  effectSummary: string | null;
+} {
+  const text = sanitizeCardText(String(storyCard.effectText || ''));
+  let updatedAttacker = { ...attacker };
+  let updatedDefender = { ...defender };
+  let effectSummary: string | null = null;
+
+  if (!text) return { updatedAttacker, updatedDefender, effectSummary };
+
+  const drawMatch = text.match(/draw\s+(\d+|a)\s+card/i);
+  if (drawMatch) {
+    const drawCount = drawMatch[1].toLowerCase() === 'a' ? 1 : parseInt(drawMatch[1], 10) || 1;
+    const drawnCards = updatedAttacker.mainDeck.slice(0, drawCount);
+    updatedAttacker = {
+      ...updatedAttacker,
+      mainDeck: updatedAttacker.mainDeck.slice(drawCount),
+      hand: [...updatedAttacker.hand, ...drawnCards],
+    };
+    effectSummary = `Story Effect: ${attacker.displayName} drew ${drawnCards.length} card${
+      drawnCards.length === 1 ? '' : 's'
+    }!`;
+  } else if (/opponent.*discard/i.test(text) && updatedDefender.hand.length > 0) {
+    const discarded = updatedDefender.hand[updatedDefender.hand.length - 1];
+    updatedDefender = {
+      ...updatedDefender,
+      hand: updatedDefender.hand.slice(0, -1),
+      retirement: [...updatedDefender.retirement, discarded],
+    };
+    effectSummary = `Story Effect: ${defender.displayName} discarded 1 card!`;
+  } else if (/\+(\d+)\s*Inspiration/i.test(text) && updatedAttacker.adventureArea[activeLane].character) {
+    const boost = parseInt(text.match(/\+(\d+)\s*Inspiration/i)![1], 10) || 1;
+    const slot = updatedAttacker.adventureArea[activeLane];
+    updatedAttacker = {
+      ...updatedAttacker,
+      adventureArea: {
+        ...updatedAttacker.adventureArea,
+        [activeLane]: { ...slot, inspoBoost: slot.inspoBoost + boost },
+      },
+    };
+    effectSummary = `Story Effect: +${boost} Inspiration granted!`;
+  } else {
+    effectSummary = `Story Effect: ${text}`;
+  }
+
+  return { updatedAttacker, updatedDefender, effectSummary };
+}
+
 export function resolveBreakthroughChoice(
   state: KayouGameState,
   playerId: '0' | '1',
@@ -747,14 +809,15 @@ export function resolveBreakthroughChoice(
     actedLanesThisTurn: [...state.players[playerId].actedLanesThisTurn, activeLane],
   };
   let defender: PlayerState = { ...state.players[defenderId] };
-  let planRevealEvent = state.lastPlanRevealEvent;
 
   const allowedToProgress = canProgressNextStoryStage(attacker, defender);
   const effectiveChoice =
     choice === 'PROGRESS_STORY' && !allowedToProgress ? 'INTERVENE_PLAN' : choice;
 
+  const remainingQueue = state.contactState.laneQueue.slice(1);
+
   if (effectiveChoice === 'PROGRESS_STORY') {
-    const nextProgress = Math.min(4, attacker.storyProgress + 1);
+    const nextProgress = Math.min(4, attacker.storyProgress + 1) as 1 | 2 | 3 | 4;
     const updatedStages = attacker.storyStages.map((st, idx) =>
       idx < nextProgress ? { ...st, isStoryCompleted: true } : st
     );
@@ -765,51 +828,107 @@ export function resolveBreakthroughChoice(
       storyStages: updatedStages,
     };
 
+    const revealedStoryStage = attacker.storyStages[nextProgress - 1];
+    const storyCard = revealedStoryStage?.storyCard;
+
+    if (storyCard) {
+      const { updatedAttacker, updatedDefender, effectSummary } = executeStoryPromotionEffect(
+        attacker,
+        defender,
+        storyCard,
+        activeLane
+      );
+      attacker = updatedAttacker;
+      defender = updatedDefender;
+
+      // Hold turn/lane progression in REVEAL_HOLD until BOTH players acknowledge the Story card!
+      return {
+        ...state,
+        phase: 'REVEAL_HOLD',
+        contactState: null,
+        pendingLaneQueueAfterReveal: remainingQueue,
+        players: {
+          ...state.players,
+          [playerId]: attacker,
+          [defenderId]: defender,
+        },
+        lastStoryRevealEvent: {
+          id: Date.now(),
+          stage: nextProgress,
+          attackerId: playerId,
+          attackerName: attacker.displayName,
+          storyCard,
+          triggeredEffectSummary: effectSummary,
+          acknowledgedBy: [],
+          isGameWinningStage: nextProgress >= 4,
+        },
+      };
+    }
+
     if (nextProgress >= 4) {
       return {
         ...state,
         phase: 'GAME_OVER',
         winnerId: playerId,
         contactState: null,
+        pendingLaneQueueAfterReveal: null,
         players: {
           ...state.players,
           [playerId]: attacker,
         },
-        announcements: [
-          ...state.announcements,
-          {
-            type: 'VICTORY',
-            message: `${attacker.displayName} completed Story Stage 4 and won the match!`,
-            timestamp: Date.now(),
-          },
-        ],
       };
     }
-  } else if (effectiveChoice === 'INTERVENE_PLAN') {
-    const sequentialStageIdx = defender.storyStages.findIndex(
-      (s) => s.planCard !== null && !s.isPlanRevealed
+
+    return advanceToNextAttackLane(
+      {
+        ...state,
+        players: {
+          ...state.players,
+          [playerId]: attacker,
+          [defenderId]: defender,
+        },
+      },
+      playerId,
+      remainingQueue
+    );
+  }
+
+  // INTERVENE_PLAN: Flip opponent's lowest sequential Plan card, reveal to both players,
+  // place into defender's hand, and HOLD turn transition until BOTH players acknowledge!
+  const sequentialStageIdx = defender.storyStages.findIndex(
+    (s) => s.planCard !== null && !s.isPlanRevealed
+  );
+
+  if (sequentialStageIdx !== -1) {
+    const targetStage = defender.storyStages[sequentialStageIdx];
+    const revealedCard = targetStage.planCard!;
+
+    const updatedDefStages = defender.storyStages.map((s, idx) =>
+      idx === sequentialStageIdx ? { ...s, planCard: null, isPlanRevealed: true } : s
     );
 
-    if (sequentialStageIdx !== -1) {
-      const targetStage = defender.storyStages[sequentialStageIdx];
-      const revealedCard = targetStage.planCard!;
+    defender = {
+      ...defender,
+      storyStages: updatedDefStages,
+    };
 
-      const updatedDefStages = defender.storyStages.map((s, idx) =>
-        idx === sequentialStageIdx ? { ...s, planCard: null, isPlanRevealed: true } : s
-      );
+    const { updatedAttacker, updatedDefender, hasPrePlanTrigger, effectSummary } =
+      executePrePlanEffectAndReturnToHand(attacker, defender, revealedCard, activeLane);
 
-      defender = {
-        ...defender,
-        storyStages: updatedDefStages,
-      };
+    attacker = updatedAttacker;
+    defender = updatedDefender;
 
-      const { updatedAttacker, updatedDefender, hasPrePlanTrigger, effectSummary } =
-        executePrePlanEffectAndReturnToHand(attacker, defender, revealedCard, activeLane);
-
-      attacker = updatedAttacker;
-      defender = updatedDefender;
-
-      planRevealEvent = {
+    return {
+      ...state,
+      phase: 'REVEAL_HOLD',
+      contactState: null,
+      pendingLaneQueueAfterReveal: remainingQueue,
+      players: {
+        ...state.players,
+        [playerId]: attacker,
+        [defenderId]: defender,
+      },
+      lastPlanRevealEvent: {
         id: Date.now(),
         stage: targetStage.stage,
         defenderId,
@@ -818,11 +937,10 @@ export function resolveBreakthroughChoice(
         hasPrePlanTrigger,
         triggeredEffectSummary: effectSummary,
         acknowledgedBy: [],
-      };
-    }
+      },
+    };
   }
 
-  const nextQueue = state.contactState.laneQueue.slice(1);
   return advanceToNextAttackLane(
     {
       ...state,
@@ -831,10 +949,9 @@ export function resolveBreakthroughChoice(
         [playerId]: attacker,
         [defenderId]: defender,
       },
-      lastPlanRevealEvent: planRevealEvent,
     },
     playerId,
-    nextQueue
+    remainingQueue
   );
 }
 
@@ -847,20 +964,80 @@ export function acknowledgePlanReveal(
 
   const updatedAck = [...state.lastPlanRevealEvent.acknowledgedBy, playerId];
 
-  if (updatedAck.length >= 2) {
+  // Wait until BOTH players acknowledge before continuing lanes or switching turns
+  if (updatedAck.length < 2) {
     return {
       ...state,
-      lastPlanRevealEvent: null,
+      lastPlanRevealEvent: {
+        ...state.lastPlanRevealEvent,
+        acknowledgedBy: updatedAck,
+      },
     };
   }
 
-  return {
-    ...state,
-    lastPlanRevealEvent: {
-      ...state.lastPlanRevealEvent,
-      acknowledgedBy: updatedAck,
+  const queueToResume = state.pendingLaneQueueAfterReveal || [];
+  return advanceToNextAttackLane(
+    {
+      ...state,
+      lastPlanRevealEvent: null,
+      pendingLaneQueueAfterReveal: null,
     },
-  };
+    state.turnPlayerId,
+    queueToResume
+  );
+}
+
+export function acknowledgeStoryReveal(
+  state: KayouGameState,
+  playerId: '0' | '1'
+): KayouGameState {
+  if (!state.lastStoryRevealEvent) return state;
+  if (state.lastStoryRevealEvent.acknowledgedBy.includes(playerId)) return state;
+
+  const updatedAck = [...state.lastStoryRevealEvent.acknowledgedBy, playerId];
+
+  // Wait until BOTH players acknowledge the revealed Story card before advancing
+  if (updatedAck.length < 2) {
+    return {
+      ...state,
+      lastStoryRevealEvent: {
+        ...state.lastStoryRevealEvent,
+        acknowledgedBy: updatedAck,
+      },
+    };
+  }
+
+  const revealEvent = state.lastStoryRevealEvent;
+
+  // If this was Story Stage 4, trigger the Victory Screen now that both players saw it!
+  if (revealEvent.isGameWinningStage) {
+    return {
+      ...state,
+      phase: 'GAME_OVER',
+      winnerId: revealEvent.attackerId,
+      lastStoryRevealEvent: null,
+      pendingLaneQueueAfterReveal: null,
+      announcements: [
+        ...state.announcements,
+        {
+          type: 'VICTORY',
+          message: `${revealEvent.attackerName} completed Story Stage 4 and won the match!`,
+          timestamp: Date.now(),
+        },
+      ],
+    };
+  }
+
+  const queueToResume = state.pendingLaneQueueAfterReveal || [];
+  return advanceToNextAttackLane(
+    {
+      ...state,
+      lastStoryRevealEvent: null,
+      pendingLaneQueueAfterReveal: null,
+    },
+    state.turnPlayerId,
+    queueToResume
+  );
 }
 
 export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameState {
@@ -917,6 +1094,7 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     turnPlayerId: nextPlayerId,
     turnNumber: nextTurnNumber,
     contactState: null,
+    pendingLaneQueueAfterReveal: null,
     players: {
       [playerId]: cleanedEndingPlayer,
       [nextPlayerId]: updatedStartingPlayer,

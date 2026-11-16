@@ -131,12 +131,12 @@
   color: #be185d;
 }
 
-/* Row 1: Adventure Area (3 Portrait Slots with Floating Top Total Power Pill) */
+/* Row 1: Adventure Area */
 .adventure-area-row {
   display: flex;
   justify-content: center;
   gap: 28px;
-  padding-top: 16px; /* Room for floating Total Power indicator above card */
+  padding-top: 16px;
 }
 
 .adventure-slot {
@@ -165,7 +165,6 @@
   box-shadow: 0 0 22px rgba(245, 158, 11, 0.65);
 }
 
-/* Floating Total Power Pill ABOVE the card with clickable subscript */
 .total-power-above-badge {
   position: absolute;
   top: -20px;
@@ -385,17 +384,6 @@
   filter: brightness(0.85);
 }
 
-.scene-card-slot.inspire-clickable {
-  cursor: pointer;
-  box-shadow: 0 0 16px #ec4899;
-  border: 2px solid #ec4899;
-  transform: translateY(-4px);
-}
-
-.scene-card-slot.exhausted.inspire-clickable {
-  transform: rotate(90deg) translateX(-4px);
-}
-
 .scene-card-slot img {
   width: 100%;
   height: 100%;
@@ -562,7 +550,7 @@
   display: block;
 }
 
-/* Turn Transition Banner Animation ("Your Turn" / "Opponent's Turn") */
+/* Turn Transition Banner Animation */
 .turn-transition-banner-overlay {
   position: fixed;
   inset: 0;
@@ -841,7 +829,7 @@
   animation: loserFallOff 1.8s ease-in 0.85s forwards;
 }
 
-/* Inspector & Power Breakdown Modal */
+/* Inspector & Power Breakdown Modal (Portrait 5:7 default + Landscape 7:5 for Story cards) */
 .inspector-backdrop {
   position: fixed;
   inset: 0;
@@ -860,7 +848,7 @@
   padding: 18px;
   display: flex;
   gap: 18px;
-  max-width: 580px;
+  max-width: 640px;
   max-height: 88dvh;
   overflow-y: auto;
   color: #fff;
@@ -874,7 +862,13 @@
   flex-shrink: 0;
 }
 
-/* Plan Reveal Modal */
+/* Landscape 7:5 aspect ratio ONLY for Story cards in Inspector */
+.inspector-card-box.story-landscape img {
+  width: 280px;
+  height: 200px;
+}
+
+/* Plan & Story Reveal Modals */
 .plan-reveal-modal {
   background: linear-gradient(145deg, #241036 0%, #3b0764 100%);
   border: 3px solid #f472b6;
@@ -882,7 +876,7 @@
   padding: 22px 26px;
   display: flex;
   gap: 22px;
-  max-width: 620px;
+  max-width: 660px;
   width: 92vw;
   color: #fff;
   position: relative;
@@ -925,6 +919,12 @@
   animation: cardFlipReveal 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+/* Landscape 7:5 aspect ratio ONLY for Story cards in Story Reveal Modal */
+.plan-reveal-card-flip.story-landscape {
+  width: 280px;
+  height: 200px;
+}
+
 .plan-reveal-modal.has-trap .plan-reveal-card-flip {
   border-color: #fde047;
 }
@@ -940,10 +940,7 @@
   flex-wrap: wrap;
 }
 
-/* ========================================================================= */
-/* FANFARE WINNER SCREEN WITH CONFETTI                                       */
-/* ========================================================================= */
-
+/* Fanfare Winner Screen with Confetti */
 .victory-fanfare-overlay {
   position: fixed;
   inset: 0;
@@ -1225,6 +1222,12 @@
   .plan-reveal-card-flip {
     width: 125px;
     height: 175px;
+  }
+
+  .plan-reveal-card-flip.story-landscape,
+  .inspector-card-box.story-landscape img {
+    width: 196px;
+    height: 140px;
   }
 
   .trap-exclamation-burst {
