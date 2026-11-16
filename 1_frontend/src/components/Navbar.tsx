@@ -13,6 +13,10 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
   
   const isAdmin = user && (user.role === 'admin' || user.isSafeMode === false);
   const displayPoints = user?.reward_points !== undefined ? user.reward_points : 500;
+  
+  // Status determination
+  const statusLabel = user?.isVerified ? 'Verified ✓' : user?.isSafeMode ? 'Safe Mode 🔒' : 'Member';
+  const statusColor = user?.isVerified ? '#34d399' : user?.isSafeMode ? '#fbbf24' : '#a855f7';
 
   return (
     <nav className="mlp-navbar" style={{ position: 'sticky', top: 0, zIndex: 1000 }}>
@@ -71,7 +75,12 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
               <span>⭐</span> {displayPoints} Pony Points
             </div>
             <div className="user-profile-widget">
-              <span className="user-welcome">Hi, {user.displayName || user.username}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                <span className="user-welcome">Hi, {user.displayName || user.username}</span>
+                <span style={{ fontSize: '10px', fontWeight: 800, color: statusColor, background: 'rgba(0,0,0,0.15)', padding: '1px 6px', borderRadius: '6px', marginTop: '2px' }}>
+                  {statusLabel}
+                </span>
+              </div>
               <button onClick={logout} className="auth-action-btn logout-btn">Logout</button>
             </div>
           </div>

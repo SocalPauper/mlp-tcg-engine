@@ -20,10 +20,10 @@ export const sendVerificationEmail = async (toEmail: string, verificationToken: 
     const { data, error } = await resend.emails.send({
       from: 'MLP TCG Engine <equestriaclash@verify.socalpauper.com>', 
       to: toEmail,
-      subject: 'Confirm Your MLP TCG Engine Account',
+      subject: 'Confirm Your Equestria Clash Account',
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-          <h2 style="color: #6b46c1;">Welcome to MLP TCG Engine!</h2>
+          <h2 style="color: #6b46c1;">Welcome to Equestria Clash!</h2>
           <p>Thank you for registering. Please click the button below to verify your email address and activate your account:</p>
           <a href="${verificationLink}" style="display: inline-block; padding: 10px 20px; background-color: #805ad5; color: #ffffff; text-decoration: none; border-radius: 5px; margin-top: 15px;">Verify Email</a>
           <p style="margin-top: 20px; font-size: 12px; color: #718096;">If you didn't request this, you can safely ignore this email.</p>

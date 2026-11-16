@@ -39,8 +39,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const verifyLiveSession = async () => {
+      const token = localStorage.getItem('token');
       try {
-        const { data } = await axios.get(`${API_BASE_URL}/api/auth/me`);
+        const { data } = await axios.get(`${API_BASE_URL}/api/auth/me`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         if (data.user) setUser(data.user);
       } catch (err) {
         setUser(null);
@@ -53,11 +56,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (credentials: { username: string; password: string }) => {
     const { data } = await axios.post(`${API_BASE_URL}/api/auth/login`, credentials);
+    if (data.token) {
+      localStorage.setItem('token', data.token);
+    }
     setUser(data.user || data);
   };
 
   const register = async (formData: any) => {
     const { data } = await axios.post(`${API_BASE_URL}/api/auth/register`, formData);
+    if (data.token) {
+      localStorage.setItem('token', data.token);
+    }
     setUser(data.user || data);
   };
 
@@ -65,6 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await axios.post(`${API_BASE_URL}/api/auth/logout`);
     } finally {
+      localStorage.removeItem('token');
       setUser(null);
     }
   };
@@ -87,8 +97,8 @@ type BuilderMode = 'CREATE' | 'EDIT' | 'VIEW' | 'COPY';
 function AppContent() {
   const [currentTab, setCurrentTab] = useState<string>('hub');
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const { user } = useAuth();
 
-  // State to track if the DeckBuilder is open, and what deck it's editing
   const [builderConfig, setBuilderConfig] = useState<{ id: string | null, mode: BuilderMode } | null>(null);
 
   const handleTabChange = (tab: string) => {
@@ -126,7 +136,6 @@ function AppContent() {
         {currentTab === 'admin' && <AdminPanel />}
       </main>
 
-      {/* Full-featured AuthModal component with all required database fields */}
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
     </div>
   );

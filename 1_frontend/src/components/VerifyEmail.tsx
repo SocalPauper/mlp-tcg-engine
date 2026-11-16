@@ -24,14 +24,14 @@ export const VerifyEmail: React.FC = () => {
         
         setIsSuccess(true);
         setStatusMessage(data.message || 'Email verified successfully!');
+        window.alert('Success! Your email has been verified and Safe Mode has been lifted.');
 
-        // Update local session state to lift Safe Mode
         if (user) {
-          const updatedUser = { ...user, isSafeMode: false };
+          const updatedUser = { ...user, isSafeMode: false, isVerified: true };
           login(updatedUser, localStorage.getItem('token') || 'dummy-jwt-token');
         }
 
-        setTimeout(() => navigate('/'), 3000);
+        setTimeout(() => navigate('/'), 2000);
       })
       .catch((err) => {
         setIsSuccess(false);

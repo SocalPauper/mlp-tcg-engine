@@ -7,7 +7,7 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ onClose }: AuthModalProps) {
-  const [isLogin, setIsLogin] = useState(false);
+  const [isLogin, setIsLogin] = useState(true); // Default to Sign In
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -127,7 +127,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
         </form>
 
         <div className="toggle-auth-mode" onClick={() => { setIsLogin(!isLogin); setError(null); }}>
-          {isLogin ? "Don't have an account? Register" : "Already have an account? Login"}
+          {isLogin ? "Don't have an account? Register" : "Already have an account? Sign In"}
         </div>
 
         <button 
