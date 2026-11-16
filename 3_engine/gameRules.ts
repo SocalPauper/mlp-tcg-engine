@@ -1,5 +1,19 @@
 import { KayouGameState, CardDefinition, PlayerState, GamePhase } from './types.ts';
 
+/**
+ * Secure Fisher-Yates shuffle utilizing crypto.getRandomValues for true randomness.
+ */
+export function secureShuffle<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const randomBuffer = new Uint32Array(1);
+    crypto.getRandomValues(randomBuffer);
+    const j = Math.floor((randomBuffer[0] / (0xffffffff + 1)) * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 export function createWaitingMatch(p0DeckId: string, p1DeckId: string): KayouGameState {
   return {
     roomId: 'waiting-room',
@@ -23,11 +37,21 @@ function createEmptyPlayer(id: string, name: string): PlayerState {
     hand: [],
     discard: [],
     points: 0,
-    lanes: { left: null, center: null, right: null },
+    lanes: {
+      left: { character: null, item: null, story: null, plan: null },
+      center: { character: null, item: null, story: null, plan: null },
+      right: { character: null, item: null, story: null, plan: null },
+    },
   };
 }
 
-export function startSeatedMatch(deck0Def: { leader: CardDefinition, cards: CardDefinition[] }, deck1Def: { leader: CardDefinition, cards: CardDefinition[] }): KayouGameState {
+export function startSeatedMatch(
+  deck0Def: { leader: CardDefinition, cards: CardDefinition[] }, 
+  deck1Def: { leader: CardDefinition, cards: CardDefinition[] }
+): KayouGameState {
+  const shuffledDeck0 = secureShuffle(deck0Def.cards);
+  const shuffledDeck1 = secureShuffle(deck1Def.cards);
+
   return {
     roomId: 'active-match',
     phase: 'MAIN_PHASE',
@@ -37,37 +61,63 @@ export function startSeatedMatch(deck0Def: { leader: CardDefinition, cards: Card
         id: '0',
         displayName: 'Player 1',
         leader: deck0Def.leader,
-        deck: [...deck0Def.cards],
-        hand: deck0Def.cards.slice(0, 5),
+        deck: shuffledDeck0.slice(5),
+        hand: shuffledDeck0.slice(0, 5),
         discard: [],
         points: 0,
-        lanes: { left: null, center: null, right: null },
+        lanes: {
+          left: { character: null, item: null, story: null, plan: null },
+          center: { character: null, item: null, story: null, plan: null },
+          right: { character: null, item: null, story: null, plan: null },
+        },
       },
       '1': {
         id: '1',
         displayName: 'Player 2',
         leader: deck1Def.leader,
-        deck: [...deck1Def.cards],
-        hand: deck1Def.cards.slice(0, 5),
+        deck: shuffledDeck1.slice(5),
+        hand: shuffledDeck1.slice(0, 5),
         discard: [],
         points: 0,
-        lanes: { left: null, center: null, right: null },
+        lanes: {
+          left: { character: null, item: null, story: null, plan: null },
+          center: { character: null, item: null, story: null, plan: null },
+          right: { character: null, item: null, story: null, plan: null },
+        },
       },
     },
-    announcements: [{ type: 'SYSTEM', message: 'Match started! May the best pony win.', timestamp: Date.now() }],
+    announcements: [{ type: 'SYSTEM', message: 'Match started with secure cryptographic shuffle!', timestamp: Date.now() }],
     lastClashResult: null,
   };
 }
 
-export function acknowledgeAnnouncement(state: KayouGameState, playerId: '0' | '1'): KayouGameState {
-  return state;
+export function drawCard(state: KayouGameState, playerId: '0' | '1'): KayouGameState {
+  const player = state.players[playerId];
+  if (player.deck.length === 0) return state;
+
+  const newDeck = [...player.deck];
+  const drawnCard = newDeck.shift()!;
+  const newHand = [...player.hand, drawnCard];
+
+  return {
+    ...state,
+    players: {
+      ...state.players,
+      [playerId]: {
+        ...player,
+        deck: newDeck,
+        hand: newHand,
+      }
+    }
+  };
 }
 
-export function resolveMulligan(state: KayouGameState, playerId: '0' | '1', decision: boolean): KayouGameState {
-  return state;
-}
-
-export function playCharacter(state: KayouGameState, playerId: '0' | '1', cardId: string, laneIndex: 'left' | 'center' | 'right'): KayouGameState {
+export function playCharacter(
+  state: KayouGameState, 
+  playerId: '0' | '1', 
+  cardId: string, 
+  laneIndex: 'left' | 'center' | 'right'
+): KayouGameState {
   const player = state.players[playerId];
   const cardIndex = player.hand.findIndex(c => c.id === cardId);
   if (cardIndex === -1) return state;
@@ -85,35 +135,14 @@ export function playCharacter(state: KayouGameState, playerId: '0' | '1', cardId
         hand: newHand,
         lanes: {
           ...player.lanes,
-          [laneIndex]: card,
+          [laneIndex]: {
+            ...player.lanes[laneIndex],
+            character: card,
+          }
         }
       }
     }
   };
-}
-
-export function attachItem(state: KayouGameState, playerId: '0' | '1', cardId: string, laneIndex: 'left' | 'center' | 'right'): KayouGameState {
-  return state;
-}
-
-export function playEvent(state: KayouGameState, playerId: '0' | '1', cardId: string, targetLane: 'left' | 'center' | 'right'): KayouGameState {
-  return state;
-}
-
-export function boostClashWithScene(state: KayouGameState, playerId: '0' | '1', sceneIndex: number): KayouGameState {
-  return state;
-}
-
-export function passClashPriority(state: KayouGameState, playerId: '0' | '1'): KayouGameState {
-  return state;
-}
-
-export function executeLaneAction(state: KayouGameState, playerId: '0' | '1', laneAction: any): KayouGameState {
-  return state;
-}
-
-export function discardCardFromHand(state: KayouGameState, playerId: '0' | '1', cardId: string): KayouGameState {
-  return state;
 }
 
 export function advancePhase(state: KayouGameState): KayouGameState {
