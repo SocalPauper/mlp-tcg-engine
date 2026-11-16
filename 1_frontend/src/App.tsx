@@ -4,6 +4,7 @@ import axios from 'axios';
 import { API_BASE_URL } from './config';
 import Navbar from './components/Navbar';
 import MainHub from './components/MainHub';
+import GameBoard, { LiveGameState } from './components/GameBoard';
 import StableHub from './components/StableHub';
 import DeckBuilder from './components/DeckBuilder';
 import AdminPanel from './components/AdminPanel';
@@ -95,7 +96,6 @@ export const useAuth = () => {
 
 type BuilderMode = 'CREATE' | 'EDIT' | 'VIEW' | 'COPY';
 
-// Separate Verification Component to handle popup and token check via router
 function VerifyEmailRoute() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -121,7 +121,7 @@ function VerifyEmailRoute() {
 
         if (user) {
           const updatedUser = { ...user, isSafeMode: false, isVerified: true };
-          login(updatedUser, localStorage.getItem('token') || 'dummy-jwt-token');
+          login(updatedUser as any);
         }
 
         setTimeout(() => navigate('/'), 2000);
@@ -149,7 +149,44 @@ function AppContent() {
 
   const [builderConfig, setBuilderConfig] = useState<{ id: string | null, mode: BuilderMode } | null>(null);
 
+  // Active live WebSocket match state
+  const [activeMatch, setActiveMatch] = useState<{
+    ws: WebSocket;
+    state: LiveGameState;
+    seat: '0' | '1' | 'spectator';
+  } | null>(null);
+
+  const handleMatchJoined = (ws: WebSocket, initialState: LiveGameState, seat: '0' | '1' | 'spectator') => {
+    // Keep listening for subsequent STATE_UPDATE messages during the match
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'STATE_UPDATE' && data.state) {
+          setActiveMatch(prev => prev ? { ...prev, state: data.state, seat: data.seat || prev.seat } : null);
+        }
+      } catch (err) {
+        console.error('[MATCH WS ERROR]', err);
+      }
+    };
+
+    ws.onclose = () => {
+      setActiveMatch(null);
+    };
+
+    setActiveMatch({ ws, state: initialState, seat });
+  };
+
+  const handleLeaveMatch = () => {
+    if (activeMatch && activeMatch.ws.readyState === WebSocket.OPEN) {
+      activeMatch.ws.close();
+    }
+    setActiveMatch(null);
+  };
+
   const handleTabChange = (tab: string) => {
+    if (activeMatch) {
+      handleLeaveMatch();
+    }
     setCurrentTab(tab);
     if (tab !== 'stable') {
       setBuilderConfig(null);
@@ -164,27 +201,36 @@ function AppContent() {
         <Routes>
           <Route path="/verify" element={<VerifyEmailRoute />} />
           <Route path="*" element={
-            <>
-              {currentTab === 'hub' && <MainHub />}
-              {currentTab === 'stable' && (
-                builderConfig ? (
-                  <DeckBuilder 
-                    deckId={builderConfig.id} 
-                    mode={builderConfig.mode}
-                    onClose={() => setBuilderConfig(null)} 
-                  />
-                ) : (
-                  <StableHub 
-                    currentUserId={user?.id?.toString() || ''} 
-                    onOpenBuilder={(id, mode) => setBuilderConfig({ id, mode })} 
-                  />
-                )
-              )}
-              {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
-              {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
-              {currentTab === 'fanPage' && <div className="placeholder-tab"><h2>Fan Art & Lore Page Coming Soon</h2></div>}
-              {currentTab === 'admin' && <AdminPanel />}
-            </>
+            activeMatch ? (
+              <GameBoard
+                ws={activeMatch.ws}
+                gameState={activeMatch.state}
+                seat={activeMatch.seat}
+                onLeaveMatch={handleLeaveMatch}
+              />
+            ) : (
+              <>
+                {currentTab === 'hub' && <MainHub onMatchJoined={handleMatchJoined} />}
+                {currentTab === 'stable' && (
+                  builderConfig ? (
+                    <DeckBuilder 
+                      deckId={builderConfig.id} 
+                      mode={builderConfig.mode}
+                      onClose={() => setBuilderConfig(null)} 
+                    />
+                  ) : (
+                    <StableHub 
+                      currentUserId={user?.id?.toString() || ''} 
+                      onOpenBuilder={(id, mode) => setBuilderConfig({ id, mode })} 
+                    />
+                  )
+                )}
+                {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
+                {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
+                {currentTab === 'fanPage' && <div className="placeholder-tab"><h2>Fan Art & Lore Page Coming Soon</h2></div>}
+                {currentTab === 'admin' && <AdminPanel />}
+              </>
+            )
           } />
         </Routes>
       </main>

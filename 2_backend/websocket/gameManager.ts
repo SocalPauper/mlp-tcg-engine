@@ -1,5 +1,5 @@
 import { WebSocket, WebSocketServer } from 'ws';
-import { KayouGameState, DeckId } from '../../3_engine/types.js';
+import { KayouGameState, DeckId, CardDefinition } from '../../3_engine/types.js';
 import { createWaitingMatch, startSeatedMatch, drawCard, playCharacter, advancePhase } from '../../3_engine/gameRules.js';
 import { pool } from '../../4_data/db.js';
 
@@ -11,6 +11,12 @@ interface RoomClient {
   username: string;
 }
 
+interface QueuedPlayer {
+  ws: WebSocket;
+  deckId: DeckId;
+  username: string;
+}
+
 interface Room {
   code: string;
   name: string;
@@ -18,10 +24,12 @@ interface Room {
   allowSpectators: boolean;
   state: KayouGameState;
   clients: RoomClient[];
+  decks: Partial<Record<'0' | '1', DeckId>>;
 }
 
 export class GameManager {
   private rooms = new Map<string, Room>();
+  private quickPlayQueue: QueuedPlayer[] = [];
   private wss: WebSocketServer;
 
   constructor(server: any) {
@@ -33,7 +41,12 @@ export class GameManager {
     this.wss.on('connection', (ws: WebSocket) => {
       let userSession: RoomClient | null = null;
 
+      const removeFromQueue = () => {
+        this.quickPlayQueue = this.quickPlayQueue.filter(q => q.ws !== ws && q.ws.readyState === WebSocket.OPEN);
+      };
+
       const handleClientLeave = () => {
+        removeFromQueue();
         if (!userSession) return;
         const room = this.rooms.get(userSession.roomCode);
         if (room) {
@@ -48,12 +61,74 @@ export class GameManager {
         this.broadcastLobbyRooms();
       };
 
-      ws.on('message', (rawMessage: string) => {
+      ws.on('message', async (rawMessage: string) => {
         try {
-          const message = JSON.parse(rawMessage);
+          const message = JSON.parse(rawMessage.toString());
 
           if (message.type === 'GET_ROOMS') {
-            this.broadcastLobbyRooms();
+            this.sendLobbyRoomsToClient(ws);
+            return;
+          }
+
+          if (message.type === 'CANCEL_QUICK_PLAY') {
+            removeFromQueue();
+            ws.send(JSON.stringify({ type: 'QUICK_PLAY_CANCELLED' }));
+            return;
+          }
+
+          if (message.type === 'QUICK_PLAY') {
+            if (userSession) handleClientLeave();
+            removeFromQueue();
+
+            const deckId: DeckId = message.deckId || 'SD01_TWILIGHT';
+            const username = message.username || `Guest_${Math.floor(100 + Math.random() * 900)}`;
+
+            // Clean disconnected sockets in queue
+            this.quickPlayQueue = this.quickPlayQueue.filter(q => q.ws.readyState === WebSocket.OPEN);
+
+            if (this.quickPlayQueue.length > 0) {
+              const opponent = this.quickPlayQueue.shift()!;
+              const roomCode = `qp-${Math.floor(10000 + Math.random() * 90000)}`;
+
+              const room: Room = {
+                code: roomCode,
+                name: `Quick Play: ${opponent.username} vs ${username}`,
+                mode: 'Casual',
+                allowSpectators: true,
+                state: createWaitingMatch(opponent.deckId, deckId),
+                clients: [],
+                decks: { '0': opponent.deckId, '1': deckId },
+              };
+
+              const p0Session: RoomClient = {
+                ws: opponent.ws,
+                seat: '0',
+                roomCode,
+                selectedDeck: opponent.deckId,
+                username: opponent.username,
+              };
+              const p1Session: RoomClient = {
+                ws,
+                seat: '1',
+                roomCode,
+                selectedDeck: deckId,
+                username,
+              };
+
+              room.clients.push(p0Session, p1Session);
+              this.rooms.set(roomCode, room);
+
+              // Notify both sockets to bind their session
+              (opponent.ws as any).__setSession?.(p0Session);
+              userSession = p1Session;
+
+              await this.startMatchWithDecks(room);
+              this.broadcastRoomState(room);
+              this.broadcastLobbyRooms();
+            } else {
+              this.quickPlayQueue.push({ ws, deckId, username });
+              ws.send(JSON.stringify({ type: 'QUEUED', message: 'Waiting for an opponent in Quick Play...' }));
+            }
             return;
           }
 
@@ -73,6 +148,7 @@ export class GameManager {
               allowSpectators,
               state: createWaitingMatch(deckId, 'SD02_RAINBOW'),
               clients: [],
+              decks: { '0': deckId },
             };
 
             this.rooms.set(roomCode, room);
@@ -90,8 +166,8 @@ export class GameManager {
             const roomCode = (message.roomCode || '').trim().toLowerCase();
             const chosenDeckId: DeckId = message.deckId || 'SD02_RAINBOW';
             const username = message.username || 'GuestPlayer';
-            
-            let room = this.rooms.get(roomCode);
+
+            const room = this.rooms.get(roomCode);
             if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found.' }));
 
             room.clients = room.clients.filter(c => c.ws.readyState === WebSocket.OPEN && c.ws !== ws);
@@ -99,8 +175,12 @@ export class GameManager {
 
             userSession = { ws, seat: assignedSeat, roomCode, selectedDeck: chosenDeckId, username };
             room.clients.push(userSession);
+            room.decks[assignedSeat] = chosenDeckId;
 
-            this.checkAndStartMatch(room, chosenDeckId);
+            if (room.clients.some(c => c.seat === '0') && room.clients.some(c => c.seat === '1') && room.state.phase === 'WAITING_FOR_PLAYERS') {
+              await this.startMatchWithDecks(room);
+            }
+
             this.broadcastRoomState(room);
             this.broadcastLobbyRooms();
             return;
@@ -146,21 +226,42 @@ export class GameManager {
         }
       });
 
+      // Allow Quick Play pairing to attach session to waiting socket
+      (ws as any).__setSession = (session: RoomClient) => {
+        userSession = session;
+      };
+
       ws.on('close', () => {
         handleClientLeave();
       });
     });
   }
 
+  private getRoomListPayload() {
+    const roomList = Array.from(this.rooms.values()).map(r => {
+      const hostClient = r.clients.find(c => c.seat === '0');
+      const playerCount = r.clients.filter(c => c.seat === '0' || c.seat === '1').length;
+      return {
+        code: r.code,
+        name: r.name,
+        host: hostClient?.username || 'Player',
+        mode: r.mode,
+        status: playerCount >= 2 ? 'In-Progress' : 'Waiting',
+        allowSpectators: r.allowSpectators,
+        playerCount,
+      };
+    });
+    return JSON.stringify({ type: 'ROOMS_LIST', rooms: roomList });
+  }
+
+  private sendLobbyRoomsToClient(ws: WebSocket) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(this.getRoomListPayload());
+    }
+  }
+
   private broadcastLobbyRooms() {
-    const roomList = Array.from(this.rooms.values()).map(r => ({
-      code: r.code,
-      name: r.name,
-      mode: r.mode,
-      allowSpectators: r.allowSpectators,
-      playerCount: r.clients.filter(c => c.seat === '0' || c.seat === '1').length,
-    }));
-    const payload = JSON.stringify({ type: 'ROOMS_LIST', rooms: roomList });
+    const payload = this.getRoomListPayload();
     for (const client of this.wss.clients) {
       if (client.readyState === WebSocket.OPEN) client.send(payload);
     }
@@ -169,8 +270,8 @@ export class GameManager {
   private broadcastRoomState(room: Room) {
     for (const client of room.clients) {
       if (client.ws.readyState === WebSocket.OPEN) {
-        const stateToSend = client.seat === 'spectator' 
-          ? this.getPublicStateForSpectator(room.state) 
+        const stateToSend = client.seat === 'spectator'
+          ? this.getPublicStateForSpectator(room.state)
           : room.state;
 
         client.ws.send(JSON.stringify({
@@ -193,15 +294,38 @@ export class GameManager {
     };
   }
 
-  private checkAndStartMatch(room: Room, p1DeckId: DeckId) {
-    const client0 = room.clients.find(c => c.seat === '0');
-    const client1 = room.clients.find(c => c.seat === '1');
+  private buildStarterDeck(deckId: DeckId): { leader: CardDefinition; cards: CardDefinition[] } {
+    const isRainbow = deckId.includes('RAINBOW');
+    const leader: CardDefinition = isRainbow
+      ? { id: 'SD02-001', cardNumber: 'SD02-001', name: 'Rainbow Dash - Element of Loyalty', type: 'MainCharacter', element: 'Loyalty', power: 4 }
+      : { id: 'SD01-001', cardNumber: 'SD01-001', name: 'Twilight Sparkle - Element of Magic', type: 'MainCharacter', element: 'Magic', power: 4 };
 
-    if (client0 && client1 && room.state.phase === 'WAITING_FOR_PLAYERS') {
-      const mockDeck = { leader: { id: 'l1', cardNumber: '01', name: 'Mane Leader', type: 'MainCharacter' as const, element: 'Magic' as const }, cards: [] };
-      room.state = startSeatedMatch(mockDeck, mockDeck);
-      room.state.roomId = room.code;
-    }
+    const element = isRainbow ? 'Loyalty' : 'Magic';
+    const cards: CardDefinition[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `${deckId}-C${i + 1}`,
+      cardNumber: `${deckId}-${String(i + 1).padStart(3, '0')}`,
+      name: isRainbow ? `Wonderbolt Trainee #${i + 1}` : `Canterlot Scholar #${i + 1}`,
+      type: i % 5 === 0 ? 'Story' : 'Character',
+      element,
+      power: (i % 4) + 1,
+      defense: (i % 3) + 1,
+      effectText: 'Harmony boost +1 when paired in matching lane.',
+    }));
+
+    return { leader, cards };
+  }
+
+  private async startMatchWithDecks(room: Room) {
+    const deck0 = this.buildStarterDeck(room.decks['0'] || 'SD01_TWILIGHT');
+    const deck1 = this.buildStarterDeck(room.decks['1'] || 'SD02_RAINBOW');
+
+    room.state = startSeatedMatch(deck0, deck1);
+    room.state.roomId = room.code;
+
+    const p0Client = room.clients.find(c => c.seat === '0');
+    const p1Client = room.clients.find(c => c.seat === '1');
+    if (p0Client) room.state.players['0'].displayName = p0Client.username;
+    if (p1Client) room.state.players['1'].displayName = p1Client.username;
   }
 
   private processGameAction(state: KayouGameState, playerId: '0' | '1', action: string, payload: any): KayouGameState {

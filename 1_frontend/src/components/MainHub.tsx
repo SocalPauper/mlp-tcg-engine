@@ -1,33 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../App';
+import { API_BASE_URL } from '../config';
 import BackgroundUploader from './BackgroundUploader';
+import { LiveGameState } from './GameBoard';
 import './MainHub.css';
 
 interface GameLobby {
-  id: string;
+  code: string;
   name: string;
   host: string;
   mode: 'Casual' | 'Ranked';
   status: 'Waiting' | 'In-Progress';
   allowSpectators: boolean;
-  isPasswordProtected: boolean;
+  playerCount: number;
 }
 
-export default function MainHub() {
+interface MainHubProps {
+  onMatchJoined: (ws: WebSocket, state: LiveGameState, seat: '0' | '1' | 'spectator') => void;
+}
+
+export default function MainHub({ onMatchJoined }: MainHubProps) {
   const { user } = useAuth();
   const isGuest = !user;
 
-  // Lobbies & Quick Play state
-  const [lobbies, setLobbies] = useState<GameLobby[]>([
-    { id: '1', name: 'Casual Mane 6 Showdown', host: 'TwilightFan99', mode: 'Casual', status: 'Waiting', allowSpectators: true, isPasswordProtected: false },
-    { id: '2', name: 'Competitive Pauper Match', host: 'PauperMaster', mode: 'Ranked', status: 'In-Progress', allowSpectators: true, isPasswordProtected: false }
-  ]);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [lobbies, setLobbies] = useState<GameLobby[]>([]);
 
   // Create Game Form Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [roomMode, setRoomMode] = useState<'Casual' | 'Ranked'>('Casual');
-  const [roomPassword, setRoomPassword] = useState('');
   const [allowSpectators, setAllowSpectators] = useState(true);
 
   // Quick Play Modal State
@@ -36,10 +39,11 @@ export default function MainHub() {
     return localStorage.getItem('mlp_last_deck_id') || 'SD01_TWILIGHT';
   });
   const [isSearchingQueue, setIsSearchingQueue] = useState(false);
+  const [queueStatusText, setQueueStatusText] = useState('Searching for opponent in casual queue...');
 
   // Chat state
   const [chatMessages, setChatMessages] = useState([
-    { user: 'System', text: isGuest ? 'Welcome Guest! You are in Guest Mode (Quick Play only).' : 'Welcome to the Equestria Clash General Chatroom!' }
+    { user: 'System', text: isGuest ? 'Welcome Guest! You are in Guest Mode (Quick Play & Casual Rooms).' : 'Welcome to the Equestria Clash General Chatroom!' }
   ]);
   const [inputMsg, setInputMsg] = useState('');
 
@@ -47,13 +51,71 @@ export default function MainHub() {
     localStorage.setItem('mlp_last_deck_id', selectedDeck);
   }, [selectedDeck]);
 
+  // Establish live WebSocket connection to Render backend
+  useEffect(() => {
+    const wsUrl = API_BASE_URL.replace(/^http/, 'ws');
+    const socket = new WebSocket(wsUrl);
+    wsRef.current = socket;
+
+    socket.onopen = () => {
+      setWsConnected(true);
+      socket.send(JSON.stringify({ type: 'GET_ROOMS' }));
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'ROOMS_LIST') {
+          setLobbies(data.rooms || []);
+        } else if (data.type === 'QUEUED') {
+          setQueueStatusText(data.message || 'Waiting for opponent...');
+        } else if (data.type === 'STATE_UPDATE' && data.state) {
+          setIsSearchingQueue(false);
+          setShowQuickPlayModal(false);
+          onMatchJoined(socket, data.state, data.seat);
+        } else if (data.type === 'ERROR') {
+          setIsSearchingQueue(false);
+          alert(data.message || 'Matchmaking error');
+        }
+      } catch (err) {
+        console.error('[WS PARSE ERROR]', err);
+      }
+    };
+
+    socket.onclose = () => {
+      setWsConnected(false);
+    };
+
+    return () => {
+      // Only close socket if we didn't hand it off to an active match
+      if (socket.readyState === WebSocket.OPEN && !isSearchingQueue) {
+        // Keep socket alive if handed to GameBoard; App handles cleanup on leave
+      }
+    };
+  }, []);
+
   const handleQuickPlayStart = () => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      alert('Connecting to game server... Please wait a moment and try again.');
+      return;
+    }
+
     setIsSearchingQueue(true);
-    setTimeout(() => {
-      setIsSearchingQueue(false);
-      setShowQuickPlayModal(false);
-      alert(`[Quick Play Matched!] Joined casual game using ${selectedDeck}. (Guest Mode: No Pony Points awarded).`);
-    }, 2500);
+    setQueueStatusText('Joining Quick Play queue...');
+    wsRef.current.send(JSON.stringify({
+      type: 'QUICK_PLAY',
+      deckId: selectedDeck,
+      username: user?.username || `Guest_${Math.floor(100 + Math.random() * 900)}`
+    }));
+  };
+
+  const handleCancelQuickPlay = () => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'CANCEL_QUICK_PLAY' }));
+    }
+    setIsSearchingQueue(false);
+    setShowQuickPlayModal(false);
   };
 
   const handleCreateGameSubmit = (e: React.FormEvent) => {
@@ -62,22 +124,42 @@ export default function MainHub() {
       alert('Guests cannot create custom lobbies. Please use Quick Play or log in.');
       return;
     }
-    if (!newRoomName.trim()) return;
+    if (!newRoomName.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
-    const newLobby: GameLobby = {
-      id: Date.now().toString(),
-      name: newRoomName,
-      host: user?.username || 'Player',
+    wsRef.current.send(JSON.stringify({
+      type: 'CREATE_ROOM',
+      roomName: newRoomName.trim(),
       mode: roomMode,
-      status: 'Waiting',
       allowSpectators,
-      isPasswordProtected: !!roomPassword.trim()
-    };
+      deckId: selectedDeck,
+      username: user?.username || 'Player'
+    }));
 
-    setLobbies([newLobby, ...lobbies]);
     setNewRoomName('');
-    setRoomPassword('');
     setShowCreateModal(false);
+  };
+
+  const handleJoinRoom = (lobby: GameLobby) => {
+    if (isGuest && lobby.mode === 'Ranked') {
+      alert('Ranked matches require a registered account.');
+      return;
+    }
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    wsRef.current.send(JSON.stringify({
+      type: 'JOIN_ROOM',
+      roomCode: lobby.code,
+      deckId: selectedDeck,
+      username: user?.username || `Guest_${Math.floor(100 + Math.random() * 900)}`
+    }));
+  };
+
+  const handleSpectateRoom = (lobby: GameLobby) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({
+      type: 'SPECTATE_ROOM',
+      roomCode: lobby.code
+    }));
   };
 
   const sendChatMessage = (e: React.FormEvent) => {
@@ -101,9 +183,12 @@ export default function MainHub() {
           
           {/* Quick Play Hero Banner */}
           <div className="panel-box quick-play-banner" style={{ background: 'linear-gradient(135deg, #4c1d95, #831843)', marginBottom: '20px', textAlign: 'center', padding: '24px' }}>
+            <div style={{ fontSize: '11px', color: wsConnected ? '#34d399' : '#fbbf24', marginBottom: '6px', fontWeight: 'bold' }}>
+              {wsConnected ? '🟢 Live Matchmaking Server Connected' : '🟡 Connecting to Game Server...'}
+            </div>
             <h1 style={{ color: '#fbcfe8', fontSize: '24px', marginBottom: '8px' }}>⚡ Instant Quick Play</h1>
             <p style={{ color: '#e9d5ff', fontSize: '13px', marginBottom: '16px' }}>
-              {isGuest ? 'Playing as Guest: Jump instantly into casual matches with starter decks!' : 'Jump straight into casual matchmaking using your saved deck.'}
+              {isGuest ? 'Playing as Guest: Jump instantly into casual matches with starter decks (No Pony Points awarded).' : 'Jump straight into casual matchmaking using your selected deck.'}
             </p>
             <button 
               onClick={() => setShowQuickPlayModal(true)} 
@@ -126,42 +211,39 @@ export default function MainHub() {
             </div>
 
             <div className="lobby-list">
-              {lobbies.map(lobby => (
-                <div key={lobby.id} className="lobby-card">
-                  <div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <strong>{lobby.name}</strong>
-                      <span className={`mode-badge ${lobby.mode.toLowerCase()}`}>{lobby.mode}</span>
-                      {lobby.isPasswordProtected && <span>🔒</span>}
+              {lobbies.length === 0 ? (
+                <p style={{ fontSize: '13px', color: '#d8b4fe', textAlign: 'center', padding: '16px 0' }}>
+                  No active lobbies right now. Start a Quick Play match or create a custom room!
+                </p>
+              ) : (
+                lobbies.map(lobby => (
+                  <div key={lobby.code} className="lobby-card">
+                    <div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <strong>{lobby.name}</strong>
+                        <span className={`mode-badge ${lobby.mode.toLowerCase()}`}>{lobby.mode}</span>
+                      </div>
+                      <span style={{ fontSize: '12px', color: '#d8b4fe' }}>
+                        Host: {lobby.host} • Players: {lobby.playerCount}/2 • Status: {lobby.status}
+                      </span>
                     </div>
-                    <span style={{ fontSize: '12px', color: '#d8b4fe' }}>Host: {lobby.host} • Status: {lobby.status}</span>
+                    <div className="lobby-actions">
+                      {lobby.playerCount < 2 && (
+                        <button className="mlp-btn secondary" onClick={() => handleJoinRoom(lobby)}>
+                          Join
+                        </button>
+                      )}
+                      {lobby.allowSpectators ? (
+                        <button className="mlp-btn secondary" onClick={() => handleSpectateRoom(lobby)}>
+                          Spectate
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: '11px', color: '#9ca3af', alignSelf: 'center' }}>No Specs</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="lobby-actions">
-                    <button 
-                      className="mlp-btn secondary"
-                      onClick={() => {
-                        if (isGuest && lobby.mode === 'Ranked') {
-                          alert('Ranked matches require a registered account.');
-                          return;
-                        }
-                        alert(`Joining room: ${lobby.name}`);
-                      }}
-                    >
-                      Join
-                    </button>
-                    {lobby.allowSpectators ? (
-                      <button 
-                        className="mlp-btn secondary"
-                        onClick={() => alert(`Spectating ${lobby.host}'s match (Public Info Only)`)}
-                      >
-                        Spectate
-                      </button>
-                    ) : (
-                      <span style={{ fontSize: '11px', color: '#9ca3af', alignSelf: 'center' }}>No Specs</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -200,8 +282,11 @@ export default function MainHub() {
             {isSearchingQueue ? (
               <div style={{ padding: '30px 0' }}>
                 <div className="spinner" style={{ fontSize: '24px', marginBottom: '15px' }}>🌀</div>
-                <p style={{ color: '#fbcfe8', fontWeight: 'bold' }}>Searching for opponent in casual queue...</p>
-                <p style={{ fontSize: '12px', color: '#d8b4fe', marginTop: '8px' }}>Using Deck: {selectedDeck}</p>
+                <p style={{ color: '#fbcfe8', fontWeight: 'bold' }}>{queueStatusText}</p>
+                <p style={{ fontSize: '12px', color: '#d8b4fe', marginTop: '8px', marginBottom: '20px' }}>
+                  Using Deck: {selectedDeck} {isGuest ? '(Guest Casual — No Pony Points)' : ''}
+                </p>
+                <button onClick={handleCancelQuickPlay} className="mlp-btn secondary">Cancel Search</button>
               </div>
             ) : (
               <>
@@ -248,12 +333,6 @@ export default function MainHub() {
                   <option value="Ranked">Ranked (Competitive Ladder & MMR)</option>
                 </select>
               </label>
-              <input 
-                type="password" 
-                placeholder="Password (Optional - leave blank for public)" 
-                value={roomPassword} 
-                onChange={e => setRoomPassword(e.target.value)}
-              />
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#fbcfe8', cursor: 'pointer' }}>
                 <input 
                   type="checkbox" 
