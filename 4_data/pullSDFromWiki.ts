@@ -47,33 +47,49 @@ async function uploadToR2(buffer: Buffer, fileName: string): Promise<string> {
   return `${R2_PUBLIC_BASE}/cards/${fileName}`;
 }
 
-async function processAndUploadImage(url: string, fileName: string, cardId: string): Promise<string | null> {
+async function processAndUploadImage(
+  url: string,
+  fileName: string,
+  cardId: string,
+  cardType: string = '',
+  cardName: string = ''
+): Promise<string | null> {
   try {
     const imgRes = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!imgRes.ok) return null;
-    
+
     const buffer = Buffer.from(await imgRes.arrayBuffer());
     const image = sharp(buffer);
     const metadata = await image.metadata();
-    
-    // Landscape whitelist for Scene and Prop cards
-    const isLandscapeScene = cardId.match(/-(C0[6-9]|ER\d+|SPR\d+)$/i);
-    
-    if (metadata.width && metadata.height && metadata.width >= metadata.height) {
-      if (!isLandscapeScene) {
-        console.log(`[FILTER] Rejected landscape/grid image.`);
-        return null; 
-      }
+
+    if (!metadata.width || !metadata.height) return null;
+
+    // Only Story cards are landscape (7:5); all SD01 ER/SPR/Character/Event/Item/Scene cards are portrait (5:7)
+    const isStoryCard =
+      cardType === 'Story' ||
+      cardName.includes(' - ') ||
+      cardName.includes(' – ');
+
+    const aspectRatio = metadata.width / metadata.height;
+    if (aspectRatio > 1.75) {
+      console.log(`[FILTER] Rejected wide gallery grid image (${metadata.width}x${metadata.height}).`);
+      return null;
     }
-    
-    const targetWidth = isLandscapeScene ? 840 : 600;
-    const targetHeight = isLandscapeScene ? 600 : 840;
-    
+
+    if (metadata.width > metadata.height && !isStoryCard) {
+      console.log(`[FILTER] Rejected landscape image for non-Story card ${cardId}.`);
+      return null;
+    }
+
+    const targetWidth = isStoryCard ? 840 : 600;
+    const targetHeight = isStoryCard ? 600 : 840;
+
+    // Use fit: 'fill' so 100% of the card borders and rules text are preserved without center-cropping
     const webpBuffer = await image
-      .resize(targetWidth, targetHeight, { fit: 'cover', position: 'center', withoutEnlargement: true })
-      .webp({ quality: 85 })
+      .resize(targetWidth, targetHeight, { fit: 'fill' })
+      .webp({ quality: 90 })
       .toBuffer();
-    
+
     return await uploadToR2(webpBuffer, fileName);
   } catch (err) {
     console.error(`[ERROR] Processing image ${fileName} failed:`, err);
@@ -81,23 +97,19 @@ async function processAndUploadImage(url: string, fileName: string, cardId: stri
   }
 }
 
-// Bypasses HTML scraping entirely by using the MediaWiki API to search for the raw File uploads
 async function scrapeWikiArtViaAPI(cardId: string): Promise<string | null> {
-  const cleanId = cardId.replace(/-S$/i, ''); // Base ID for the search query
-  
-  // 1. Search the 'File:' namespace (srnamespace=6) for the exact card ID
+  const cleanId = cardId.replace(/-S$/i, '');
   const searchUrl = `https://kayoumylittleponycardgame.miraheze.org/w/api.php?action=query&list=search&srnamespace=6&srsearch="${cleanId}"&format=json`;
-  
+
   try {
     const searchRes = await fetch(searchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!searchRes.ok) return null;
-    
+
     const searchData = await searchRes.json();
     if (!searchData.query || !searchData.query.search || searchData.query.search.length === 0) {
       return null;
     }
 
-    // Prioritize the exact match if checking for an '-S' variant, otherwise take the best match
     let fileTitle = searchData.query.search[0].title;
     for (const item of searchData.query.search) {
       if (item.title.toLowerCase().includes(cardId.toLowerCase())) {
@@ -106,41 +118,44 @@ async function scrapeWikiArtViaAPI(cardId: string): Promise<string | null> {
       }
     }
 
-    // 2. Resolve the File title to its direct image URL
     const imgInfoUrl = `https://kayoumylittleponycardgame.miraheze.org/w/api.php?action=query&titles=${encodeURIComponent(fileTitle)}&prop=imageinfo&iiprop=url&format=json`;
     const infoRes = await fetch(imgInfoUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!infoRes.ok) return null;
-    
+
     const infoData = await infoRes.json();
     const pages = infoData.query.pages;
     const pageId = Object.keys(pages)[0];
-    
-    if (pageId === "-1" || !pages[pageId].imageinfo) {
+
+    if (pageId === '-1' || !pages[pageId].imageinfo) {
       return null;
     }
 
     const finalUrl = pages[pageId].imageinfo[0].url;
-    
+
     if (await testUrl(finalUrl)) {
       return finalUrl;
     }
-    
+
     return null;
-  } catch (err) {
+  } catch {
     console.error(`[API ERROR] Fetching wiki API for ${cardId} failed.`);
     return null;
   }
 }
 
 async function runWikiAPIPipeline() {
-  console.log('[WIKI API PIPELINE] Pulling unassigned SD01 cards from database...');
-  const { rows: cards } = await pool.query(
-    "SELECT id, name, image_url FROM game.cards WHERE id LIKE 'SD01%' AND image_url IS NULL ORDER BY id ASC"
-  );
-  console.log(`[WIKI API PIPELINE] Found ${cards.length} unassigned SD01 cards to target.`);
+  const forceAll = process.argv.includes('--force');
+
+  console.log('[WIKI API PIPELINE] Pulling SD01 cards from database...');
+  const query = forceAll
+    ? "SELECT id, name, card_type, image_url FROM game.cards WHERE id LIKE 'SD01%' ORDER BY id ASC"
+    : "SELECT id, name, card_type, image_url FROM game.cards WHERE id LIKE 'SD01%' AND image_url IS NULL ORDER BY id ASC";
+
+  const { rows: cards } = await pool.query(query);
+  console.log(`[WIKI API PIPELINE] Found ${cards.length} SD01 cards to process.`);
 
   if (cards.length === 0) {
-    console.log('[WIKI API PIPELINE] No unassigned SD01 cards found. Exiting.');
+    console.log('[WIKI API PIPELINE] No SD01 cards found to update. Exiting.');
     await pool.end();
     return;
   }
@@ -163,7 +178,7 @@ async function runWikiAPIPipeline() {
     }
 
     console.log(`[WIKI API] Found direct file URL, processing through sharp...`);
-    const finalAssetUrl = await processAndUploadImage(wikiImgUrl, fileName, cardId);
+    const finalAssetUrl = await processAndUploadImage(wikiImgUrl, fileName, cardId, card.card_type, card.name);
 
     if (finalAssetUrl) {
       await pool.query('UPDATE game.cards SET image_url = $1 WHERE id = $2', [finalAssetUrl, cardId]);
@@ -174,12 +189,11 @@ async function runWikiAPIPipeline() {
       missingCount++;
     }
 
-    // Be kind to the MediaWiki API
     await new Promise(resolve => setTimeout(resolve, 350));
   }
 
   console.log('\n========================================');
-  console.log(`[WIKI API PIPELINE COMPLETE] Uploaded: ${uploadedCount}`);
+  console.log(`[WIKI API PIPELINE COMPLETE] Re-uploaded: ${uploadedCount}`);
   console.log(`[WIKI API PIPELINE COMPLETE] Missing: ${missingCount}`);
   console.log('========================================\n');
 

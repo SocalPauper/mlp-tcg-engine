@@ -16,6 +16,13 @@ interface Card {
   image_url: string;
 }
 
+interface StackedCardGroup {
+  card: Card;
+  copies: Card[];
+  count: number;
+  isStory?: boolean;
+}
+
 type BuildPhase = 'MANE' | 'STORY' | 'SCENE' | 'MAIN';
 
 interface DeckBuilderProps {
@@ -54,7 +61,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [unlockedCardIds, setUnlockedCardIds] = useState<string[]>([]);
   const [newlyUnlockedCards, setNewlyUnlockedCards] = useState<Card[]>([]);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
-  const [showLockedCards, setShowLockedCards] = useState(false); // Off by default
+  const [showLockedCards, setShowLockedCards] = useState(false);
 
   // Deck Structure States
   const [maneCharacter, setManeCharacter] = useState<Card | null>(null);
@@ -75,6 +82,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   const [isStarter, setIsStarter] = useState(mode === 'VIEW');
   const [isCopiedStarter, setIsCopiedStarter] = useState(mode === 'COPY');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showCompletedShowcase, setShowCompletedShowcase] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importText, setImportText] = useState('');
 
@@ -83,6 +92,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [inspectorGroup, setInspectorGroup] = useState<Card[]>([]);
   const [inspectorIndex, setInspectorIndex] = useState<number>(0);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const prevTotalCardsRef = useRef<number>(0);
 
   // 1. Fetch entire card catalog
   useEffect(() => {
@@ -158,6 +168,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         setIsPublic(deckData.is_public ?? true);
         setIsStarter(starterFlag && mode !== 'COPY' ? true : mode === 'VIEW');
         setIsCopiedStarter(mode === 'COPY');
+        setHasUnsavedChanges(mode === 'COPY');
 
         const parseDeckField = (raw: any): any[] => {
           if (!raw) return [];
@@ -195,9 +206,10 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
           ? (deckData.mane_character.card_id || deckData.mane_character.id)
           : deckData.mane_character;
 
+        let loadedMane: Card | null = null;
         if (rawMane) {
-          const mane = cards.find(c => c.id.toLowerCase() === String(rawMane).toLowerCase());
-          if (mane) setManeCharacter(mane);
+          loadedMane = cards.find(c => c.id.toLowerCase() === String(rawMane).toLowerCase()) || null;
+          if (loadedMane) setManeCharacter(loadedMane);
         }
 
         const loadedStory = hydrateCards(deckData.story_deck);
@@ -207,14 +219,25 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         if (!rawMane && loadedStory.length === 0 && loadedScene.length === 0 && loadedMain.length === 0 && Array.isArray(deckData.cards)) {
           const allHydrated = hydrateCards(deckData.cards);
           const foundMane = allHydrated.find(isValidManeCharacter) || null;
+          const stories = allHydrated.filter(c => c.card_type === 'Story');
+          const scenes = allHydrated.filter(c => c.card_type === 'Scene');
+          const mains = allHydrated.filter(c => !['Mane Character', 'Story', 'Scene'].includes(c.card_type));
           setManeCharacter(foundMane);
-          setStoryDeck(allHydrated.filter(c => c.card_type === 'Story'));
-          setSceneDeck(allHydrated.filter(c => c.card_type === 'Scene'));
-          setMainDeck(allHydrated.filter(c => !['Mane Character', 'Story', 'Scene'].includes(c.card_type)));
+          setStoryDeck(stories);
+          setSceneDeck(scenes);
+          setMainDeck(mains);
+
+          const count = (foundMane ? 1 : 0) + stories.length + scenes.length + mains.length;
+          prevTotalCardsRef.current = count;
+          if (count === 70) setShowCompletedShowcase(true);
         } else {
           setStoryDeck(loadedStory);
           setSceneDeck(loadedScene);
           setMainDeck(loadedMain);
+
+          const count = (loadedMane ? 1 : 0) + loadedStory.length + loadedScene.length + loadedMain.length;
+          prevTotalCardsRef.current = count;
+          if (count === 70) setShowCompletedShowcase(true);
         }
 
         setBuildPhase('MAIN');
@@ -222,31 +245,18 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       .catch(err => console.error('Error fetching deck:', err));
   }, [deckId, cards, mode]);
 
-  // Keyboard navigation for Story set arrows inside Inspector popup
+  const totalCards = (maneCharacter ? 1 : 0) + storyDeck.length + sceneDeck.length + mainDeck.length;
+  const isDeckFull = totalCards === 70;
+
+  // Automatically enter Completed Deck Showcase the moment the deck reaches 70/70
   useEffect(() => {
-    if (!hoveredCard || inspectorGroup.length <= 1) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
-        setInspectorIndex(prev => {
-          const next = (prev - 1 + inspectorGroup.length) % inspectorGroup.length;
-          setHoveredCard(inspectorGroup[next]);
-          return next;
-        });
-      } else if (e.key === 'ArrowRight') {
-        setInspectorIndex(prev => {
-          const next = (prev + 1) % inspectorGroup.length;
-          setHoveredCard(inspectorGroup[next]);
-          return next;
-        });
-      } else if (e.key === 'Escape') {
-        closeInspector();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hoveredCard, inspectorGroup]);
+    if (totalCards === 70 && prevTotalCardsRef.current < 70) {
+      setShowCompletedShowcase(true);
+    } else if (totalCards < 70 && showCompletedShowcase) {
+      setShowCompletedShowcase(false);
+    }
+    prevTotalCardsRef.current = totalCards;
+  }, [totalCards, showCompletedShowcase]);
 
   // --- Logic Helpers ---
 
@@ -327,10 +337,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   };
 
   const isCardLocked = (card: Card) => {
-    // All Starter Deck cards (SD01-SD06, SD01A, SD01B) are free/unlocked for everyone
     if (/^SD/i.test(card.id) || /^SD/i.test(card.set_code || '')) return false;
 
-    // Everyday Scenes are always unlocked by default for everyone
     const isEverydayScene =
       card.card_type === 'Scene' &&
       (!card.element ||
@@ -339,10 +347,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         /-EV/i.test(card.id));
     if (isEverydayScene) return false;
 
-    // If the user owns it in auth.user_cards, it's unlocked
     if (unlockedCardIds.includes(card.id)) return false;
 
-    // Premium hits and alternate arts require unlocking
     const premiumRarities = ['RR', 'CR', 'GR', 'SPR'];
     if (premiumRarities.includes(card.rarity) || card.id.includes('-S')) return true;
 
@@ -375,6 +381,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
     if (buildPhase === 'MANE') {
       setManeCharacter(card);
+      setHasUnsavedChanges(true);
       if (storyDeck.length === 0) setBuildPhase('STORY'); 
     } 
     else if (buildPhase === 'SCENE') {
@@ -388,6 +395,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       }
       
       setSceneDeck([...sceneDeck, card]);
+      setHasUnsavedChanges(true);
     } 
     else if (buildPhase === 'MAIN') {
       if (mainDeck.length >= 50) return alert('Main Deck is full (50/50).');
@@ -395,6 +403,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       if (copies >= 3) return alert('You can only have 3 copies of any card.');
       
       setMainDeck([...mainDeck, card]);
+      setHasUnsavedChanges(true);
     }
   };
 
@@ -404,6 +413,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     if (storyDeck.length + group.length > 4) return alert('Story Deck can only hold 4 cards.');
     
     setStoryDeck([...storyDeck, ...group]);
+    setHasUnsavedChanges(true);
   };
 
   const removeCard = (zone: string, index: number) => {
@@ -417,13 +427,17 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         setSceneDeck([]);
         setMainDeck([]);
         setBuildPhase('MANE');
+        setHasUnsavedChanges(true);
       }
     } else if (zone === 'story') {
       setStoryDeck([]);
+      setHasUnsavedChanges(true);
     } else if (zone === 'scene') {
       setSceneDeck(sceneDeck.filter((_, i) => i !== index));
+      setHasUnsavedChanges(true);
     } else if (zone === 'main') {
       setMainDeck(mainDeck.filter((_, i) => i !== index));
+      setHasUnsavedChanges(true);
     }
   };
 
@@ -437,13 +451,154 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     setSceneDeck([]);
     setMainDeck([]);
     setBuildPhase('MANE');
+    setShowCompletedShowcase(false);
+    setHasUnsavedChanges(true);
   };
 
   const handleCopyDeck = () => {
     setIsStarter(false);
     setIsCopiedStarter(true);
+    setHasUnsavedChanges(true);
     setDeckName(`${deckName} (Copy)`);
     alert('Deck copied! You can now make changes and save it to your account.');
+  };
+
+  // --- Save & Return to Stable Handlers ---
+
+  const saveDeckToServer = async (): Promise<boolean> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('You must be signed in to save your deck to your account.');
+      return false;
+    }
+
+    const deckPayload = {
+      name: deckName,
+      is_public: isPublic,
+      mane_character: maneCharacter?.id,
+      story_deck: storyDeck.map(c => c.id),
+      scene_deck: sceneDeck.map(c => c.id),
+      main_deck: mainDeck.map(c => c.id)
+    };
+
+    const isEditingOwnDeck = mode === 'EDIT' && deckId && !isCopiedStarter;
+    const endpoint = isEditingOwnDeck ? `/api/decks/${deckId}` : '/api/decks';
+    const method = isEditingOwnDeck ? 'PUT' : 'POST';
+
+    try {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(deckPayload)
+      });
+      if (!res.ok) throw new Error('Save failed');
+      await res.json();
+      setHasUnsavedChanges(false);
+      return true;
+    } catch {
+      alert('Failed to save deck.');
+      return false;
+    }
+  };
+
+  const handleSaveDeck = async () => {
+    const saved = await saveDeckToServer();
+    if (saved) {
+      alert('Deck successfully saved!');
+      onClose();
+    }
+  };
+
+  const handleReturnToStable = async () => {
+    if (!isStarter && totalCards > 0 && hasUnsavedChanges) {
+      const wantsToSave = window.confirm(
+        'You have unsaved changes in this deck. Would you like to save your deck before returning to the Stable?\n\nClick OK to Save & Exit, or Cancel to leave without saving.'
+      );
+      if (wantsToSave) {
+        const saved = await saveDeckToServer();
+        if (!saved) return;
+      }
+    }
+    onClose();
+  };
+
+  const handleExportDeck = () => {
+    const exportList = [
+      `// Deck: ${deckName}`,
+      `Mane: ${maneCharacter ? maneCharacter.id : 'None'}`,
+      `--- Story (${storyDeck.length}) ---`,
+      ...storyDeck.map(c => `1x ${c.id} ${c.name}`),
+      `--- Scene (${sceneDeck.length}) ---`,
+      ...sceneDeck.map(c => `1x ${c.id} ${c.name}`),
+      `--- Main (${mainDeck.length}) ---`,
+      ...mainDeck.map(c => `1x ${c.id} ${c.name}`)
+    ].join('\n');
+    navigator.clipboard.writeText(exportList);
+    alert('Decklist copied to clipboard in standard Kayou format!');
+  };
+
+  const handleImportDeck = () => {
+    const lines = importText.split('\n');
+    let foundMane: Card | null = null;
+    const foundStories: Card[] = [];
+    const foundScenes: Card[] = [];
+    const foundMains: Card[] = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('---')) continue;
+      
+      const match = trimmed.match(/^(?:(\d+)x?\s+)?([A-Z0-9-]+)\s+(.*)$/i) || trimmed.match(/^([A-Z0-9-]+)\s+(.*)$/i);
+      if (match) {
+        const cardId = match[2] || match[1];
+        const qty = match[1] && !isNaN(Number(match[1])) ? parseInt(match[1], 10) : 1;
+        const cardObj = cards.find(c => c.id.toLowerCase() === cardId.toLowerCase());
+        if (cardObj) {
+          if (isValidManeCharacter(cardObj)) foundMane = cardObj;
+          else if (isStoryCard(cardObj)) foundStories.push(cardObj);
+          else if (cardObj.card_type === 'Scene') {
+            for (let i = 0; i < qty; i++) foundScenes.push(cardObj);
+          } else {
+            for (let i = 0; i < qty; i++) foundMains.push(cardObj);
+          }
+        }
+      }
+    }
+
+    if (foundMane) setManeCharacter(foundMane);
+    if (foundStories.length > 0) setStoryDeck(foundStories.slice(0, 4));
+    if (foundScenes.length > 0) setSceneDeck(foundScenes.slice(0, 15));
+    if (foundMains.length > 0) setMainDeck(foundMains.slice(0, 50));
+
+    setImportModalOpen(false);
+    setImportText('');
+    setBuildPhase('MAIN');
+    setHasUnsavedChanges(true);
+    alert('Deck successfully imported!');
+  };
+
+  // --- Grouping Helper for Completed Deck Showcase ---
+
+  const groupCardsById = (cardList: Card[], isStoryGroup: boolean = false): StackedCardGroup[] => {
+    const groupedMap = new Map<string, StackedCardGroup>();
+    for (const c of cardList) {
+      const existing = groupedMap.get(c.id);
+      if (existing) {
+        existing.copies.push(c);
+        existing.count += 1;
+      } else {
+        groupedMap.set(c.id, {
+          card: c,
+          copies: [c],
+          count: 1,
+          isStory: isStoryGroup,
+        });
+      }
+    }
+    return Array.from(groupedMap.values());
   };
 
   // --- Rendering Helpers ---
@@ -517,101 +672,10 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     chunkArray(altCards, true);
   });
 
-  const totalCards = (maneCharacter ? 1 : 0) + storyDeck.length + sceneDeck.length + mainDeck.length;
-
-  const handleSaveDeck = () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      return alert('You must be signed in to save your deck to your account.');
-    }
-    const deckPayload = {
-      name: deckName,
-      is_public: isPublic,
-      mane_character: maneCharacter?.id,
-      story_deck: storyDeck.map(c => c.id),
-      scene_deck: sceneDeck.map(c => c.id),
-      main_deck: mainDeck.map(c => c.id)
-    };
-    
-    const isEditingOwnDeck = mode === 'EDIT' && deckId && !isCopiedStarter;
-    const endpoint = isEditingOwnDeck ? `/api/decks/${deckId}` : '/api/decks';
-    const method = isEditingOwnDeck ? 'PUT' : 'POST';
-
-    fetch(`${API_BASE}${endpoint}`, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(deckPayload)
-    })
-    .then(res => {
-      if (!res.ok) throw new Error('Save failed');
-      return res.json();
-    })
-    .then(() => {
-      alert('Deck successfully saved!');
-      onClose(); 
-    })
-    .catch(() => alert('Failed to save deck.'));
-  };
-
-  const handleExportDeck = () => {
-    const exportList = [
-      `// Deck: ${deckName}`,
-      `Mane: ${maneCharacter ? maneCharacter.id : 'None'}`,
-      `--- Story (${storyDeck.length}) ---`,
-      ...storyDeck.map(c => `1x ${c.id} ${c.name}`),
-      `--- Scene (${sceneDeck.length}) ---`,
-      ...sceneDeck.map(c => `1x ${c.id} ${c.name}`),
-      `--- Main (${mainDeck.length}) ---`,
-      ...mainDeck.map(c => `1x ${c.id} ${c.name}`)
-    ].join('\n');
-    navigator.clipboard.writeText(exportList);
-    alert('Decklist copied to clipboard in standard Kayou format!');
-  };
-
-  const handleImportDeck = () => {
-    const lines = importText.split('\n');
-    let foundMane: Card | null = null;
-    const foundStories: Card[] = [];
-    const foundScenes: Card[] = [];
-    const foundMains: Card[] = [];
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('---')) continue;
-      
-      const match = trimmed.match(/^(?:(\d+)x?\s+)?([A-Z0-9-]+)\s+(.*)$/i) || trimmed.match(/^([A-Z0-9-]+)\s+(.*)$/i);
-      if (match) {
-        const cardId = match[2] || match[1];
-        const qty = match[1] && !isNaN(Number(match[1])) ? parseInt(match[1], 10) : 1;
-        const cardObj = cards.find(c => c.id.toLowerCase() === cardId.toLowerCase());
-        if (cardObj) {
-          if (isValidManeCharacter(cardObj)) foundMane = cardObj;
-          else if (isStoryCard(cardObj)) foundStories.push(cardObj);
-          else if (cardObj.card_type === 'Scene') {
-            for (let i = 0; i < qty; i++) foundScenes.push(cardObj);
-          } else {
-            for (let i = 0; i < qty; i++) foundMains.push(cardObj);
-          }
-        }
-      }
-    }
-
-    if (foundMane) setManeCharacter(foundMane);
-    if (foundStories.length > 0) setStoryDeck(foundStories.slice(0, 4));
-    if (foundScenes.length > 0) setSceneDeck(foundScenes.slice(0, 15));
-    if (foundMains.length > 0) setMainDeck(foundMains.slice(0, 50));
-
-    setImportModalOpen(false);
-    setImportText('');
-    setBuildPhase('MAIN');
-    alert('Deck successfully imported!');
-  };
-
-  // ONLY Story cards use the landscape exception; all other cards stay portrait 5:7
   const isHoveredStory = hoveredCard ? isStoryCard(hoveredCard) : false;
+
+  const groupedScenes = groupCardsById(sceneDeck, false);
+  const groupedMain = groupCardsById(mainDeck, false);
 
   return (
     <div className="deck-builder-container">
@@ -742,110 +806,269 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         </div>
       )}
 
-      {/* Main Library */}
+      {/* Main Library / Completed Deck Showcase */}
       <div className="card-library-section">
         <div className="phase-tracker">
-          <button className={`phase-btn ${buildPhase === 'MANE' ? 'active' : ''}`} onClick={() => setBuildPhase('MANE')}>1. Mane</button>
-          <button className={`phase-btn ${buildPhase === 'STORY' ? 'active' : ''}`} onClick={() => setBuildPhase('STORY')}>2. Story</button>
-          <button className={`phase-btn ${buildPhase === 'SCENE' ? 'active' : ''}`} onClick={() => setBuildPhase('SCENE')}>3. Scenes</button>
-          <button className={`phase-btn ${buildPhase === 'MAIN' ? 'active' : ''}`} onClick={() => setBuildPhase('MAIN')}>4. Main Deck</button>
-        </div>
-
-        <div className="filters-bar">
-          <input 
-            type="text" 
-            placeholder="Search ponies, items, IDs..." 
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="search-input input-bubble"
-          />
-          {buildPhase === 'MAIN' && (
-            <select value={selectedMainType} onChange={e => setSelectedMainType(e.target.value)} className="rarity-select input-bubble">
-              <option value="ALL">All Types</option>
-              <option value="Character">Character</option>
-              <option value="Friend Character">Friend Character</option>
-              <option value="Event">Event</option>
-              <option value="Item">Item</option>
-            </select>
+          <button
+            className={`phase-btn ${!showCompletedShowcase && buildPhase === 'MANE' ? 'active' : ''}`}
+            onClick={() => { setShowCompletedShowcase(false); setBuildPhase('MANE'); }}
+          >
+            1. Mane
+          </button>
+          <button
+            className={`phase-btn ${!showCompletedShowcase && buildPhase === 'STORY' ? 'active' : ''}`}
+            onClick={() => { setShowCompletedShowcase(false); setBuildPhase('STORY'); }}
+          >
+            2. Story
+          </button>
+          <button
+            className={`phase-btn ${!showCompletedShowcase && buildPhase === 'SCENE' ? 'active' : ''}`}
+            onClick={() => { setShowCompletedShowcase(false); setBuildPhase('SCENE'); }}
+          >
+            3. Scenes
+          </button>
+          <button
+            className={`phase-btn ${!showCompletedShowcase && buildPhase === 'MAIN' ? 'active' : ''}`}
+            onClick={() => { setShowCompletedShowcase(false); setBuildPhase('MAIN'); }}
+          >
+            4. Main Deck
+          </button>
+          {isDeckFull && (
+            <button
+              className={`phase-btn showcase-tab-btn ${showCompletedShowcase ? 'active' : ''}`}
+              onClick={() => setShowCompletedShowcase(prev => !prev)}
+            >
+              ✦ Deck Showcase (70/70)
+            </button>
           )}
-          <select value={selectedRarity} onChange={e => setSelectedRarity(e.target.value)} className="rarity-select input-bubble">
-            <option value="ALL">All Rarities</option>
-            <option value="C">Common</option>
-            <option value="SR">Silver Rare</option>
-            <option value="SSR">Super Secret Rare</option>
-          </select>
-
-          <label className="locked-toggle-pill">
-            <input
-              type="checkbox"
-              checked={showLockedCards}
-              onChange={e => setShowLockedCards(e.target.checked)}
-            />
-            <span>Show Locked 🔒</span>
-          </label>
         </div>
 
-        {loading ? (
-          <div className="loading-sparkles">Gathering cards... ✨</div>
-        ) : (
-          <div className="card-grid" style={{ opacity: isStarter ? 0.5 : 1, pointerEvents: isStarter ? 'none' : 'auto' }}>
-            {buildPhase === 'STORY' ? (
-              Object.entries(storyGroups).map(([groupKey, group]) => {
-                const displayName = group[0]?.name ? group[0].name.split(/[-–]/)[0].trim() : groupKey;
-                const isLocked = group.some(c => isCardLocked(c));
-                return (
-                  <div 
-                    key={groupKey} 
-                    className={`story-stack ${isLocked ? 'locked' : ''}`} 
-                    onClick={() => {
-                      if (isLocked) alert('You must unlock this alternate art first!');
-                      else addStoryGroup(group);
-                    }}
-                    onContextMenu={(e) => handleContextMenu(e, group[0], group)}
-                    onTouchStart={() => handleTouchStart(group[0], group)}
-                    onTouchEnd={handleTouchEnd}
+        {showCompletedShowcase && isDeckFull ? (
+          <div className="completed-deck-showcase">
+            <div className="showcase-header-banner">
+              <div>
+                <h2 className="showcase-deck-title">{deckName}</h2>
+                <span className="showcase-deck-subtitle">
+                  {deckElement || 'Unaligned'} Element • 70 / 70 Cards Complete
+                </span>
+              </div>
+              <button
+                className="phase-btn"
+                style={{ flex: '0 0 auto', padding: '8px 16px' }}
+                onClick={() => setShowCompletedShowcase(false)}
+              >
+                Browse Card Pool
+              </button>
+            </div>
+
+            {/* Section 1: Mane Character & Story Arc */}
+            <div className="showcase-section">
+              <h3 className="showcase-section-title">Mane Character & Story Deck</h3>
+              <div className="showcase-top-row">
+                {maneCharacter && (
+                  <div
+                    className="stacked-deck-slot"
+                    onClick={() => openInspector(maneCharacter)}
+                    onContextMenu={(e) => handleContextMenu(e, maneCharacter)}
                   >
-                    {group.map((card) => (
-                      <img 
-                        key={card.id}
-                        className="story-card-layer"
-                        src={card.image_url} 
-                        alt={card.name} 
-                      />
-                    ))}
-                    {isLocked && <div className="lock-icon">🔒</div>}
-                    <div className="story-stack-label">{displayName} {isLocked ? '(Locked)' : `(${group.length}/4)`}</div>
+                    <div className="card-copy-stack count-1">
+                      <img src={maneCharacter.image_url} alt={maneCharacter.name} className="stacked-copy-img layer-0" />
+                    </div>
+                    <div className="diamond-count-wrapper">
+                      <div className="diamond-badge"><span>1</span></div>
+                      <span className="diamond-copies-label">Mane</span>
+                    </div>
                   </div>
-                );
-              })
-            ) : (
-              displayCards.map(card => {
-                const isLocked = isCardLocked(card);
-                return (
-                  <div 
-                    key={card.id} 
-                    className={`card-item ${isLocked ? 'locked' : ''}`} 
-                    onClick={() => {
-                      if (isLocked) alert('You must unlock this rare card from a pack first!');
-                      else addCardToDeck(card);
-                    }}
-                    onContextMenu={(e) => handleContextMenu(e, card)}
-                    onTouchStart={() => handleTouchStart(card)}
-                    onTouchEnd={handleTouchEnd}
+                )}
+
+                {storyDeck.length > 0 && (
+                  <div
+                    className="stacked-deck-slot story-showcase-slot"
+                    onClick={() => openInspector(storyDeck[0], storyDeck)}
+                    onContextMenu={(e) => handleContextMenu(e, storyDeck[0], storyDeck)}
                   >
-                    <img src={card.image_url} alt={card.name} loading="lazy" />
-                    {isLocked && <div className="lock-icon">🔒</div>}
+                    <div className={`story-copy-stack count-${Math.min(storyDeck.length, 4)}`}>
+                      {storyDeck.slice(0, 4).map((sc, idx) => (
+                        <img
+                          key={`${sc.id}-${idx}`}
+                          src={sc.image_url}
+                          alt={sc.name}
+                          className={`stacked-story-img layer-${idx}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="diamond-count-wrapper">
+                      <div className="diamond-badge"><span>{storyDeck.length}</span></div>
+                      <span className="diamond-copies-label">Stages</span>
+                    </div>
                   </div>
-                );
-              })
-            )}
+                )}
+              </div>
+            </div>
+
+            {/* Section 2: Scene Deck */}
+            <div className="showcase-section">
+              <h3 className="showcase-section-title">Scene Deck ({sceneDeck.length}/15)</h3>
+              <div className="showcase-cards-grid">
+                {groupedScenes.map((group) => (
+                  <div
+                    key={group.card.id}
+                    className="stacked-deck-slot"
+                    onClick={() => openInspector(group.card)}
+                    onContextMenu={(e) => handleContextMenu(e, group.card)}
+                  >
+                    <div className={`card-copy-stack count-${Math.min(group.count, 5)}`}>
+                      {group.copies.slice(0, 5).map((copyCard, idx) => (
+                        <img
+                          key={`${copyCard.id}-${idx}`}
+                          src={copyCard.image_url}
+                          alt={copyCard.name}
+                          className={`stacked-copy-img layer-${idx}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="diamond-count-wrapper">
+                      <div className="diamond-badge"><span>{group.count}</span></div>
+                      <span className="diamond-copies-label">
+                        {group.count === 1 ? 'Copy' : 'Copies'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Section 3: Main Deck */}
+            <div className="showcase-section">
+              <h3 className="showcase-section-title">Main Deck ({mainDeck.length}/50)</h3>
+              <div className="showcase-cards-grid">
+                {groupedMain.map((group) => (
+                  <div
+                    key={group.card.id}
+                    className="stacked-deck-slot"
+                    onClick={() => openInspector(group.card)}
+                    onContextMenu={(e) => handleContextMenu(e, group.card)}
+                  >
+                    <div className={`card-copy-stack count-${Math.min(group.count, 5)}`}>
+                      {group.copies.slice(0, 5).map((copyCard, idx) => (
+                        <img
+                          key={`${copyCard.id}-${idx}`}
+                          src={copyCard.image_url}
+                          alt={copyCard.name}
+                          className={`stacked-copy-img layer-${idx}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="diamond-count-wrapper">
+                      <div className="diamond-badge"><span>{group.count}</span></div>
+                      <span className="diamond-copies-label">
+                        {group.count === 1 ? 'Copy' : 'Copies'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
+        ) : (
+          <>
+            <div className="filters-bar">
+              <input 
+                type="text" 
+                placeholder="Search ponies, items, IDs..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="search-input input-bubble"
+              />
+              {buildPhase === 'MAIN' && (
+                <select value={selectedMainType} onChange={e => setSelectedMainType(e.target.value)} className="rarity-select input-bubble">
+                  <option value="ALL">All Types</option>
+                  <option value="Character">Character</option>
+                  <option value="Friend Character">Friend Character</option>
+                  <option value="Event">Event</option>
+                  <option value="Item">Item</option>
+                </select>
+              )}
+              <select value={selectedRarity} onChange={e => setSelectedRarity(e.target.value)} className="rarity-select input-bubble">
+                <option value="ALL">All Rarities</option>
+                <option value="C">Common</option>
+                <option value="SR">Silver Rare</option>
+                <option value="SSR">Super Secret Rare</option>
+              </select>
+
+              <label className="locked-toggle-pill">
+                <input
+                  type="checkbox"
+                  checked={showLockedCards}
+                  onChange={e => setShowLockedCards(e.target.checked)}
+                />
+                <span>Show Locked 🔒</span>
+              </label>
+            </div>
+
+            {loading ? (
+              <div className="loading-sparkles">Gathering cards... ✨</div>
+            ) : (
+              <div className="card-grid" style={{ opacity: isStarter ? 0.5 : 1, pointerEvents: isStarter ? 'none' : 'auto' }}>
+                {buildPhase === 'STORY' ? (
+                  Object.entries(storyGroups).map(([groupKey, group]) => {
+                    const displayName = group[0]?.name ? group[0].name.split(/[-–]/)[0].trim() : groupKey;
+                    const isLocked = group.some(c => isCardLocked(c));
+                    return (
+                      <div 
+                        key={groupKey} 
+                        className={`story-stack ${isLocked ? 'locked' : ''}`} 
+                        onClick={() => {
+                          if (isLocked) alert('You must unlock this alternate art first!');
+                          else addStoryGroup(group);
+                        }}
+                        onContextMenu={(e) => handleContextMenu(e, group[0], group)}
+                        onTouchStart={() => handleTouchStart(group[0], group)}
+                        onTouchEnd={handleTouchEnd}
+                      >
+                        {group.map((card) => (
+                          <img 
+                            key={card.id}
+                            className="story-card-layer"
+                            src={card.image_url} 
+                            alt={card.name} 
+                          />
+                        ))}
+                        {isLocked && <div className="lock-icon">🔒</div>}
+                        <div className="story-stack-label">{displayName} {isLocked ? '(Locked)' : `(${group.length}/4)`}</div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  displayCards.map(card => {
+                    const isLocked = isCardLocked(card);
+                    return (
+                      <div 
+                        key={card.id} 
+                        className={`card-item ${isLocked ? 'locked' : ''}`} 
+                        onClick={() => {
+                          if (isLocked) alert('You must unlock this rare card from a pack first!');
+                          else addCardToDeck(card);
+                        }}
+                        onContextMenu={(e) => handleContextMenu(e, card)}
+                        onTouchStart={() => handleTouchStart(card)}
+                        onTouchEnd={handleTouchEnd}
+                      >
+                        <img src={card.image_url} alt={card.name} loading="lazy" />
+                        {isLocked && <div className="lock-icon">🔒</div>}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
       <div className="deck-panel-section">
         <button 
-          onClick={onClose} 
+          onClick={handleReturnToStable} 
           style={{ 
             background: 'rgba(156, 39, 176, 0.1)', 
             color: 'var(--mlp-purple)', 
@@ -880,7 +1103,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
           <input 
             type="text" 
             value={deckName} 
-            onChange={e => setDeckName(e.target.value)} 
+            onChange={e => { setDeckName(e.target.value); setHasUnsavedChanges(true); }} 
             placeholder="Name your deck!"
             className="deck-name-input input-bubble"
             disabled={isStarter}
@@ -889,7 +1112,12 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
         <div className="deck-visibility-bar">
           <label className="visibility-switch">
-            <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} disabled={isStarter} />
+            <input
+              type="checkbox"
+              checked={isPublic}
+              onChange={e => { setIsPublic(e.target.checked); setHasUnsavedChanges(true); }}
+              disabled={isStarter}
+            />
             <span className="slider round"></span>
           </label>
           <span className="visibility-label">{isPublic ? 'Public Deck 🌍' : 'Private Deck 🔒'}</span>

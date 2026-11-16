@@ -176,10 +176,10 @@ input:checked + .slider:before { transform: translateX(24px); }
   position: relative;
 }
 
-/* Story-only landscape popup exception */
+/* Story-only landscape popup exception (exact 7:5 proportions) */
 .inspector-modal.story-landscape-modal {
-  width: 960px;
-  height: 450px;
+  width: 1000px;
+  height: 420px;
 }
 
 .inspector-close-btn {
@@ -221,8 +221,8 @@ input:checked + .slider:before { transform: translateX(24px); }
 
 /* Landscape 7:5 inspector container exception for Story cards only */
 .inspector-image-container.story-landscape-box {
-  flex: 0 0 540px;
-  padding: 24px 48px;
+  flex: 0 0 580px;
+  padding: 22px 52px;
 }
 
 .inspector-image-container.story-landscape-box img {
@@ -259,12 +259,12 @@ input:checked + .slider:before { transform: translateX(24px); }
   transform: translateY(-50%) scale(1.08);
 }
 
-.story-nav-arrow.prev { left: 8px; }
-.story-nav-arrow.next { right: 8px; }
+.story-nav-arrow.prev { left: 10px; }
+.story-nav-arrow.next { right: 10px; }
 
 .story-stage-indicator {
   position: absolute;
-  bottom: 8px;
+  bottom: 6px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(17, 20, 26, 0.9);
@@ -272,7 +272,7 @@ input:checked + .slider:before { transform: translateX(24px); }
   color: #fff;
   font-size: 11px;
   font-weight: 800;
-  padding: 3px 12px;
+  padding: 2px 12px;
   border-radius: 12px;
   letter-spacing: 0.5px;
 }
@@ -389,6 +389,16 @@ input:checked + .slider:before { transform: translateX(24px); }
 
 .phase-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .phase-btn.active { background: var(--mlp-pink); color: #fff; transform: scale(1.05); }
+.phase-btn.showcase-tab-btn {
+  border-color: var(--mlp-gold);
+  background: linear-gradient(135deg, #fff8e1, #fff);
+  color: #8e24aa;
+}
+.phase-btn.showcase-tab-btn.active {
+  background: linear-gradient(135deg, #ff66a3, #9c27b0);
+  color: #fff;
+  border-color: var(--mlp-gold);
+}
 
 .card-grid {
   display: grid;
@@ -403,7 +413,7 @@ input:checked + .slider:before { transform: translateX(24px); }
   gap: 28px;
 }
 
-/* All standard cards remain portrait 5:7 and scale to fit inside the container */
+/* All standard cards remain portrait 5:7 and stretch to fit inside the container */
 .card-item {
   border-radius: 12px;
   cursor: pointer;
@@ -482,6 +492,180 @@ input:checked + .slider:before { transform: translateX(24px); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------------------- */
+/* COMPLETED 70/70 DECK SHOWCASE (STACKED COPIES + DIAMOND COUNT)      */
+/* ------------------------------------------------------------------- */
+.completed-deck-showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 50px;
+}
+
+.showcase-header-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #ffffff 0%, #fce4ec 100%);
+  border: 2px solid var(--mlp-pink);
+  border-radius: 18px;
+  padding: 14px 20px;
+  box-shadow: 0 8px 20px rgba(233, 30, 99, 0.12);
+}
+
+.showcase-deck-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  color: #4a148c;
+}
+
+.showcase-deck-subtitle {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--mlp-magenta);
+}
+
+.showcase-section {
+  background: rgba(255, 255, 255, 0.72);
+  border: 2px solid rgba(225, 190, 231, 0.8);
+  border-radius: 20px;
+  padding: 18px 20px 24px;
+}
+
+.showcase-section-title {
+  margin: 0 0 16px 0;
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--mlp-purple);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-bottom: 2px dashed var(--mlp-light-purple);
+  padding-bottom: 6px;
+}
+
+.showcase-top-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  align-items: flex-end;
+}
+
+.showcase-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 26px 22px;
+}
+
+.stacked-deck-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.stacked-deck-slot:hover {
+  transform: translateY(-4px);
+}
+
+.stacked-deck-slot.story-showcase-slot {
+  width: 245px;
+}
+
+/* Portrait 5:7 stacked copy container with peeking edges */
+.card-copy-stack {
+  position: relative;
+  width: 138px;
+  aspect-ratio: 5/7;
+  margin-right: 12px;
+  margin-bottom: 12px;
+}
+
+.stacked-copy-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  object-fit: fill;
+  border: 2px solid #ffffff;
+  box-shadow: 0 4px 10px rgba(74, 20, 140, 0.22);
+  transition: transform 0.2s ease;
+}
+
+.stacked-copy-img.layer-0 { transform: translate(0px, 0px); z-index: 5; }
+.stacked-copy-img.layer-1 { transform: translate(6px, 6px); z-index: 4; }
+.stacked-copy-img.layer-2 { transform: translate(12px, 12px); z-index: 3; }
+.stacked-copy-img.layer-3 { transform: translate(16px, 16px); z-index: 2; }
+.stacked-copy-img.layer-4 { transform: translate(20px, 20px); z-index: 1; }
+
+/* Landscape 7:5 stacked Story stages with peeking edges */
+.story-copy-stack {
+  position: relative;
+  width: 225px;
+  aspect-ratio: 7/5;
+  margin-right: 16px;
+  margin-bottom: 14px;
+}
+
+.stacked-story-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  object-fit: fill;
+  border: 2px solid #ffffff;
+  box-shadow: 0 4px 10px rgba(74, 20, 140, 0.22);
+}
+
+.stacked-story-img.layer-0 { transform: translate(0px, 0px); z-index: 5; }
+.stacked-story-img.layer-1 { transform: translate(6px, 6px); z-index: 4; }
+.stacked-story-img.layer-2 { transform: translate(12px, 12px); z-index: 3; }
+.stacked-story-img.layer-3 { transform: translate(18px, 18px); z-index: 2; }
+
+/* Pretty Diamond Count Badge Underneath Stack */
+.diamond-count-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 10px;
+  gap: 6px;
+}
+
+.diamond-badge {
+  width: 30px;
+  height: 30px;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, #ff66a3 0%, #9c27b0 100%);
+  border: 2px solid #ffd700;
+  border-radius: 6px;
+  box-shadow: 0 4px 10px rgba(156, 39, 176, 0.35), inset 0 0 6px rgba(255, 255, 255, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diamond-badge span {
+  transform: rotate(-45deg);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.diamond-copies-label {
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--mlp-purple);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
 }
 
 .deck-zones-container { flex: 1; overflow-y: auto; margin-bottom: 12px; padding-right: 8px; }
