@@ -71,6 +71,14 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   
   const [buildPhase, setBuildPhase] = useState<BuildPhase>('MANE');
   const deckElement = maneCharacter?.element || null;
+
+  // Collapsible right-panel zones (auto-syncs with active phase, also manually toggleable)
+  const [collapsedZones, setCollapsedZones] = useState<Record<BuildPhase, boolean>>({
+    MANE: false,
+    STORY: true,
+    SCENE: true,
+    MAIN: true,
+  });
   
   // UI Meta States
   const [deckName, setDeckName] = useState('My Sparkle Deck');
@@ -83,7 +91,9 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [isStarter, setIsStarter] = useState(mode === 'VIEW');
   const [isCopiedStarter, setIsCopiedStarter] = useState(mode === 'COPY');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showCompletedShowcase, setShowCompletedShowcase] = useState(false);
+  const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
+  const [isSavingExit, setIsSavingExit] = useState(false);
+  const [showDeckContents, setShowDeckContents] = useState(mode === 'VIEW');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importText, setImportText] = useState('');
 
@@ -92,7 +102,25 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [inspectorGroup, setInspectorGroup] = useState<Card[]>([]);
   const [inspectorIndex, setInspectorIndex] = useState<number>(0);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
-  const prevTotalCardsRef = useRef<number>(0);
+
+  // Switch active build phase and auto-collapse inactive deck zones on the right
+  const activatePhase = (phase: BuildPhase) => {
+    setShowDeckContents(false);
+    setBuildPhase(phase);
+    setCollapsedZones({
+      MANE: phase !== 'MANE',
+      STORY: phase !== 'STORY',
+      SCENE: phase !== 'SCENE',
+      MAIN: phase !== 'MAIN',
+    });
+  };
+
+  const toggleZoneCollapse = (zone: BuildPhase) => {
+    setCollapsedZones(prev => ({
+      ...prev,
+      [zone]: !prev[zone],
+    }));
+  };
 
   // 1. Fetch entire card catalog
   useEffect(() => {
@@ -164,9 +192,10 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       })
       .then(deckData => {
         const starterFlag = Boolean(deckData.is_starter);
+        const readOnlyView = (starterFlag && mode !== 'COPY') || mode === 'VIEW';
         setDeckName(mode === 'COPY' ? `${deckData.name} (Copy)` : deckData.name);
         setIsPublic(deckData.is_public ?? true);
-        setIsStarter(starterFlag && mode !== 'COPY' ? true : mode === 'VIEW');
+        setIsStarter(readOnlyView);
         setIsCopiedStarter(mode === 'COPY');
         setHasUnsavedChanges(mode === 'COPY');
 
@@ -228,35 +257,28 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
           setMainDeck(mains);
 
           const count = (foundMane ? 1 : 0) + stories.length + scenes.length + mains.length;
-          prevTotalCardsRef.current = count;
-          if (count === 70) setShowCompletedShowcase(true);
+          if (readOnlyView || count === 70) setShowDeckContents(true);
         } else {
           setStoryDeck(loadedStory);
           setSceneDeck(loadedScene);
           setMainDeck(loadedMain);
 
           const count = (loadedMane ? 1 : 0) + loadedStory.length + loadedScene.length + loadedMain.length;
-          prevTotalCardsRef.current = count;
-          if (count === 70) setShowCompletedShowcase(true);
+          if (readOnlyView || count === 70) setShowDeckContents(true);
         }
 
         setBuildPhase('MAIN');
+        setCollapsedZones({
+          MANE: !readOnlyView,
+          STORY: !readOnlyView,
+          SCENE: !readOnlyView,
+          MAIN: false,
+        });
       })
       .catch(err => console.error('Error fetching deck:', err));
   }, [deckId, cards, mode]);
 
   const totalCards = (maneCharacter ? 1 : 0) + storyDeck.length + sceneDeck.length + mainDeck.length;
-  const isDeckFull = totalCards === 70;
-
-  // Automatically enter Completed Deck Showcase the moment the deck reaches 70/70
-  useEffect(() => {
-    if (totalCards === 70 && prevTotalCardsRef.current < 70) {
-      setShowCompletedShowcase(true);
-    } else if (totalCards < 70 && showCompletedShowcase) {
-      setShowCompletedShowcase(false);
-    }
-    prevTotalCardsRef.current = totalCards;
-  }, [totalCards, showCompletedShowcase]);
 
   // --- Logic Helpers ---
 
@@ -382,7 +404,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     if (buildPhase === 'MANE') {
       setManeCharacter(card);
       setHasUnsavedChanges(true);
-      if (storyDeck.length === 0) setBuildPhase('STORY'); 
+      if (storyDeck.length === 0) activatePhase('STORY');
     } 
     else if (buildPhase === 'SCENE') {
       if (sceneDeck.length >= 15) return alert('Scene Deck is full (15/15).');
@@ -394,16 +416,24 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         return alert('You can only have up to 3 copies of an element-specific Scene.');
       }
       
-      setSceneDeck([...sceneDeck, card]);
+      const nextScene = [...sceneDeck, card];
+      setSceneDeck(nextScene);
       setHasUnsavedChanges(true);
+      if ((maneCharacter ? 1 : 0) + storyDeck.length + nextScene.length + mainDeck.length === 70) {
+        setShowDeckContents(true);
+      }
     } 
     else if (buildPhase === 'MAIN') {
       if (mainDeck.length >= 50) return alert('Main Deck is full (50/50).');
       const copies = mainDeck.filter(c => c.id.replace('-S', '') === baseId).length;
       if (copies >= 3) return alert('You can only have 3 copies of any card.');
       
-      setMainDeck([...mainDeck, card]);
+      const nextMain = [...mainDeck, card];
+      setMainDeck(nextMain);
       setHasUnsavedChanges(true);
+      if ((maneCharacter ? 1 : 0) + storyDeck.length + sceneDeck.length + nextMain.length === 70) {
+        setShowDeckContents(true);
+      }
     }
   };
 
@@ -412,8 +442,12 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     if (group.some(c => isCardLocked(c))) return alert('You must unlock this alternate art first!');
     if (storyDeck.length + group.length > 4) return alert('Story Deck can only hold 4 cards.');
     
-    setStoryDeck([...storyDeck, ...group]);
+    const nextStory = [...storyDeck, ...group];
+    setStoryDeck(nextStory);
     setHasUnsavedChanges(true);
+    if ((maneCharacter ? 1 : 0) + nextStory.length + sceneDeck.length + mainDeck.length === 70) {
+      setShowDeckContents(true);
+    }
   };
 
   const removeCard = (zone: string, index: number) => {
@@ -426,7 +460,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         setStoryDeck([]);
         setSceneDeck([]);
         setMainDeck([]);
-        setBuildPhase('MANE');
+        activatePhase('MANE');
         setHasUnsavedChanges(true);
       }
     } else if (zone === 'story') {
@@ -450,8 +484,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     setStoryDeck([]);
     setSceneDeck([]);
     setMainDeck([]);
-    setBuildPhase('MANE');
-    setShowCompletedShowcase(false);
+    activatePhase('MANE');
     setHasUnsavedChanges(true);
   };
 
@@ -459,6 +492,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     setIsStarter(false);
     setIsCopiedStarter(true);
     setHasUnsavedChanges(true);
+    setShowDeckContents(false);
     setDeckName(`${deckName} (Copy)`);
     alert('Deck copied! You can now make changes and save it to your account.');
   };
@@ -512,16 +546,26 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     }
   };
 
-  const handleReturnToStable = async () => {
+  const handleReturnToStable = () => {
     if (!isStarter && totalCards > 0 && hasUnsavedChanges) {
-      const wantsToSave = window.confirm(
-        'You have unsaved changes in this deck. Would you like to save your deck before returning to the Stable?\n\nClick OK to Save & Exit, or Cancel to leave without saving.'
-      );
-      if (wantsToSave) {
-        const saved = await saveDeckToServer();
-        if (!saved) return;
-      }
+      setShowExitConfirmModal(true);
+      return;
     }
+    onClose();
+  };
+
+  const handleSaveAndExit = async () => {
+    setIsSavingExit(true);
+    const saved = await saveDeckToServer();
+    setIsSavingExit(false);
+    if (saved) {
+      setShowExitConfirmModal(false);
+      onClose();
+    }
+  };
+
+  const handleDiscardAndExit = () => {
+    setShowExitConfirmModal(false);
     onClose();
   };
 
@@ -575,12 +619,12 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
     setImportModalOpen(false);
     setImportText('');
-    setBuildPhase('MAIN');
+    activatePhase('MAIN');
     setHasUnsavedChanges(true);
     alert('Deck successfully imported!');
   };
 
-  // --- Grouping Helper for Completed Deck Showcase ---
+  // --- Grouping Helper for Deck Contents Showcase ---
 
   const groupCardsById = (cardList: Card[], isStoryGroup: boolean = false): StackedCardGroup[] => {
     const groupedMap = new Map<string, StackedCardGroup>();
@@ -679,6 +723,62 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   return (
     <div className="deck-builder-container">
+
+      {/* --- UNSAVED DECK EXIT CONFIRMATION MODAL --- */}
+      {showExitConfirmModal && (
+        <div
+          className="inspector-overlay"
+          style={{ pointerEvents: 'auto', zIndex: 10001 }}
+          onClick={() => !isSavingExit && setShowExitConfirmModal(false)}
+        >
+          <div
+            className="inspector-modal"
+            style={{
+              flexDirection: 'column',
+              padding: '28px 32px',
+              height: 'auto',
+              width: '460px',
+              textAlign: 'center',
+              gap: '16px',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 style={{ color: '#fff', margin: 0, fontSize: '22px', fontWeight: 900 }}>
+              Unsaved Deck Changes ✨
+            </h2>
+            <p style={{ color: '#d0d7e2', margin: 0, fontSize: '14px', lineHeight: 1.5 }}>
+              Your deck <strong>“{deckName}”</strong> ({totalCards}/70 cards) has unsaved changes.
+              Would you like to save it before returning to the Stable?
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '8px', flexWrap: 'wrap' }}>
+              <button
+                className="action-btn save-btn"
+                style={{ padding: '12px 16px', fontSize: '13px' }}
+                onClick={handleSaveAndExit}
+                disabled={isSavingExit}
+              >
+                {isSavingExit ? 'Saving...' : 'Save & Exit 💾'}
+              </button>
+              <button
+                className="action-btn clear-btn"
+                style={{ padding: '12px 16px', fontSize: '13px' }}
+                onClick={handleDiscardAndExit}
+                disabled={isSavingExit}
+              >
+                Discard & Exit 🗑️
+              </button>
+              <button
+                className="phase-btn"
+                style={{ padding: '10px 16px', fontSize: '13px' }}
+                onClick={() => setShowExitConfirmModal(false)}
+                disabled={isSavingExit}
+              >
+                Keep Editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- UNLOCK CELEBRATION MODAL --- */}
       {showUnlockModal && newlyUnlockedCards.length > 0 && (
@@ -806,172 +906,44 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         </div>
       )}
 
-      {/* Main Library / Completed Deck Showcase */}
+      {/* Main Library / Deck Contents Showcase */}
       <div className="card-library-section">
-        <div className="phase-tracker">
-          <button
-            className={`phase-btn ${!showCompletedShowcase && buildPhase === 'MANE' ? 'active' : ''}`}
-            onClick={() => { setShowCompletedShowcase(false); setBuildPhase('MANE'); }}
-          >
-            1. Mane
-          </button>
-          <button
-            className={`phase-btn ${!showCompletedShowcase && buildPhase === 'STORY' ? 'active' : ''}`}
-            onClick={() => { setShowCompletedShowcase(false); setBuildPhase('STORY'); }}
-          >
-            2. Story
-          </button>
-          <button
-            className={`phase-btn ${!showCompletedShowcase && buildPhase === 'SCENE' ? 'active' : ''}`}
-            onClick={() => { setShowCompletedShowcase(false); setBuildPhase('SCENE'); }}
-          >
-            3. Scenes
-          </button>
-          <button
-            className={`phase-btn ${!showCompletedShowcase && buildPhase === 'MAIN' ? 'active' : ''}`}
-            onClick={() => { setShowCompletedShowcase(false); setBuildPhase('MAIN'); }}
-          >
-            4. Main Deck
-          </button>
-          {isDeckFull && (
+        {/* Sticky Top Header (Phase Tabs + Search/Filters + Show Deck Contents Toggle) */}
+        <div className="library-sticky-header">
+          <div className="phase-tracker">
             <button
-              className={`phase-btn showcase-tab-btn ${showCompletedShowcase ? 'active' : ''}`}
-              onClick={() => setShowCompletedShowcase(prev => !prev)}
+              className={`phase-btn ${!showDeckContents && buildPhase === 'MANE' ? 'active' : ''}`}
+              onClick={() => activatePhase('MANE')}
             >
-              ✦ Deck Showcase (70/70)
+              1. Mane
             </button>
-          )}
-        </div>
-
-        {showCompletedShowcase && isDeckFull ? (
-          <div className="completed-deck-showcase">
-            <div className="showcase-header-banner">
-              <div>
-                <h2 className="showcase-deck-title">{deckName}</h2>
-                <span className="showcase-deck-subtitle">
-                  {deckElement || 'Unaligned'} Element • 70 / 70 Cards Complete
-                </span>
-              </div>
-              <button
-                className="phase-btn"
-                style={{ flex: '0 0 auto', padding: '8px 16px' }}
-                onClick={() => setShowCompletedShowcase(false)}
-              >
-                Browse Card Pool
-              </button>
-            </div>
-
-            {/* Section 1: Mane Character & Story Arc */}
-            <div className="showcase-section">
-              <h3 className="showcase-section-title">Mane Character & Story Deck</h3>
-              <div className="showcase-top-row">
-                {maneCharacter && (
-                  <div
-                    className="stacked-deck-slot"
-                    onClick={() => openInspector(maneCharacter)}
-                    onContextMenu={(e) => handleContextMenu(e, maneCharacter)}
-                  >
-                    <div className="card-copy-stack count-1">
-                      <img src={maneCharacter.image_url} alt={maneCharacter.name} className="stacked-copy-img layer-0" />
-                    </div>
-                    <div className="diamond-count-wrapper">
-                      <div className="diamond-badge"><span>1</span></div>
-                      <span className="diamond-copies-label">Mane</span>
-                    </div>
-                  </div>
-                )}
-
-                {storyDeck.length > 0 && (
-                  <div
-                    className="stacked-deck-slot story-showcase-slot"
-                    onClick={() => openInspector(storyDeck[0], storyDeck)}
-                    onContextMenu={(e) => handleContextMenu(e, storyDeck[0], storyDeck)}
-                  >
-                    <div className={`story-copy-stack count-${Math.min(storyDeck.length, 4)}`}>
-                      {storyDeck.slice(0, 4).map((sc, idx) => (
-                        <img
-                          key={`${sc.id}-${idx}`}
-                          src={sc.image_url}
-                          alt={sc.name}
-                          className={`stacked-story-img layer-${idx}`}
-                        />
-                      ))}
-                    </div>
-                    <div className="diamond-count-wrapper">
-                      <div className="diamond-badge"><span>{storyDeck.length}</span></div>
-                      <span className="diamond-copies-label">Stages</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Section 2: Scene Deck */}
-            <div className="showcase-section">
-              <h3 className="showcase-section-title">Scene Deck ({sceneDeck.length}/15)</h3>
-              <div className="showcase-cards-grid">
-                {groupedScenes.map((group) => (
-                  <div
-                    key={group.card.id}
-                    className="stacked-deck-slot"
-                    onClick={() => openInspector(group.card)}
-                    onContextMenu={(e) => handleContextMenu(e, group.card)}
-                  >
-                    <div className={`card-copy-stack count-${Math.min(group.count, 5)}`}>
-                      {group.copies.slice(0, 5).map((copyCard, idx) => (
-                        <img
-                          key={`${copyCard.id}-${idx}`}
-                          src={copyCard.image_url}
-                          alt={copyCard.name}
-                          className={`stacked-copy-img layer-${idx}`}
-                        />
-                      ))}
-                    </div>
-                    <div className="diamond-count-wrapper">
-                      <div className="diamond-badge"><span>{group.count}</span></div>
-                      <span className="diamond-copies-label">
-                        {group.count === 1 ? 'Copy' : 'Copies'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Section 3: Main Deck */}
-            <div className="showcase-section">
-              <h3 className="showcase-section-title">Main Deck ({mainDeck.length}/50)</h3>
-              <div className="showcase-cards-grid">
-                {groupedMain.map((group) => (
-                  <div
-                    key={group.card.id}
-                    className="stacked-deck-slot"
-                    onClick={() => openInspector(group.card)}
-                    onContextMenu={(e) => handleContextMenu(e, group.card)}
-                  >
-                    <div className={`card-copy-stack count-${Math.min(group.count, 5)}`}>
-                      {group.copies.slice(0, 5).map((copyCard, idx) => (
-                        <img
-                          key={`${copyCard.id}-${idx}`}
-                          src={copyCard.image_url}
-                          alt={copyCard.name}
-                          className={`stacked-copy-img layer-${idx}`}
-                        />
-                      ))}
-                    </div>
-                    <div className="diamond-count-wrapper">
-                      <div className="diamond-badge"><span>{group.count}</span></div>
-                      <span className="diamond-copies-label">
-                        {group.count === 1 ? 'Copy' : 'Copies'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <button
+              className={`phase-btn ${!showDeckContents && buildPhase === 'STORY' ? 'active' : ''}`}
+              onClick={() => activatePhase('STORY')}
+            >
+              2. Story
+            </button>
+            <button
+              className={`phase-btn ${!showDeckContents && buildPhase === 'SCENE' ? 'active' : ''}`}
+              onClick={() => activatePhase('SCENE')}
+            >
+              3. Scenes
+            </button>
+            <button
+              className={`phase-btn ${!showDeckContents && buildPhase === 'MAIN' ? 'active' : ''}`}
+              onClick={() => activatePhase('MAIN')}
+            >
+              4. Main Deck
+            </button>
+            <button
+              className={`phase-btn showcase-tab-btn ${showDeckContents ? 'active' : ''}`}
+              onClick={() => setShowDeckContents(prev => !prev)}
+            >
+              {showDeckContents ? '📖 Browse Library' : `✦ Show Deck Contents (${totalCards}/70)`}
+            </button>
           </div>
-        ) : (
-          <>
+
+          {!showDeckContents && (
             <div className="filters-bar">
               <input 
                 type="text" 
@@ -1005,67 +977,209 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                 <span>Show Locked 🔒</span>
               </label>
             </div>
+          )}
+        </div>
 
-            {loading ? (
-              <div className="loading-sparkles">Gathering cards... ✨</div>
-            ) : (
-              <div className="card-grid" style={{ opacity: isStarter ? 0.5 : 1, pointerEvents: isStarter ? 'none' : 'auto' }}>
-                {buildPhase === 'STORY' ? (
-                  Object.entries(storyGroups).map(([groupKey, group]) => {
-                    const displayName = group[0]?.name ? group[0].name.split(/[-–]/)[0].trim() : groupKey;
-                    const isLocked = group.some(c => isCardLocked(c));
-                    return (
-                      <div 
-                        key={groupKey} 
-                        className={`story-stack ${isLocked ? 'locked' : ''}`} 
-                        onClick={() => {
-                          if (isLocked) alert('You must unlock this alternate art first!');
-                          else addStoryGroup(group);
-                        }}
-                        onContextMenu={(e) => handleContextMenu(e, group[0], group)}
-                        onTouchStart={() => handleTouchStart(group[0], group)}
-                        onTouchEnd={handleTouchEnd}
-                      >
-                        {group.map((card) => (
-                          <img 
-                            key={card.id}
-                            className="story-card-layer"
-                            src={card.image_url} 
-                            alt={card.name} 
-                          />
-                        ))}
-                        {isLocked && <div className="lock-icon">🔒</div>}
-                        <div className="story-stack-label">{displayName} {isLocked ? '(Locked)' : `(${group.length}/4)`}</div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  displayCards.map(card => {
-                    const isLocked = isCardLocked(card);
-                    return (
-                      <div 
-                        key={card.id} 
-                        className={`card-item ${isLocked ? 'locked' : ''}`} 
-                        onClick={() => {
-                          if (isLocked) alert('You must unlock this rare card from a pack first!');
-                          else addCardToDeck(card);
-                        }}
-                        onContextMenu={(e) => handleContextMenu(e, card)}
-                        onTouchStart={() => handleTouchStart(card)}
-                        onTouchEnd={handleTouchEnd}
-                      >
-                        <img src={card.image_url} alt={card.name} loading="lazy" />
-                        {isLocked && <div className="lock-icon">🔒</div>}
-                      </div>
-                    );
-                  })
-                )}
+        {showDeckContents ? (
+          <div className="completed-deck-showcase">
+            <div className="showcase-header-banner">
+              <div>
+                <h2 className="showcase-deck-title">{deckName}</h2>
+                <span className="showcase-deck-subtitle">
+                  {deckElement || 'Unaligned'} Element • {totalCards} / 70 Cards
+                </span>
               </div>
+              <button
+                className="phase-btn"
+                style={{ flex: '0 0 auto', padding: '8px 16px' }}
+                onClick={() => setShowDeckContents(false)}
+              >
+                Back to Card Pool
+              </button>
+            </div>
+
+            {totalCards === 0 ? (
+              <div className="empty-zone" style={{ padding: '40px', fontSize: '15px' }}>
+                No cards in this deck yet. Switch back to the card pool to start building!
+              </div>
+            ) : (
+              <>
+                {/* Section 1: Mane Character & Story Arc */}
+                {(maneCharacter || storyDeck.length > 0) && (
+                  <div className="showcase-section">
+                    <h3 className="showcase-section-title">Mane Character & Story Deck</h3>
+                    <div className="showcase-top-row">
+                      {maneCharacter && (
+                        <div
+                          className="stacked-deck-slot"
+                          onClick={() => openInspector(maneCharacter)}
+                          onContextMenu={(e) => handleContextMenu(e, maneCharacter)}
+                        >
+                          <div className="card-copy-stack count-1">
+                            <img src={maneCharacter.image_url} alt={maneCharacter.name} className="stacked-copy-img layer-0" />
+                          </div>
+                          <div className="diamond-count-wrapper">
+                            <div className="diamond-badge"><span>1</span></div>
+                            <span className="diamond-copies-label">Mane</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {storyDeck.length > 0 && (
+                        <div
+                          className="stacked-deck-slot story-showcase-slot"
+                          onClick={() => openInspector(storyDeck[0], storyDeck)}
+                          onContextMenu={(e) => handleContextMenu(e, storyDeck[0], storyDeck)}
+                        >
+                          <div className={`story-copy-stack count-${Math.min(storyDeck.length, 4)}`}>
+                            {storyDeck.slice(0, 4).map((sc, idx) => (
+                              <img
+                                key={`${sc.id}-${idx}`}
+                                src={sc.image_url}
+                                alt={sc.name}
+                                className={`stacked-story-img layer-${idx}`}
+                              />
+                            ))}
+                          </div>
+                          <div className="diamond-count-wrapper">
+                            <div className="diamond-badge"><span>{storyDeck.length}</span></div>
+                            <span className="diamond-copies-label">Stages</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Section 2: Scene Deck */}
+                {groupedScenes.length > 0 && (
+                  <div className="showcase-section">
+                    <h3 className="showcase-section-title">Scene Deck ({sceneDeck.length}/15)</h3>
+                    <div className="showcase-cards-grid">
+                      {groupedScenes.map((group) => (
+                        <div
+                          key={group.card.id}
+                          className="stacked-deck-slot"
+                          onClick={() => openInspector(group.card)}
+                          onContextMenu={(e) => handleContextMenu(e, group.card)}
+                        >
+                          <div className={`card-copy-stack count-${Math.min(group.count, 5)}`}>
+                            {group.copies.slice(0, 5).map((copyCard, idx) => (
+                              <img
+                                key={`${copyCard.id}-${idx}`}
+                                src={copyCard.image_url}
+                                alt={copyCard.name}
+                                className={`stacked-copy-img layer-${idx}`}
+                              />
+                            ))}
+                          </div>
+                          <div className="diamond-count-wrapper">
+                            <div className="diamond-badge"><span>{group.count}</span></div>
+                            <span className="diamond-copies-label">
+                              {group.count === 1 ? 'Copy' : 'Copies'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Section 3: Main Deck */}
+                {groupedMain.length > 0 && (
+                  <div className="showcase-section">
+                    <h3 className="showcase-section-title">Main Deck ({mainDeck.length}/50)</h3>
+                    <div className="showcase-cards-grid">
+                      {groupedMain.map((group) => (
+                        <div
+                          key={group.card.id}
+                          className="stacked-deck-slot"
+                          onClick={() => openInspector(group.card)}
+                          onContextMenu={(e) => handleContextMenu(e, group.card)}
+                        >
+                          <div className={`card-copy-stack count-${Math.min(group.count, 5)}`}>
+                            {group.copies.slice(0, 5).map((copyCard, idx) => (
+                              <img
+                                key={`${copyCard.id}-${idx}`}
+                                src={copyCard.image_url}
+                                alt={copyCard.name}
+                                className={`stacked-copy-img layer-${idx}`}
+                              />
+                            ))}
+                          </div>
+                          <div className="diamond-count-wrapper">
+                            <div className="diamond-badge"><span>{group.count}</span></div>
+                            <span className="diamond-copies-label">
+                              {group.count === 1 ? 'Copy' : 'Copies'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
-          </>
+          </div>
+        ) : loading ? (
+          <div className="loading-sparkles">Gathering cards... ✨</div>
+        ) : (
+          <div className="card-grid" style={{ opacity: isStarter ? 0.5 : 1, pointerEvents: isStarter ? 'none' : 'auto' }}>
+            {buildPhase === 'STORY' ? (
+              Object.entries(storyGroups).map(([groupKey, group]) => {
+                const displayName = group[0]?.name ? group[0].name.split(/[-–]/)[0].trim() : groupKey;
+                const isLocked = group.some(c => isCardLocked(c));
+                return (
+                  <div 
+                    key={groupKey} 
+                    className={`story-stack ${isLocked ? 'locked' : ''}`} 
+                    onClick={() => {
+                      if (isLocked) alert('You must unlock this alternate art first!');
+                      else addStoryGroup(group);
+                    }}
+                    onContextMenu={(e) => handleContextMenu(e, group[0], group)}
+                    onTouchStart={() => handleTouchStart(group[0], group)}
+                    onTouchEnd={handleTouchEnd}
+                  >
+                    {group.map((card) => (
+                      <img 
+                        key={card.id}
+                        className="story-card-layer"
+                        src={card.image_url} 
+                        alt={card.name} 
+                      />
+                    ))}
+                    {isLocked && <div className="lock-icon">🔒</div>}
+                    <div className="story-stack-label">{displayName} {isLocked ? '(Locked)' : `(${group.length}/4)`}</div>
+                  </div>
+                );
+              })
+            ) : (
+              displayCards.map(card => {
+                const isLocked = isCardLocked(card);
+                return (
+                  <div 
+                    key={card.id} 
+                    className={`card-item ${isLocked ? 'locked' : ''}`} 
+                    onClick={() => {
+                      if (isLocked) alert('You must unlock this rare card from a pack first!');
+                      else addCardToDeck(card);
+                    }}
+                    onContextMenu={(e) => handleContextMenu(e, card)}
+                    onTouchStart={() => handleTouchStart(card)}
+                    onTouchEnd={handleTouchEnd}
+                  >
+                    <img src={card.image_url} alt={card.name} loading="lazy" />
+                    {isLocked && <div className="lock-icon">🔒</div>}
+                  </div>
+                );
+              })
+            )}
+          </div>
         )}
       </div>
 
+      {/* Right Deck Zones Panel (Auto-Collapses Inactive Zones) */}
       <div className="deck-panel-section">
         <button 
           onClick={handleReturnToStable} 
@@ -1128,43 +1242,71 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         </div>
 
         <div className="deck-zones-container">
-          <div className="deck-zone">
-            <h3>Mane Character (1)</h3>
-            {maneCharacter ? (
-               <div className="deck-row mane-row" onClick={() => removeCard('mane', 0)}>
-                 <span>{maneCharacter.name}</span>
-                 {!isStarter && <span className="remove-tag">✕</span>}
-               </div>
-            ) : <div className="empty-zone">Select a Mane Character</div>}
-          </div>
-
-          <div className="deck-zone">
-            <h3>Story Deck ({storyDeck.length}/4)</h3>
-            {storyDeck.length > 0 ? (
-              storyDeck.map((c, i) => (
-                <div key={i} className="deck-row" onClick={() => removeCard('story', i)}>
-                  <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
+          {/* Collapsible Zone 1: Mane Character */}
+          <div className={`deck-zone ${collapsedZones.MANE ? 'collapsed' : ''}`}>
+            <h3 className="collapsible-zone-header" onClick={() => toggleZoneCollapse('MANE')}>
+              <span>Mane Character ({maneCharacter ? 1 : 0}/1)</span>
+              <span className="collapse-chevron">{collapsedZones.MANE ? '▶' : '▼'}</span>
+            </h3>
+            {!collapsedZones.MANE && (
+              maneCharacter ? (
+                <div className="deck-row mane-row" onClick={() => removeCard('mane', 0)}>
+                  <span>{maneCharacter.name}</span>
+                  {!isStarter && <span className="remove-tag">✕</span>}
                 </div>
-              ))
-            ) : <div className="empty-zone">Select Story Cards</div>}
+              ) : <div className="empty-zone">Select a Mane Character</div>
+            )}
           </div>
 
-          <div className="deck-zone">
-            <h3>Scene Deck ({sceneDeck.length}/15)</h3>
-            {sceneDeck.map((c, i) => (
-              <div key={i} className="deck-row" onClick={() => removeCard('scene', i)}>
-                <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
-              </div>
-            ))}
+          {/* Collapsible Zone 2: Story Deck */}
+          <div className={`deck-zone ${collapsedZones.STORY ? 'collapsed' : ''}`}>
+            <h3 className="collapsible-zone-header" onClick={() => toggleZoneCollapse('STORY')}>
+              <span>Story Deck ({storyDeck.length}/4)</span>
+              <span className="collapse-chevron">{collapsedZones.STORY ? '▶' : '▼'}</span>
+            </h3>
+            {!collapsedZones.STORY && (
+              storyDeck.length > 0 ? (
+                storyDeck.map((c, i) => (
+                  <div key={i} className="deck-row" onClick={() => removeCard('story', i)}>
+                    <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
+                  </div>
+                ))
+              ) : <div className="empty-zone">Select Story Cards</div>
+            )}
           </div>
 
-          <div className="deck-zone main-deck-zone">
-            <h3>Main Deck ({mainDeck.length}/50)</h3>
-            {mainDeck.map((c, i) => (
-              <div key={i} className="deck-row" onClick={() => removeCard('main', i)}>
-                <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
-              </div>
-            ))}
+          {/* Collapsible Zone 3: Scene Deck */}
+          <div className={`deck-zone ${collapsedZones.SCENE ? 'collapsed' : ''}`}>
+            <h3 className="collapsible-zone-header" onClick={() => toggleZoneCollapse('SCENE')}>
+              <span>Scene Deck ({sceneDeck.length}/15)</span>
+              <span className="collapse-chevron">{collapsedZones.SCENE ? '▶' : '▼'}</span>
+            </h3>
+            {!collapsedZones.SCENE && (
+              sceneDeck.length > 0 ? (
+                sceneDeck.map((c, i) => (
+                  <div key={i} className="deck-row" onClick={() => removeCard('scene', i)}>
+                    <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
+                  </div>
+                ))
+              ) : <div className="empty-zone">Select Scene Cards</div>
+            )}
+          </div>
+
+          {/* Collapsible Zone 4: Main Deck */}
+          <div className={`deck-zone main-deck-zone ${collapsedZones.MAIN ? 'collapsed' : ''}`}>
+            <h3 className="collapsible-zone-header" onClick={() => toggleZoneCollapse('MAIN')}>
+              <span>Main Deck ({mainDeck.length}/50)</span>
+              <span className="collapse-chevron">{collapsedZones.MAIN ? '▶' : '▼'}</span>
+            </h3>
+            {!collapsedZones.MAIN && (
+              mainDeck.length > 0 ? (
+                mainDeck.map((c, i) => (
+                  <div key={i} className="deck-row" onClick={() => removeCard('main', i)}>
+                    <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
+                  </div>
+                ))
+              ) : <div className="empty-zone">Select Main Deck Cards</div>
+            )}
           </div>
         </div>
 
