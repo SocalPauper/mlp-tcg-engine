@@ -307,7 +307,7 @@
   overflow-x: auto;
 }
 
-/* Scene Card Slot + 90deg Clockwise Exhausted Rotation (MTG Tap style) */
+/* Scene Card Slot + 90deg Clockwise Exhausted Rotation */
 .scene-card-slot {
   width: 68px;
   height: 94px;
@@ -427,6 +427,11 @@
   border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
+/* Mobile camera toggle pill hidden on desktop */
+.mobile-camera-toggle {
+  display: none;
+}
+
 /* Player Fanned Hand */
 .player-hand-dock {
   display: flex;
@@ -499,7 +504,27 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  position: relative;
+}
+
+.vs-first-crown {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #fde047, #f59e0b);
+  color: #4a148c;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 4px 14px;
+  border-radius: 16px;
+  border: 2px solid #fff;
+  box-shadow: 0 0 20px rgba(253, 224, 71, 0.85);
+  animation: crownFloat 1.2s ease-in-out infinite;
+}
+
+.vs-first-crown-placeholder {
+  height: 31px;
 }
 
 .vs-fighter-card img {
@@ -565,6 +590,11 @@
   animation: loserFallOff 0.95s ease-in forwards;
 }
 
+@keyframes crownFloat {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-5px) scale(1.06); }
+}
+
 @keyframes winnerSlam {
   0% { transform: scale(1); }
   45% { transform: scale(1.18) translateX(25px); box-shadow: 0 0 40px #ffd700; }
@@ -588,14 +618,13 @@
 }
 
 /* ========================================================================= */
-/* MOBILE LANDSCAPE ZERO-SCROLL VIEWPORT & PORTRAIT ROTATE OVERLAY            */
+/* MOBILE LANDSCAPE SINGLE-MAT CAMERA VIEW & PORTRAIT ROTATE OVERLAY          */
 /* ========================================================================= */
 
 .portrait-rotate-overlay {
   display: none;
 }
 
-/* Portrait phone prompt encouraging horizontal tabletop play */
 @media screen and (max-width: 640px) and (orientation: portrait) {
   .portrait-rotate-overlay {
     position: fixed;
@@ -613,45 +642,59 @@
   }
 }
 
-/* Compact Zero-Scroll 100dvh Fit for Mobile Landscape Screens */
+/* Single-Mat Camera Mode on Mobile Landscape (Zero-Scroll, Zero-Overlap) */
 @media screen and (max-height: 560px) and (orientation: landscape) {
   .kayou-playmat-wrapper {
     height: 100dvh;
     min-height: 100dvh;
     overflow: hidden;
-    padding: 4px 10px 44px; /* Leaves room for docked bottom hand */
-    gap: 3px;
+    padding: 4px 10px 6px;
+    justify-content: flex-start;
+    gap: 4px;
+  }
+
+  .mobile-camera-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Hide whichever player mat is NOT currently focused by the camera */
+  .playmat-half.mobile-camera-hidden {
+    display: none;
   }
 
   .playmat-half {
+    flex: 1;
     padding: 4px 10px;
-    gap: 3px;
-    border-radius: 10px;
+    gap: 4px;
+    border-radius: 12px;
+    justify-content: space-between;
   }
 
   .player-hud-bar {
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .hud-pill {
-    padding: 1px 6px;
-    font-size: 9px;
+    padding: 1px 7px;
+    font-size: 10px;
   }
 
   .adventure-area-row {
-    gap: 14px;
+    gap: 18px;
   }
 
   .adventure-slot {
-    width: 48px;
-    height: 67px;
-    border-radius: 7px;
+    width: 66px;
+    height: 92px;
+    border-radius: 9px;
   }
 
   .side-portrait-zone {
-    width: 44px;
-    height: 61px;
-    border-radius: 7px;
+    width: 58px;
+    height: 81px;
+    border-radius: 8px;
   }
 
   .zone-caption {
@@ -659,20 +702,20 @@
   }
 
   .story-four-strip {
-    gap: 6px;
+    gap: 8px;
   }
 
   .story-stage-box {
-    width: 76px;
-    height: 54px;
-    border-radius: 6px;
+    width: 98px;
+    height: 70px;
+    border-radius: 7px;
   }
 
   .plan-card-overlay {
-    width: 24px;
-    height: 34px;
-    top: -4px;
-    right: -4px;
+    width: 30px;
+    height: 42px;
+    top: -5px;
+    right: -5px;
   }
 
   .resource-deck-row {
@@ -681,65 +724,65 @@
   }
 
   .scene-area-tray {
-    min-height: 56px;
-    padding: 3px 8px;
-    gap: 10px;
+    min-height: 72px;
+    padding: 4px 10px;
+    gap: 12px;
   }
 
   .scene-card-slot {
-    width: 38px;
-    height: 52px;
+    width: 48px;
+    height: 67px;
   }
 
   .scene-card-slot.exhausted {
-    margin: 0 7px;
+    margin: 0 9px;
   }
 
   .center-action-bar {
-    padding: 3px 10px;
-    margin: 2px 0;
-    border-radius: 9px;
+    padding: 4px 12px;
+    margin: 0;
+    border-radius: 10px;
+    order: -1; /* Places Action Bar cleanly at the very top of mobile screen */
   }
 
   .action-bar-status {
-    font-size: 10px;
+    font-size: 11px;
     gap: 6px;
   }
 
   .action-bar-btn {
-    padding: 3px 9px;
-    font-size: 10px;
+    padding: 4px 10px;
+    font-size: 11px;
   }
 
-  /* Docked Bottom Hand Drawer that raises smoothly on tap/hover */
+  /* Compact non-overlapping hand strip along bottom edge */
   .player-hand-dock {
-    position: fixed;
-    bottom: -58px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(45, 27, 54, 0.92);
-    border: 2px solid #f472b6;
-    border-bottom: none;
-    border-radius: 16px 16px 0 0;
-    padding: 6px 14px 8px;
-    min-height: auto;
-    z-index: 500;
-    transition: bottom 0.22s ease;
-  }
-
-  .player-hand-dock.mobile-expanded,
-  .player-hand-dock:hover {
-    bottom: 0;
+    position: relative;
+    bottom: auto;
+    left: auto;
+    transform: none;
+    background: rgba(45, 27, 54, 0.88);
+    border: 1.5px solid #f472b6;
+    border-radius: 12px;
+    padding: 4px 10px;
+    min-height: 76px;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .hand-card-item {
-    width: 64px;
-    height: 90px;
+    width: 50px;
+    height: 70px;
+  }
+
+  .hand-card-item:hover,
+  .hand-card-item.selected {
+    transform: translateY(-10px) scale(1.08);
   }
 
   .vs-fighter-card img {
-    width: 110px;
-    height: 154px;
+    width: 115px;
+    height: 161px;
   }
 
   .vs-emblem {

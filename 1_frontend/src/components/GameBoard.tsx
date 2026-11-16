@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './GameBoard.css';
 
 const CARD_BACK_URL = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp';
@@ -106,7 +106,10 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
   const [inspectedCard, setInspectedCard] = useState<CardDefinition | null>(null);
   const [visibleClashId, setVisibleClashId] = useState<number | null>(null);
   const [choosingPlanTarget, setChoosingPlanTarget] = useState(false);
-  const [mobileHandExpanded, setMobileHandExpanded] = useState(false);
+
+  // Mobile single-mat camera focus ('ME' | 'OPPONENT')
+  const [mobileCameraView, setMobileCameraView] = useState<'ME' | 'OPPONENT'>('ME');
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mySeat: '0' | '1' = seat === '1' ? '1' : '0';
   const oppSeat: '0' | '1' = mySeat === '0' ? '1' : '0';
@@ -116,31 +119,44 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
   const opp = gameState.players[oppSeat];
   const isMyTurn = !isSpectator && gameState.turnPlayerId === mySeat;
 
+  // Auto-focus mobile camera to the active turn player at the start of their turn
+  useEffect(() => {
+    if (isSpectator) return;
+    if (gameState.turnPlayerId === mySeat) {
+      setMobileCameraView('ME');
+    } else {
+      setMobileCameraView('OPPONENT');
+    }
+  }, [gameState.turnPlayerId, gameState.turnNumber, mySeat, isSpectator]);
+
+  // Automatically focus opponent's mat on mobile when selecting a face-down Plan card to intervene
+  useEffect(() => {
+    if (choosingPlanTarget) {
+      setMobileCameraView('OPPONENT');
+    }
+  }, [choosingPlanTarget]);
+
   // Attempt landscape orientation lock on mobile browsers that support it
   useEffect(() => {
     const orient = (window.screen as any)?.orientation;
     if (orient && typeof orient.lock === 'function') {
-      orient.lock('landscape').catch(() => {
-        // Ignored on browsers that require explicit fullscreen gesture first
-      });
+      orient.lock('landscape').catch(() => {});
     }
     return () => {
       if (orient && typeof orient.unlock === 'function') {
         try {
           orient.unlock();
-        } catch {
-          // Ignore unlock error
-        }
+        } catch {}
       }
     };
   }, []);
 
-  // Auto-advance VS Intro screen after 3.2 seconds
+  // Auto-advance VS Intro screen after 3.4 seconds
   useEffect(() => {
     if (gameState.phase === 'VS_INTRO' && !isSpectator) {
       const timer = setTimeout(() => {
         sendAction('ACK_VS_INTRO');
-      }, 3200);
+      }, 3400);
       return () => clearTimeout(timer);
     }
   }, [gameState.phase, isSpectator]);
@@ -168,7 +184,6 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     if (!isMyTurn || gameState.phase !== 'MAIN_PHASE' || !selectedHandCard) return;
     sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane });
     setSelectedHandCardId(null);
-    setMobileHandExpanded(false);
   };
 
   const handleContextMenu = (e: React.MouseEvent, card: CardDefinition | null) => {
@@ -176,7 +191,25 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     if (card) setInspectedCard(card);
   };
 
+  const handleTouchStartInspect = (card: CardDefinition | null) => {
+    if (!card) return;
+    longPressTimer.current = setTimeout(() => {
+      setInspectedCard(card);
+    }, 450);
+  };
+
+  const handleTouchEndInspect = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
   const renderPlayerHalf = (player: PlayerState, isOpponent: boolean) => {
+    const isHiddenOnMobile =
+      (isOpponent && mobileCameraView === 'ME') ||
+      (!isOpponent && mobileCameraView === 'OPPONENT');
+
     const isInspirePromptMine =
       !isOpponent &&
       gameState.phase === 'CONTACT_INSPIRE' &&
@@ -219,6 +252,8 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
               }`}
               onClick={() => !isOpponent && handleAdventureSlotClick(laneKey)}
               onContextMenu={(e) => handleContextMenu(e, slot.character)}
+              onTouchStart={() => handleTouchStartInspect(slot.character)}
+              onTouchEnd={handleTouchEndInspect}
             >
               {slot.character ? (
                 <div className="deployed-char-card">
@@ -230,7 +265,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
                 </div>
               ) : (
                 <span style={{ fontSize: '9px', color: '#9333ea', fontWeight: 700, textAlign: 'center', padding: '2px' }}>
-                  {isTargetable ? 'Deploy' : laneKey.toUpperCase()}
+                  {isTargetable ? 'Tap to Deploy' : laneKey.toUpperCase()}
                 </span>
               )}
             </div>
@@ -245,6 +280,8 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         <div
           className="side-portrait-zone"
           onContextMenu={(e) => handleContextMenu(e, player.leader)}
+          onTouchStart={() => handleTouchStartInspect(player.leader)}
+          onTouchEnd={handleTouchEndInspect}
         >
           {player.leader?.imageUrl ? (
             <img src={player.leader.imageUrl} alt={player.leader.name} />
@@ -261,6 +298,8 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
               key={st.stage}
               className="story-stage-box"
               onContextMenu={(e) => handleContextMenu(e, st.isStoryCompleted ? st.storyCard : null)}
+              onTouchStart={() => handleTouchStartInspect(st.isStoryCompleted ? st.storyCard : null)}
+              onTouchEnd={handleTouchEndInspect}
             >
               {st.isStoryCompleted && st.storyCard?.imageUrl ? (
                 <img src={st.storyCard.imageUrl} alt={st.storyCard.name} />
@@ -283,6 +322,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
                         targetPlanStageIndex: idx,
                       });
                       setChoosingPlanTarget(false);
+                      setMobileCameraView('ME');
                     }
                   }}
                 >
@@ -300,6 +340,10 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
           onContextMenu={(e) =>
             handleContextMenu(e, player.retirement[player.retirement.length - 1] || null)
           }
+          onTouchStart={() =>
+            handleTouchStartInspect(player.retirement[player.retirement.length - 1] || null)
+          }
+          onTouchEnd={handleTouchEndInspect}
         >
           {player.retirement.length > 0 ? (
             <img
@@ -353,6 +397,8 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
                     if (canInspire) sendAction('INSPIRE_SCENE', { sceneIndex: idx });
                   }}
                   onContextMenu={(e) => handleContextMenu(e, sc.isFaceUp ? sc.card : null)}
+                  onTouchStart={() => handleTouchStartInspect(sc.isFaceUp ? sc.card : null)}
+                  onTouchEnd={handleTouchEndInspect}
                 >
                   {sc.isFaceUp && sc.card.imageUrl ? (
                     <img src={sc.card.imageUrl} alt={sc.card.name} />
@@ -382,7 +428,11 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     );
 
     return (
-      <div className={`playmat-half ${isOpponent ? 'opponent-half' : ''}`}>
+      <div
+        className={`playmat-half ${isOpponent ? 'opponent-half' : ''} ${
+          isHiddenOnMobile ? 'mobile-camera-hidden' : ''
+        }`}
+      >
         <div className="player-hud-bar">
           <div>
             <span>{isOpponent ? '👑 Opponent: ' : '✨ You: '}</span>
@@ -424,15 +474,20 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         <div style={{ fontSize: '48px' }}>📱🔄</div>
         <h2 style={{ margin: 0, color: '#fbcfe8' }}>Rotate Device to Landscape</h2>
         <p style={{ fontSize: '14px', color: '#e9d5ff', maxWidth: '300px' }}>
-          Equestria Clash uses a full horizontal tabletop playmat so every Adventure lane, Story stage, and Scene card fits without scrolling!
+          Equestria Clash uses a horizontal tabletop view so every Adventure lane, Story stage, and Scene card fits cleanly without scrolling!
         </p>
       </div>
 
-      {/* 1. Street Fighter Style VS Intro Splash */}
+      {/* 1. Street Fighter Style VS Intro Splash with Crown Above First Player */}
       {gameState.phase === 'VS_INTRO' && (
         <div className="vs-intro-overlay">
           <div className="vs-fighters-stage">
             <div className="vs-fighter-card">
+              {gameState.firstPlayerId === '0' ? (
+                <div className="vs-first-crown">👑 Goes First!</div>
+              ) : (
+                <div className="vs-first-crown-placeholder" />
+              )}
               <div style={{ fontSize: '18px', fontWeight: 900, color: '#fbcfe8' }}>
                 {gameState.players['0'].displayName}
               </div>
@@ -448,6 +503,11 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
             <div className="vs-emblem">VS</div>
 
             <div className="vs-fighter-card">
+              {gameState.firstPlayerId === '1' ? (
+                <div className="vs-first-crown">👑 Goes First!</div>
+              ) : (
+                <div className="vs-first-crown-placeholder" />
+              )}
               <div style={{ fontSize: '18px', fontWeight: 900, color: '#fbcfe8' }}>
                 {gameState.players['1'].displayName}
               </div>
@@ -467,12 +527,12 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
               border: '2px solid #ffd700',
               padding: '8px 22px',
               borderRadius: '18px',
-              fontSize: '16px',
+              fontSize: '15px',
               fontWeight: 900,
               color: '#fde047',
             }}
           >
-            🎲{' '}
+            👑{' '}
             {gameState.firstPlayerId === '0'
               ? gameState.players['0'].displayName
               : gameState.players['1'].displayName}{' '}
@@ -481,7 +541,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 2. Simultaneous Opening Hand Mulligan Modal */}
+      {/* 2. Simultaneous Opening Hand Mulligan Modal (Supports Right-Click & Long-Press Card Zoom) */}
       {gameState.phase === 'MULLIGAN' && !isSpectator && (
         <div
           style={{
@@ -497,18 +557,24 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
             padding: '16px',
           }}
         >
-          <h2 style={{ fontSize: '22px', color: '#fbcfe8', marginBottom: '6px' }}>
+          <h2 style={{ fontSize: '22px', color: '#fbcfe8', marginBottom: '4px' }}>
             ✨ Opening Hand Mulligan
           </h2>
-          <p style={{ fontSize: '13px', color: '#e9d5ff', marginBottom: '16px', textAlign: 'center' }}>
+          <p style={{ fontSize: '12px', color: '#e9d5ff', marginBottom: '14px', textAlign: 'center' }}>
             {me.mulliganStatus === 'PENDING'
-              ? 'You may perform 1 full hand mulligan (place all 5 cards on bottom and draw 5 new cards).'
+              ? 'Right-click or long-press any card to inspect. Keep hand or perform 1 full mulligan:'
               : `Waiting for ${opp.displayName} to keep or mulligan...`}
           </p>
 
           <div style={{ display: 'flex', gap: '10px', marginBottom: '18px', flexWrap: 'wrap', justifyContent: 'center' }}>
             {me.hand.map((c, idx) => (
-              <div key={`${c.id}-${idx}`} style={{ width: '110px', height: '154px' }}>
+              <div
+                key={`${c.id}-${idx}`}
+                style={{ width: '105px', height: '147px', cursor: 'pointer' }}
+                onContextMenu={(e) => handleContextMenu(e, c)}
+                onTouchStart={() => handleTouchStartInspect(c)}
+                onTouchEnd={handleTouchEndInspect}
+              >
                 <img
                   src={c.imageUrl}
                   alt={c.name}
@@ -610,17 +676,18 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* Card Inspector Modal (Right-Click any card) */}
+      {/* Card Inspector Modal (Right-Click or Long-Press any card, including Mulligan) */}
       {inspectedCard && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.75)',
-            zIndex: 9900,
+            background: 'rgba(0,0,0,0.78)',
+            zIndex: 9950,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            padding: '16px',
           }}
           onClick={() => setInspectedCard(null)}
         >
@@ -629,10 +696,12 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
               background: '#1e1124',
               border: '2px solid #f472b6',
               borderRadius: '16px',
-              padding: '20px',
+              padding: '18px',
               display: 'flex',
-              gap: '20px',
-              maxWidth: '600px',
+              gap: '18px',
+              maxWidth: '580px',
+              maxHeight: '88dvh',
+              overflowY: 'auto',
               color: '#fff',
             }}
             onClick={(e) => e.stopPropagation()}
@@ -640,14 +709,14 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
             <img
               src={inspectedCard.imageUrl}
               alt={inspectedCard.name}
-              style={{ width: '190px', height: '266px', objectFit: 'fill', borderRadius: '12px' }}
+              style={{ width: '175px', height: '245px', objectFit: 'fill', borderRadius: '12px', flexShrink: 0 }}
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '18px' }}>{inspectedCard.name}</h3>
+              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '17px' }}>{inspectedCard.name}</h3>
               <div style={{ fontSize: '12px', color: '#d8b4fe' }}>
                 {inspectedCard.type} • {inspectedCard.element} • Cost: {inspectedCard.cost} • Power: {inspectedCard.power}
               </div>
-              <p style={{ fontSize: '13px', lineHeight: 1.45, color: '#f3e8ff' }}>
+              <p style={{ fontSize: '13px', lineHeight: 1.45, color: '#f3e8ff', margin: 0 }}>
                 {inspectedCard.effectText || 'No special ability text.'}
               </p>
               <button
@@ -665,7 +734,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
       {/* Opponent Mirrored Playmat */}
       {renderPlayerHalf(opp, true)}
 
-      {/* Dedicated Center Action Bar */}
+      {/* Dedicated Center Action Bar (Includes Mobile Single-Mat Camera Toggle) */}
       <div className="center-action-bar">
         <div className="action-bar-status">
           <span className="turn-badge">TURN {gameState.turnNumber}</span>
@@ -682,6 +751,14 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
 
         <div className="action-bar-buttons">
+          {/* Mobile Camera View Toggle between My Mat and Opponent's Mat */}
+          <button
+            className="action-bar-btn secondary mobile-camera-toggle"
+            onClick={() => setMobileCameraView(prev => (prev === 'ME' ? 'OPPONENT' : 'ME'))}
+          >
+            {mobileCameraView === 'ME' ? "👁️ Opponent's Mat" : '👁️ My Mat'}
+          </button>
+
           {isMyTurn && gameState.phase === 'MAIN_PHASE' && (
             <>
               {me.turnsTaken > 1 ? (
@@ -704,7 +781,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
             gameState.contactState?.promptPlayerId === mySeat && (
               <>
                 <span style={{ fontSize: '11px', color: '#fde047', fontWeight: 800 }}>
-                  Click face-up Scene to Inspire (+1) or Pass:
+                  Tap face-up Scene to Inspire (+1) or Pass:
                 </span>
                 <button className="action-bar-btn gold" onClick={() => sendAction('PASS_INSPIRE')}>
                   Pass Inspire ✓
@@ -735,7 +812,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
                 }}
               >
                 {choosingPlanTarget
-                  ? '👆 Click Opponent Plan Card!'
+                  ? '👆 Tap Opponent Plan Card!'
                   : '⚡ Intervene Plan'}
               </button>
             </>
@@ -758,12 +835,9 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
       {/* Player Playmat */}
       {renderPlayerHalf(me, false)}
 
-      {/* Player Fanned Hand (Expandable on Mobile Landscape Tap) */}
+      {/* Player Hand Dock (Non-overlapping on Mobile Landscape) */}
       {!isSpectator && (
-        <div
-          className={`player-hand-dock ${mobileHandExpanded ? 'mobile-expanded' : ''}`}
-          onClick={() => setMobileHandExpanded(true)}
-        >
+        <div className="player-hand-dock">
           {me.hand.map((card, idx) => {
             const isSelected = selectedHandCardId === card.id;
             const canAfford = (card.cost || 0) <= availableHarmony;
@@ -773,16 +847,15 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
                 className={`hand-card-item ${isSelected ? 'selected' : ''} ${
                   !canAfford ? 'unaffordable' : ''
                 }`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!mobileHandExpanded) {
-                    setMobileHandExpanded(true);
-                  }
+                onClick={() => {
                   if (!isMyTurn || gameState.phase !== 'MAIN_PHASE') return;
                   if (!canAfford) return;
+                  if (mobileCameraView !== 'ME') setMobileCameraView('ME');
                   setSelectedHandCardId(isSelected ? null : card.id);
                 }}
                 onContextMenu={(e) => handleContextMenu(e, card)}
+                onTouchStart={() => handleTouchStartInspect(card)}
+                onTouchEnd={handleTouchEndInspect}
               >
                 <img src={card.imageUrl} alt={card.name} />
               </div>
