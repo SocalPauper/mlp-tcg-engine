@@ -35,7 +35,7 @@ const CARD_BACK_URL = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards
 export default function ShopView() {
   const [points, setPoints] = useState<number>(0);
   const [deals, setDeals] = useState<WeeklyDeal[]>([]);
-  const [tiers, setTiers] = useState<any>({});
+  const [tiers, setTiers] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [pulledCards, setPulledCards] = useState<CardItem[] | null>(null);
   const [purchasing, setPurchasing] = useState(false);
@@ -123,7 +123,7 @@ export default function ShopView() {
         <p className="shop-section-desc">Choose a pack tier to unlock random cards for your stable collection!</p>
         
         <div className="pack-tiers-grid">
-          {Object.entries(tiers).map(([key, tier: any]) => (
+          {Object.entries(tiers).map(([key, tier]) => (
             <div key={key} className="pack-tier-card">
               <span className="pack-price-tag">{tier.cost} 🪙</span>
               <h4>{tier.name}</h4>
