@@ -363,9 +363,10 @@ export function playCardFromHand(
 }
 
 /**
- * Official Kayou "Adventure:" Activated Tap Ability.
- * Exhausts (rotates 90deg clockwise) the character in `lane` during MAIN_PHASE so it cannot
- * attack/block this turn, and executes its printed Adventure effect (e.g., Winona draw/boost).
+ * Official Kayou Rules v1.3.0 "Adventure:" Activated Tap Ability:
+ * Exhausts (rotates 90deg clockwise) the character in `lane` during MAIN_PHASE to resolve its
+ * Adventure effect. Per official rules, tapping a Character for its Adventure ability does NOT
+ * prevent that Character from participating in mandatory Contact during the Contact Phase.
  */
 export function activateCharacterAdventureAbility(
   state: KayouGameState,
@@ -383,19 +384,17 @@ export function activateCharacterAdventureAbility(
 
   let updatedPlayer: PlayerState = {
     ...player,
-    actedLanesThisTurn: [...player.actedLanesThisTurn, lane],
     adventureArea: {
       ...player.adventureArea,
       [lane]: {
         ...slot,
-        isExhausted: true, // Tapped 90deg clockwise
+        isExhausted: true, // Tapped 90deg clockwise; still engages in Contact!
       },
     },
   };
 
   let announcementMsg = `${player.displayName} exhausted ${slot.character.name} to activate Adventure!`;
 
-  // Resolve printed Adventure effect (Draw 1 card, or +1 Power/Inspiration to another character)
   if (/draw\s+1|draw\s+a\s+card/i.test(text) && updatedPlayer.mainDeck.length > 0) {
     const drawn = updatedPlayer.mainDeck[0];
     updatedPlayer = {
@@ -421,7 +420,7 @@ export function activateCharacterAdventureAbility(
           },
         },
       };
-      announcementMsg += ` Granted +1 Power to ${otherSlot.character!.name}!`;
+      announcementMsg += ` Granted +1 Inspiration to ${otherSlot.character!.name}!`;
     }
   }
 
@@ -533,6 +532,12 @@ function getSlotTotalPower(slot: {
   return base + itemBonus + slot.inspoBoost;
 }
 
+/**
+ * Official Kayou Rules v1.3.0 Contact Phase:
+ * - Every Character in the Adventure Area (including tapped/exhausted Characters) MUST engage in Contact.
+ * - First Player resolves lanes Left -> Center -> Right.
+ * - Second Player resolves lanes Right -> Center -> Left.
+ */
 export function startContactPhase(state: KayouGameState, playerId: '0' | '1'): KayouGameState {
   if (state.phase !== 'MAIN_PHASE' || state.turnPlayerId !== playerId) return state;
   const attacker = state.players[playerId];
@@ -541,12 +546,14 @@ export function startContactPhase(state: KayouGameState, playerId: '0' | '1'): K
     return endTurn(state, playerId);
   }
 
-  // Only upright (non-exhausted) characters can attack!
-  const allLanes: LaneKey[] = ['left', 'center', 'right'];
-  const activeAttackLanes = allLanes.filter(
+  const orderedLanes: LaneKey[] =
+    playerId === state.firstPlayerId
+      ? ['left', 'center', 'right']
+      : ['right', 'center', 'left'];
+
+  const activeAttackLanes = orderedLanes.filter(
     (l) =>
       attacker.adventureArea[l].character !== null &&
-      !attacker.adventureArea[l].isExhausted &&
       !attacker.actedLanesThisTurn.includes(l)
   );
 
@@ -571,15 +578,16 @@ function advanceToNextAttackLane(
     const lane = remaining[0];
     const atkSlot = attacker.adventureArea[lane];
 
-    if (!atkSlot.character || atkSlot.isExhausted || attacker.actedLanesThisTurn.includes(lane)) {
+    // Both upright and tapped Characters must engage in Contact
+    if (!atkSlot.character || attacker.actedLanesThisTurn.includes(lane)) {
       remaining.shift();
       continue;
     }
 
     const defSlot = defender.adventureArea[lane];
 
-    // Only an upright (non-exhausted) defender blocks/intercepts in the lane
-    if (defSlot.character && !defSlot.isExhausted) {
+    // Any Character in the opposing lane (upright or tapped) engages in Contact
+    if (defSlot.character) {
       return {
         ...state,
         phase: 'CONTACT_INSPIRE',
@@ -1224,7 +1232,6 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     },
   };
 
-  // Start of next player's turn: Ready (untap) both exhausted Scenes AND exhausted Adventure Characters!
   const startingPlayer = state.players[nextPlayerId];
   const newTurnsTaken = startingPlayer.turnsTaken + 1;
 
