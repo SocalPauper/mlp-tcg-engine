@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
-import { initDatabase, pool } from '../4_data/db.js';
+import { initDatabase, pool } from './4_data/db.js';
 
 import authRouter from './routes/auth.js';
 import cardsRouter from './routes/cards.js';
@@ -94,7 +94,7 @@ async function startServer() {
     console.error('[DATABASE INIT ERROR]', err.message);
   }
 
-  // Mount REST Routes
+  // Mount Routes
   app.use('/api/auth', authRouter);
   app.use('/api/users', authRouter);
   app.use('/api/shop', shopsRouter);
@@ -109,7 +109,6 @@ async function startServer() {
     res.json({ success: true, announcement: "Welcome to Equestria Clash TCG Online!" });
   });
 
-  // Create HTTP server and attach WebSocket GameManager
   const server = createServer(app);
   const gameManager = new GameManager(server);
 
