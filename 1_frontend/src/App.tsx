@@ -19,6 +19,7 @@ interface User {
   isSafeMode: boolean;
   isVerified: boolean;
   role?: string;
+  reward_points?: number;
 }
 
 interface AuthContextType {
@@ -86,35 +87,14 @@ type BuilderMode = 'CREATE' | 'EDIT' | 'VIEW' | 'COPY';
 function AppContent() {
   const [currentTab, setCurrentTab] = useState<string>('hub');
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [isRegisterMode, setIsRegisterMode] = useState(false);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const { user, login, register } = useAuth();
 
   // State to track if the DeckBuilder is open, and what deck it's editing
   const [builderConfig, setBuilderConfig] = useState<{ id: string | null, mode: BuilderMode } | null>(null);
 
   const handleTabChange = (tab: string) => {
     setCurrentTab(tab);
-    // If they click away from the Stable tab, close the builder
     if (tab !== 'stable') {
       setBuilderConfig(null);
-    }
-  };
-
-  const handleAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (isRegisterMode) {
-        await register({ username, password, email: `${username}@mlp.local`, displayName: username });
-      } else {
-        await login({ username, password });
-      }
-      setShowAuthModal(false);
-      setUsername('');
-      setPassword('');
-    } catch (err) {
-      alert('Authentication failed. Please check your credentials.');
     }
   };
 
@@ -125,7 +105,6 @@ function AppContent() {
       <main className="main-content-area">
         {currentTab === 'hub' && <MainHub />}
         
-        {/* Routing for The Stable vs Deck Builder */}
         {currentTab === 'stable' && (
           builderConfig ? (
             <DeckBuilder 
@@ -147,37 +126,8 @@ function AppContent() {
         {currentTab === 'admin' && <AdminPanel />}
       </main>
 
-      {/* Login / Registration Modal */}
-      {showAuthModal && (
-        <div className="auth-modal-overlay">
-          <div className="auth-modal panel-box">
-            <h2>{isRegisterMode ? 'Create Account' : 'Login to Equestria Clash'}</h2>
-            <form onSubmit={handleAuthSubmit}>
-              <input 
-                type="text" 
-                placeholder="Username" 
-                value={username} 
-                onChange={e => setUsername(e.target.value)} 
-                required
-              />
-              <input 
-                type="password" 
-                placeholder="Password" 
-                value={password} 
-                onChange={e => setPassword(e.target.value)} 
-                required
-              />
-              <button type="submit" className="mlp-btn primary">
-                {isRegisterMode ? 'Register' : 'Login'}
-              </button>
-            </form>
-            <p className="toggle-auth-mode" onClick={() => setIsRegisterMode(!isRegisterMode)}>
-              {isRegisterMode ? 'Already have an account? Login' : "Don't have an account? Register"}
-            </p>
-            <button onClick={() => setShowAuthModal(false)} className="mlp-btn secondary">Close</button>
-          </div>
-        </div>
-      )}
+      {/* Full-featured AuthModal component with all required database fields */}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
     </div>
   );
 }
