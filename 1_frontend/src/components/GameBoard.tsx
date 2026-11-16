@@ -105,6 +105,15 @@ export interface LiveGameState {
   announcements: { type: string; message: string; timestamp: number }[];
 }
 
+interface PowerBreakdownDetails {
+  cardName: string;
+  laneName: string;
+  basePower: number;
+  itemDetails: { name: string; bonus: number }[];
+  inspoBoost: number;
+  totalPower: number;
+}
+
 interface GameBoardProps {
   ws: WebSocket;
   gameState: LiveGameState;
@@ -116,8 +125,14 @@ function checkSceneInspireEligibility(
   scene: SceneCardInPlay,
   targetChar: CardDefinition | null
 ): { eligible: boolean; reason?: string } {
-  if (!scene.isFaceUp || scene.isLockedFaceDown || !targetChar) {
-    return { eligible: false };
+  if (scene.isLockedFaceDown) {
+    return { eligible: false, reason: 'First-Turn Locked Scene' };
+  }
+  if (!scene.isFaceUp) {
+    return { eligible: false, reason: 'Already flipped face-down' };
+  }
+  if (!targetChar) {
+    return { eligible: false, reason: 'No character in active lane' };
   }
 
   const text = String(scene.card.effectText || '');
@@ -126,14 +141,14 @@ function checkSceneInspireEligibility(
     /Inspo Boost|Inspiration Boost|\+\d+\s*Inspiration/i.test(text) || id.includes('-ER');
 
   if (!hasInspo) {
-    return { eligible: false, reason: 'No Inspo Boost ability on this Scene.' };
+    return { eligible: false, reason: 'No Inspo Boost text on card' };
   }
 
   const charBracketMatch = text.match(/[｢\[]([^｣\]]+)[｣\]]/);
   if (charBracketMatch) {
     const requiredName = charBracketMatch[1].trim().toLowerCase();
     if (!String(targetChar.name || '').toLowerCase().includes(requiredName)) {
-      return { eligible: false, reason: `Only boosts ${charBracketMatch[1]}` };
+      return { eligible: false, reason: `Requires ${charBracketMatch[1]}` };
     }
   }
 
@@ -141,17 +156,24 @@ function checkSceneInspireEligibility(
   for (const el of elements) {
     const elRegex = new RegExp(`your\\s+${el}\\s+character`, 'i');
     if (elRegex.test(text) && String(targetChar.element || '').toLowerCase() !== el) {
-      return { eligible: false, reason: `Only boosts ${el.toUpperCase()} characters` };
+      return { eligible: false, reason: `Requires ${el.toUpperCase()} character` };
     }
   }
 
   return { eligible: true };
 }
 
+const CONFETTI_COLORS = ['#fde047', '#f472b6', '#38bdf8', '#a855f7', '#34d399', '#fb7185'];
+
 export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoardProps) {
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [inspectedCard, setInspectedCard] = useState<CardDefinition | null>(null);
+  const [powerBreakdown, setPowerBreakdown] = useState<PowerBreakdownDetails | null>(null);
   const [visibleClashId, setVisibleClashId] = useState<number | null>(null);
+
+  // Turn transition announcement banner ("Your Turn" / "Opponent's Turn")
+  const [turnBannerText, setTurnBannerText] = useState<string | null>(null);
+  const prevTurnKeyRef = useRef<string | null>(null);
 
   const [cameraFocus, setCameraFocus] = useState<'ME' | 'OPPONENT'>('ME');
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -174,14 +196,36 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     (s) => s.planCard !== null && !s.isPlanRevealed
   );
 
+  // Autofocus camera & show Turn Transition Banner when turn changes
   useEffect(() => {
     if (gameState.turnPlayerId === mySeat) {
       setCameraFocus('ME');
     } else {
       setCameraFocus('OPPONENT');
     }
-  }, [gameState.turnPlayerId, gameState.turnNumber, mySeat]);
 
+    if (
+      gameState.phase !== 'WAITING_FOR_PLAYERS' &&
+      gameState.phase !== 'VS_INTRO' &&
+      gameState.phase !== 'MULLIGAN' &&
+      gameState.phase !== 'GAME_OVER'
+    ) {
+      const turnKey = `${gameState.turnNumber}-${gameState.turnPlayerId}`;
+      if (prevTurnKeyRef.current !== turnKey) {
+        prevTurnKeyRef.current = turnKey;
+        const label = isSpectator
+          ? `${gameState.players[gameState.turnPlayerId].displayName}'s Turn`
+          : gameState.turnPlayerId === mySeat
+          ? '✨ Your Turn! ✨'
+          : "👑 Opponent's Turn";
+        setTurnBannerText(label);
+        const timer = setTimeout(() => setTurnBannerText(null), 1750);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [gameState.turnPlayerId, gameState.turnNumber, gameState.phase, mySeat, isSpectator]);
+
+  // Auto-advance VS Intro screen after 3.4 seconds
   useEffect(() => {
     if (gameState.phase === 'VS_INTRO' && !isSpectator) {
       const timer = setTimeout(() => {
@@ -191,6 +235,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     }
   }, [gameState.phase, isSpectator]);
 
+  // Show Clash showdown popup for 3.8 seconds
   useEffect(() => {
     if (gameState.lastClashEvent && gameState.lastClashEvent.id !== visibleClashId) {
       setVisibleClashId(gameState.lastClashEvent.id);
@@ -234,15 +279,17 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     }
   };
 
+  const showInspireModalForMe =
+    !isSpectator &&
+    gameState.phase === 'CONTACT_INSPIRE' &&
+    gameState.contactState?.promptPlayerId === mySeat;
+
+  const activeClashLaneForModal = gameState.contactState?.activeLane;
+  const myCharacterInClashLane = activeClashLaneForModal
+    ? me.adventureArea[activeClashLaneForModal].character
+    : null;
+
   const renderFocusedBoard = (player: PlayerState, isOpponent: boolean) => {
-    const isInspirePromptMine =
-      !isOpponent &&
-      gameState.phase === 'CONTACT_INSPIRE' &&
-      gameState.contactState?.promptPlayerId === mySeat;
-
-    const activeClashLane = gameState.contactState?.activeLane;
-    const activeClashChar = activeClashLane ? player.adventureArea[activeClashLane].character : null;
-
     const readyHarmony = player.sceneArea.filter((s) => !s.isExhausted).length;
 
     const renderAdventureRow = () => (
@@ -262,11 +309,15 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
             (gameState.phase === 'CONTACT_INSPIRE' || gameState.phase === 'BREAKTHROUGH_CHOICE') &&
             gameState.contactState?.activeLane === laneKey;
 
-          const totalPower = slot.character
-            ? (slot.character.power || 0) +
-              slot.items.reduce((s, it) => s + (it.power || 1), 0) +
-              slot.inspoBoost
-            : 0;
+          const basePower = slot.character ? Number(slot.character.power) || 0 : 0;
+          const itemDetails = slot.items.map((it) => ({
+            name: it.name,
+            bonus: Number(it.power) || 1,
+          }));
+          const itemBonusTotal = itemDetails.reduce((s, d) => s + d.bonus, 0);
+          const inspoBonus = slot.inspoBoost || 0;
+          const totalPower = basePower + itemBonusTotal + inspoBonus;
+          const isBuffed = itemBonusTotal > 0 || inspoBonus > 0;
 
           return (
             <div
@@ -280,21 +331,44 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
               onTouchEnd={handleTouchEndInspect}
             >
               {slot.character ? (
-                <div className="deployed-char-card">
-                  <img src={slot.character.imageUrl} alt={slot.character.name} />
-                  {slot.items.length > 0 && (
-                    <div className="item-count-tag">+{slot.items.length} Item</div>
-                  )}
-                  {hasActedThisTurn && (
-                    <div
-                      className="item-count-tag"
-                      style={{ top: 'auto', bottom: '4px', left: '4px', color: '#fbcfe8' }}
-                    >
-                      Acted ✓
-                    </div>
-                  )}
-                  <div className="char-power-badge">⚡ {totalPower}</div>
-                </div>
+                <>
+                  {/* Total Power Pill ABOVE card with clickable subscript explaining modifiers */}
+                  <div
+                    className={`total-power-above-badge ${isBuffed ? 'buffed' : ''}`}
+                    title="Click to view Total Power breakdown"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPowerBreakdown({
+                        cardName: slot.character!.name,
+                        laneName: laneKey.toUpperCase(),
+                        basePower,
+                        itemDetails,
+                        inspoBoost: inspoBonus,
+                        totalPower,
+                      });
+                    }}
+                  >
+                    <span>⚡ {totalPower}</span>
+                    <span className="power-subscript-info">
+                      {isBuffed ? `+${itemBonusTotal + inspoBonus} ⓘ` : 'ⓘ'}
+                    </span>
+                  </div>
+
+                  <div className="deployed-char-card">
+                    <img src={slot.character.imageUrl} alt={slot.character.name} />
+                    {slot.items.length > 0 && (
+                      <div className="item-count-tag">+{slot.items.length} Item</div>
+                    )}
+                    {hasActedThisTurn && (
+                      <div
+                        className="item-count-tag"
+                        style={{ top: 'auto', bottom: '4px', left: '4px', color: '#fbcfe8' }}
+                      >
+                        Acted ✓
+                      </div>
+                    )}
+                  </div>
+                </>
               ) : (
                 <span className="slot-empty-label">
                   {isTargetable ? 'Click to Deploy' : `${laneKey.toUpperCase()}`}
@@ -404,46 +478,33 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
               Scene Area (Harmony Resources)
             </span>
           ) : (
-            player.sceneArea.map((sc, idx) => {
-              const inspoCheck = isInspirePromptMine
-                ? checkSceneInspireEligibility(sc, activeClashChar)
-                : { eligible: false };
-
-              return (
-                <div
-                  key={`${sc.card.id}-${idx}`}
-                  className={`scene-card-slot ${sc.isExhausted ? 'exhausted' : ''} ${
-                    inspoCheck.eligible ? 'inspire-clickable' : ''
-                  }`}
-                  title={
-                    sc.isLockedFaceDown
-                      ? 'First-Turn Locked Scene (Cannot be used for Inspo)'
-                      : !sc.isFaceUp
-                      ? 'Inspo Boost already used'
-                      : inspoCheck.eligible
-                      ? `Click to flip face-down for Inspo Boost! (${sc.card.effectText || '+1 Inspiration'})`
-                      : inspoCheck.reason || sc.card.name
-                  }
-                  onClick={() => {
-                    if (inspoCheck.eligible) sendAction('INSPIRE_SCENE', { sceneIndex: idx });
-                  }}
-                  onContextMenu={(e) => handleContextMenu(e, sc.isFaceUp ? sc.card : null)}
-                  onTouchStart={() => handleTouchStartInspect(sc.isFaceUp ? sc.card : null)}
-                  onTouchEnd={handleTouchEndInspect}
-                >
-                  {sc.isFaceUp && sc.card.imageUrl ? (
-                    <img src={sc.card.imageUrl} alt={sc.card.name} />
-                  ) : (
-                    <>
-                      <img src={CARD_BACK_URL} alt="Face-Down Scene" className="kayou-card-back-img" />
-                      <span className="scene-status-tag">
-                        {sc.isLockedFaceDown ? '🔒 Locked' : 'Inspo Used'}
-                      </span>
-                    </>
-                  )}
-                </div>
-              );
-            })
+            player.sceneArea.map((sc, idx) => (
+              <div
+                key={`${sc.card.id}-${idx}`}
+                className={`scene-card-slot ${sc.isExhausted ? 'exhausted' : ''}`}
+                title={
+                  sc.isLockedFaceDown
+                    ? 'First-Turn Locked Scene (Cannot be used for Inspo)'
+                    : !sc.isFaceUp
+                    ? 'Inspo Boost already used'
+                    : sc.card.name
+                }
+                onContextMenu={(e) => handleContextMenu(e, sc.isFaceUp ? sc.card : null)}
+                onTouchStart={() => handleTouchStartInspect(sc.isFaceUp ? sc.card : null)}
+                onTouchEnd={handleTouchEndInspect}
+              >
+                {sc.isFaceUp && sc.card.imageUrl ? (
+                  <img src={sc.card.imageUrl} alt={sc.card.name} />
+                ) : (
+                  <>
+                    <img src={CARD_BACK_URL} alt="Face-Down Scene" className="kayou-card-back-img" />
+                    <span className="scene-status-tag">
+                      {sc.isLockedFaceDown ? '🔒 Locked' : 'Inspo Used'}
+                    </span>
+                  </>
+                )}
+              </div>
+            ))
           )}
         </div>
 
@@ -501,8 +562,17 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     );
   };
 
+  const winnerPlayer = gameState.winnerId ? gameState.players[gameState.winnerId] : null;
+
   return (
     <div className="kayou-playmat-wrapper">
+      {/* Turn Transition Banner ("Your Turn" / "Opponent's Turn") */}
+      {turnBannerText && (
+        <div className="turn-transition-banner-overlay">
+          <div className="turn-transition-banner">{turnBannerText}</div>
+        </div>
+      )}
+
       {/* 1. Street Fighter Style VS Intro Splash with Crown Above First Player */}
       {gameState.phase === 'VS_INTRO' && (
         <div className="vs-intro-overlay">
@@ -595,7 +665,70 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 3. Extended Clash Slam Showdown Animation Overlay */}
+      {/* 3. Dedicated Inspiration Boost Popup (Shown to Active Prompted Player — Attacker or Defender) */}
+      {showInspireModalForMe && gameState.contactState && (
+        <div className="inspector-backdrop">
+          <div className="inspire-popup-modal">
+            <h3 style={{ margin: 0, color: '#fde047', fontSize: '20px' }}>
+              ✨ Inspiration Boost Step — {gameState.contactState.activeLane.toUpperCase()} Lane Clash
+            </h3>
+            <div style={{ fontSize: '13px', color: '#fbcfe8', textAlign: 'center' }}>
+              Current Clash Power: <strong>⚡ {gameState.contactState.attackerPower}</strong> (Attacker) vs{' '}
+              <strong>⚡ {gameState.contactState.defenderPower}</strong> (Defender)
+              <br />
+              Select an eligible face-up Scene card below to flip face-down for Inspiration, or Pass:
+            </div>
+
+            <div className="inspire-scenes-grid">
+              {me.sceneArea.map((sc, idx) => {
+                const eligibility = checkSceneInspireEligibility(sc, myCharacterInClashLane);
+                return (
+                  <div
+                    key={`${sc.card.id}-${idx}`}
+                    className={`inspire-modal-card ${
+                      eligibility.eligible ? 'eligible' : 'ineligible'
+                    }`}
+                    onClick={() => {
+                      if (eligibility.eligible) {
+                        sendAction('INSPIRE_SCENE', { sceneIndex: idx });
+                      }
+                    }}
+                    onContextMenu={(e) => handleContextMenu(e, sc.isFaceUp ? sc.card : null)}
+                    onTouchStart={() => handleTouchStartInspect(sc.isFaceUp ? sc.card : null)}
+                    onTouchEnd={handleTouchEndInspect}
+                  >
+                    <img
+                      src={sc.isFaceUp && sc.card.imageUrl ? sc.card.imageUrl : CARD_BACK_URL}
+                      alt={sc.card.name}
+                    />
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        textAlign: 'center',
+                        color: eligibility.eligible ? '#fde047' : '#d1d5db',
+                      }}
+                    >
+                      {eligibility.eligible ? '✨ Tap to Inspire!' : eligibility.reason}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              className="action-bar-btn gold"
+              style={{ fontSize: '14px', padding: '10px 28px' }}
+              onClick={() => sendAction('PASS_INSPIRE')}
+            >
+              Pass Inspiration ✓
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Extended Clash Slam Showdown Animation Overlay */}
       {visibleClashId && gameState.lastClashEvent && (
         <div className="clash-showdown-overlay">
           <h2 style={{ color: '#fde047', fontSize: '24px', marginBottom: '18px' }}>
@@ -643,7 +776,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 4. Sequential Plan Revealed Popup (Awaits Both Players' Acknowledgment) */}
+      {/* 5. Sequential Plan Revealed Popup (Awaits Both Players' Acknowledgment) */}
       {gameState.lastPlanRevealEvent && (
         <div className="inspector-backdrop">
           <div
@@ -729,23 +862,115 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 5. Victory / Game Over Modal */}
-      {gameState.phase === 'GAME_OVER' && (
-        <div className="mulligan-overlay">
-          <h1 style={{ fontSize: '36px', color: '#fde047', marginBottom: '10px' }}>
-            🏆 {gameState.winnerId === mySeat ? 'Victory!' : 'Match Complete!'}
+      {/* 6. Fanfare Winner Screen with Confetti */}
+      {gameState.phase === 'GAME_OVER' && winnerPlayer && (
+        <div className="victory-fanfare-overlay">
+          <div className="confetti-container">
+            {Array.from({ length: 45 }).map((_, i) => (
+              <div
+                key={i}
+                className="confetti-piece"
+                style={{
+                  left: `${(i * 2.25) % 100}%`,
+                  backgroundColor: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+                  animationDuration: `${2.4 + (i % 5) * 0.45}s`,
+                  animationDelay: `${(i % 7) * 0.25}s`,
+                }}
+              />
+            ))}
+          </div>
+
+          <h1 className="victory-trophy-banner">
+            🎉🏆 {winnerPlayer.displayName} WINS! 🏆🎉
           </h1>
-          <p style={{ fontSize: '16px', color: '#fbcfe8', marginBottom: '20px' }}>
-            {gameState.players[gameState.winnerId || '0'].displayName} progressed to Story Stage 4!
+          <p style={{ fontSize: '16px', color: '#fbcfe8', margin: '0 0 16px', zIndex: 10 }}>
+            Completed all 4 Story Stages in Equestria Clash!
           </p>
+
+          <div className="victory-winner-card">
+            {winnerPlayer.leader?.imageUrl && (
+              <img src={winnerPlayer.leader.imageUrl} alt={winnerPlayer.leader.name} />
+            )}
+            <strong style={{ fontSize: '18px', color: '#fde047' }}>
+              {winnerPlayer.leader?.name || winnerPlayer.displayName}
+            </strong>
+          </div>
+
           <button
             type="button"
-            className="action-bar-btn primary"
-            style={{ fontSize: '15px', padding: '12px 28px' }}
+            className="action-bar-btn gold"
+            style={{ fontSize: '16px', padding: '14px 36px', zIndex: 10 }}
             onClick={onLeaveMatch}
           >
-            Return to Main Hub
+            ✨ Return to Main Hub
           </button>
+        </div>
+      )}
+
+      {/* Power Breakdown Popover Modal (Triggered by clicking Total Power subscript above lane card) */}
+      {powerBreakdown && (
+        <div className="inspector-backdrop" onClick={() => setPowerBreakdown(null)}>
+          <div
+            className="inspector-card-box"
+            style={{ flexDirection: 'column', maxWidth: '380px', gap: '10px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: 0, color: '#fde047', fontSize: '18px' }}>
+              ⚡ Total Power Breakdown ({powerBreakdown.laneName} Lane)
+            </h3>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#fbcfe8' }}>
+              {powerBreakdown.cardName}
+            </div>
+            <div
+              style={{
+                background: 'rgba(255, 255, 255, 0.08)',
+                borderRadius: '10px',
+                padding: '10px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+                fontSize: '13px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Base Character Power:</span>
+                <strong>{powerBreakdown.basePower}</strong>
+              </div>
+              {powerBreakdown.itemDetails.map((it, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: '#38bdf8' }}>
+                  <span>Item ({it.name}):</span>
+                  <strong>+{it.bonus}</strong>
+                </div>
+              ))}
+              {powerBreakdown.inspoBoost > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#f472b6' }}>
+                  <span>Inspiration / Event Boosts:</span>
+                  <strong>+{powerBreakdown.inspoBoost}</strong>
+                </div>
+              )}
+              <div
+                style={{
+                  borderTop: '1px solid rgba(255,255,255,0.2)',
+                  paddingTop: '6px',
+                  marginTop: '2px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  color: '#fde047',
+                  fontSize: '15px',
+                }}
+              >
+                <span>Total Current Power:</span>
+                <strong>⚡ {powerBreakdown.totalPower}</strong>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="action-bar-btn secondary"
+              onClick={() => setPowerBreakdown(null)}
+            >
+              Close
+            </button>
+          </div>
         </div>
       )}
 
@@ -817,23 +1042,6 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
             </>
           )}
 
-          {!isSpectator &&
-            gameState.phase === 'CONTACT_INSPIRE' &&
-            gameState.contactState?.promptPlayerId === mySeat && (
-              <>
-                <span style={{ fontSize: '11px', color: '#fde047', fontWeight: 800 }}>
-                  Click eligible Inspo Scene or Pass:
-                </span>
-                <button
-                  type="button"
-                  className="action-bar-btn gold"
-                  onClick={() => sendAction('PASS_INSPIRE')}
-                >
-                  Pass Inspire ✓
-                </button>
-              </>
-            )}
-
           {isMyTurn && gameState.phase === 'BREAKTHROUGH_CHOICE' && (
             <>
               {canProgressStory && (
@@ -876,32 +1084,35 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
       {/* Single Focused Playmat */}
       {cameraFocus === 'ME' ? renderFocusedBoard(me, false) : renderFocusedBoard(opp, true)}
 
-      {/* Player Hand Dock */}
+      {/* Player Hand Dock with "My Hand" Label */}
       {!isSpectator && (
-        <div className="player-hand-dock">
-          {me.hand.map((card, idx) => {
-            const isSelected = selectedHandCardId === card.id;
-            const canAfford = (card.cost || 0) <= availableHarmony;
-            return (
-              <div
-                key={`${card.id}-${idx}`}
-                className={`hand-card-item ${isSelected ? 'selected' : ''} ${
-                  !canAfford ? 'unaffordable' : ''
-                }`}
-                onClick={() => {
-                  if (!isMyTurn || gameState.phase !== 'MAIN_PHASE') return;
-                  if (!canAfford) return;
-                  if (cameraFocus !== 'ME') setCameraFocus('ME');
-                  setSelectedHandCardId(isSelected ? null : card.id);
-                }}
-                onContextMenu={(e) => handleContextMenu(e, card)}
-                onTouchStart={() => handleTouchStartInspect(card)}
-                onTouchEnd={handleTouchEndInspect}
-              >
-                <img src={card.imageUrl} alt={card.name} />
-              </div>
-            );
-          })}
+        <div className="player-hand-section">
+          <div className="my-hand-label-pill">🃏 My Hand ({me.hand.length})</div>
+          <div className="player-hand-dock">
+            {me.hand.map((card, idx) => {
+              const isSelected = selectedHandCardId === card.id;
+              const canAfford = (card.cost || 0) <= availableHarmony;
+              return (
+                <div
+                  key={`${card.id}-${idx}`}
+                  className={`hand-card-item ${isSelected ? 'selected' : ''} ${
+                    !canAfford ? 'unaffordable' : ''
+                  }`}
+                  onClick={() => {
+                    if (!isMyTurn || gameState.phase !== 'MAIN_PHASE') return;
+                    if (!canAfford) return;
+                    if (cameraFocus !== 'ME') setCameraFocus('ME');
+                    setSelectedHandCardId(isSelected ? null : card.id);
+                  }}
+                  onContextMenu={(e) => handleContextMenu(e, card)}
+                  onTouchStart={() => handleTouchStartInspect(card)}
+                  onTouchEnd={handleTouchEndInspect}
+                >
+                  <img src={card.imageUrl} alt={card.name} />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

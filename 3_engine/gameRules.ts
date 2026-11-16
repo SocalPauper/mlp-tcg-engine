@@ -353,11 +353,6 @@ export function playCardFromHand(
   };
 }
 
-/**
- * Official Kayou Rule Check:
- * Scene cards only grant Inspiration during Contact if they have an Inspo Boost ability
- * matching the active lane's character/element condition.
- */
 export function canSceneInspireCharacter(
   scene: SceneCardInPlay,
   targetCharacter: CardDefinition | null
@@ -464,6 +459,7 @@ function advanceToNextAttackLane(
 
     const defSlot = defender.adventureArea[lane];
 
+    // If an opponent's character is blocking/intercepting in this lane -> enter Contact Inspire/Clash
     if (defSlot.character) {
       return {
         ...state,
@@ -479,6 +475,7 @@ function advanceToNextAttackLane(
       };
     }
 
+    // ONLY when attacking an open, unblocked lane -> prompt Intervene Plan or Progress Story
     return {
       ...state,
       phase: 'BREAKTHROUGH_CHOICE',
@@ -611,8 +608,14 @@ export function passInspireInContact(
     outcome,
   };
 
-  let nextAtkPlayer = { ...atkPlayer };
-  let nextDefPlayer = { ...defPlayer };
+  // Mark this lane as having completed its Clash action for the turn.
+  // Rule 1: Because a defending character blocked/intercepted, the Clash IS the action for this lane—
+  // the attacker cannot also Intervene or Progress Story in this lane this turn.
+  let nextAtkPlayer: PlayerState = {
+    ...atkPlayer,
+    actedLanesThisTurn: [...atkPlayer.actedLanesThisTurn, lane],
+  };
+  let nextDefPlayer: PlayerState = { ...defPlayer };
 
   if (outcome === 'ATTACKER_WINS') {
     nextDefPlayer = {
@@ -623,23 +626,9 @@ export function passInspireInContact(
         [lane]: { character: null, items: [], inspoBoost: 0 },
       },
     };
-
-    return {
-      ...state,
-      phase: 'BREAKTHROUGH_CHOICE',
-      players: {
-        ...state.players,
-        [attackerId]: nextAtkPlayer,
-        [defenderId]: nextDefPlayer,
-      },
-      lastClashEvent: clashEvent,
-    };
-  }
-
-  if (outcome === 'DEFENDER_WINS') {
+  } else if (outcome === 'DEFENDER_WINS') {
     nextAtkPlayer = {
       ...nextAtkPlayer,
-      actedLanesThisTurn: [...nextAtkPlayer.actedLanesThisTurn, lane],
       retirement: [...nextAtkPlayer.retirement, atkSlot.character, ...atkSlot.items],
       adventureArea: {
         ...nextAtkPlayer.adventureArea,
@@ -649,7 +638,6 @@ export function passInspireInContact(
   } else {
     nextAtkPlayer = {
       ...nextAtkPlayer,
-      actedLanesThisTurn: [...nextAtkPlayer.actedLanesThisTurn, lane],
       retirement: [...nextAtkPlayer.retirement, atkSlot.character, ...atkSlot.items],
       adventureArea: {
         ...nextAtkPlayer.adventureArea,
@@ -666,6 +654,7 @@ export function passInspireInContact(
     };
   }
 
+  // Advance directly to the next lane in queue (no Breakthrough choice after a blocked Clash)
   const nextQueue = state.contactState.laneQueue.slice(1);
   return advanceToNextAttackLane(
     {

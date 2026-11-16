@@ -131,11 +131,12 @@
   color: #be185d;
 }
 
-/* Row 1: Adventure Area (3 Portrait Slots) */
+/* Row 1: Adventure Area (3 Portrait Slots with Floating Top Total Power Pill) */
 .adventure-area-row {
   display: flex;
   justify-content: center;
-  gap: 24px;
+  gap: 28px;
+  padding-top: 16px; /* Room for floating Total Power indicator above card */
 }
 
 .adventure-slot {
@@ -164,6 +165,47 @@
   box-shadow: 0 0 22px rgba(245, 158, 11, 0.65);
 }
 
+/* Floating Total Power Pill ABOVE the card with clickable subscript */
+.total-power-above-badge {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #4c1d95, #be185d);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 2px 9px;
+  border-radius: 12px;
+  border: 1.5px solid #ffd700;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  z-index: 15;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.total-power-above-badge:hover {
+  transform: translateX(-50%) scale(1.08);
+}
+
+.total-power-above-badge.buffed {
+  background: linear-gradient(135deg, #b45309, #ec4899);
+  box-shadow: 0 0 14px rgba(250, 204, 21, 0.75);
+}
+
+.power-subscript-info {
+  font-size: 9px;
+  background: rgba(255, 255, 255, 0.25);
+  color: #fde047;
+  padding: 0 4px;
+  border-radius: 6px;
+  font-weight: 900;
+}
+
 .deployed-char-card {
   width: 100%;
   height: 100%;
@@ -179,20 +221,6 @@
   height: 100%;
   object-fit: fill;
   display: block;
-}
-
-.char-power-badge {
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  background: linear-gradient(135deg, #ec4899, #9333ea);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 900;
-  padding: 2px 7px;
-  border-radius: 10px;
-  border: 1.5px solid #ffd700;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
 .item-count-tag {
@@ -463,21 +491,42 @@
   border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
-/* Player Hand Dock */
+/* Player Hand Dock with "My Hand" Label */
+.player-hand-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.my-hand-label-pill {
+  background: linear-gradient(135deg, #7e22ce, #db2777);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  padding: 2px 14px;
+  border-radius: 12px;
+  border: 1.5px solid #ffd700;
+  box-shadow: 0 2px 8px rgba(126, 34, 206, 0.25);
+}
+
 .player-hand-dock {
   display: flex;
   justify-content: center;
   align-items: flex-end;
   gap: 10px;
-  padding: 8px 10px 2px;
-  min-height: 142px;
-  flex-shrink: 0;
+  padding: 4px 10px 2px;
+  min-height: 136px;
+  width: 100%;
   overflow-x: auto;
 }
 
 .hand-card-item {
-  width: 100px;
-  height: 140px;
+  width: 96px;
+  height: 134px;
   border-radius: 9px;
   position: relative;
   cursor: pointer;
@@ -511,6 +560,101 @@
   height: 100%;
   object-fit: fill;
   display: block;
+}
+
+/* Turn Transition Banner Animation ("Your Turn" / "Opponent's Turn") */
+.turn-transition-banner-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.turn-transition-banner {
+  background: linear-gradient(135deg, #4c1d95 0%, #db2777 50%, #f59e0b 100%);
+  color: #fff;
+  font-size: 36px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 18px 48px;
+  border-radius: 24px;
+  border: 4px solid #fde047;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.65), 0 0 40px rgba(236, 72, 153, 0.75);
+  text-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+  animation: turnBannerSweep 1.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes turnBannerSweep {
+  0% { opacity: 0; transform: scale(0.6) translateY(20px); }
+  20% { opacity: 1; transform: scale(1.06) translateY(0); }
+  75% { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(1.08) translateY(-16px); }
+}
+
+/* Inspiration Boost Selection Popup */
+.inspire-popup-modal {
+  background: linear-gradient(145deg, #241036 0%, #4c1d95 100%);
+  border: 3px solid #fde047;
+  border-radius: 20px;
+  padding: 22px 26px;
+  max-width: 680px;
+  width: 94vw;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(250, 204, 21, 0.45);
+  animation: planModalPopIn 0.28s ease-out;
+}
+
+.inspire-scenes-grid {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 8px 0;
+}
+
+.inspire-modal-card {
+  width: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border-radius: 12px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid transparent;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.inspire-modal-card.eligible {
+  cursor: pointer;
+  border-color: #fde047;
+  background: rgba(250, 204, 21, 0.16);
+  box-shadow: 0 0 20px rgba(250, 204, 21, 0.65);
+}
+
+.inspire-modal-card.eligible:hover {
+  transform: translateY(-6px) scale(1.05);
+}
+
+.inspire-modal-card.ineligible {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.inspire-modal-card img {
+  width: 96px;
+  height: 134px;
+  object-fit: fill;
+  border-radius: 8px;
 }
 
 /* VS Intro Overlay */
@@ -604,7 +748,7 @@
   color: #fde047;
 }
 
-/* Mulligan & Game Over Overlays */
+/* Mulligan Overlay */
 .mulligan-overlay {
   position: fixed;
   inset: 0;
@@ -697,7 +841,7 @@
   animation: loserFallOff 1.8s ease-in 0.85s forwards;
 }
 
-/* Inspector Modal */
+/* Inspector & Power Breakdown Modal */
 .inspector-backdrop {
   position: fixed;
   inset: 0;
@@ -730,10 +874,7 @@
   flex-shrink: 0;
 }
 
-/* ========================================================================= */
-/* PLAN / PRE-PLAN TRAP REVEAL POPUP & EXCLAMATION BURST ANIMATION           */
-/* ========================================================================= */
-
+/* Plan Reveal Modal */
 .plan-reveal-modal {
   background: linear-gradient(145deg, #241036 0%, #3b0764 100%);
   border: 3px solid #f472b6;
@@ -797,6 +938,93 @@
   padding-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.15);
   flex-wrap: wrap;
+}
+
+/* ========================================================================= */
+/* FANFARE WINNER SCREEN WITH CONFETTI                                       */
+/* ========================================================================= */
+
+.victory-fanfare-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, #581c87 0%, #1e1124 100%);
+  z-index: 9980;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  overflow: hidden;
+  padding: 20px;
+  text-align: center;
+}
+
+.confetti-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -20px;
+  width: 12px;
+  height: 20px;
+  border-radius: 3px;
+  opacity: 0.9;
+  animation: confettiFall linear infinite;
+}
+
+@keyframes confettiFall {
+  0% {
+    transform: translateY(-20px) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(105vh) rotate(720deg) scale(0.85);
+    opacity: 0.75;
+  }
+}
+
+.victory-trophy-banner {
+  font-size: 46px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #fde047 0%, #f472b6 50%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 4px 16px rgba(253, 224, 71, 0.55));
+  margin: 0 0 8px;
+  animation: fanfareBounce 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 10;
+}
+
+.victory-winner-card {
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 3px solid #fde047;
+  border-radius: 22px;
+  padding: 18px 32px;
+  box-shadow: 0 0 45px rgba(253, 224, 71, 0.45);
+  margin-bottom: 20px;
+}
+
+.victory-winner-card img {
+  width: 170px;
+  height: 238px;
+  object-fit: fill;
+  border-radius: 14px;
+  border: 3px solid #fff;
+}
+
+@keyframes fanfareBounce {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
 }
 
 @keyframes planModalPopIn {
@@ -877,12 +1105,19 @@
 
   .adventure-area-row {
     gap: 14px;
+    padding-top: 14px;
   }
 
   .adventure-slot {
     width: 68px;
     height: 95px;
     border-radius: 9px;
+  }
+
+  .total-power-above-badge {
+    top: -17px;
+    font-size: 9.5px;
+    padding: 1px 6px;
   }
 
   .side-portrait-zone {
@@ -961,6 +1196,11 @@
   .hand-card-item {
     width: 56px;
     height: 78px;
+  }
+
+  .turn-transition-banner {
+    font-size: 24px;
+    padding: 12px 28px;
   }
 
   .vs-fighter-card img {
