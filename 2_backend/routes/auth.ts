@@ -36,7 +36,7 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
 // GET USER CARD COLLECTION
 router.get('/me/collection', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
-    const result = await pool.query('SELECT card_id, quantity, user_alerted FROM public.user_cards WHERE user_id = $1', [req.user?.id]);
+    const result = await pool.query('SELECT card_id, quantity, user_alerted FROM auth.user_cards WHERE user_id = $1', [req.user?.id]);
     return res.json(result.rows);
   } catch (err) {
     console.error('Error fetching collection:', err);
@@ -47,7 +47,7 @@ router.get('/me/collection', authenticateToken, async (req: AuthenticatedRequest
 // ACKNOWLEDGE NEW UNLOCKS
 router.post('/me/collection/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
-    await pool.query('UPDATE public.user_cards SET user_alerted = TRUE WHERE user_id = $1 AND user_alerted = FALSE', [req.user?.id]);
+    await pool.query('UPDATE auth.user_cards SET user_alerted = TRUE WHERE user_id = $1 AND user_alerted = FALSE', [req.user?.id]);
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false });
@@ -92,14 +92,14 @@ router.post('/register', async (req, res) => {
 
     const newUser = insertResult.rows[0];
 
-    // Seed starter collection in public.user_cards (all SD01 starter deck cards & Everyday scenes)
+    // Seed starter collection in auth.user_cards (all SD01 starter deck cards & Everyday scenes)
     const starterCardsRes = await client.query(
       `SELECT id FROM game.cards WHERE id LIKE 'SD01%' OR element = 'Everyday' OR rarity = 'C'`
     );
     
     for (const card of starterCardsRes.rows) {
       await client.query(
-        `INSERT INTO public.user_cards (user_id, card_id, quantity, user_alerted)
+        `INSERT INTO auth.user_cards (user_id, card_id, quantity, user_alerted)
          VALUES ($1, $2, 3, TRUE)
          ON CONFLICT (user_id, card_id) DO NOTHING`,
         [newUser.id, card.id]
