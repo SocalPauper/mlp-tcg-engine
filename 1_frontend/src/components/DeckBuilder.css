@@ -169,18 +169,24 @@ input:checked + .slider:before { transform: translateX(24px); }
   border: 1px solid #333c4a;
   border-radius: 12px;
   box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-  width: 800px;
-  max-width: 90vw;
+  width: 820px;
+  max-width: 92vw;
   height: 520px;
   overflow: hidden;
   position: relative;
+}
+
+/* Wide modal layout when inspecting landscape Story or Scene cards */
+.inspector-modal.landscape-modal {
+  width: 960px;
+  height: 460px;
 }
 
 .inspector-close-btn {
   position: absolute;
   top: 12px;
   right: 12px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
   border: none;
   color: #fff;
   width: 32px;
@@ -188,6 +194,11 @@ input:checked + .slider:before { transform: translateX(24px); }
   border-radius: 50%;
   cursor: pointer;
   font-weight: bold;
+  z-index: 20;
+}
+
+.inspector-close-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .inspector-image-container {
@@ -197,13 +208,66 @@ input:checked + .slider:before { transform: translateX(24px); }
   display: flex;
   justify-content: center;
   align-items: center;
+  position: relative;
+}
+
+.inspector-image-container.landscape-image-box {
+  flex: 0 0 540px;
+  padding: 24px 48px;
 }
 
 .inspector-image-container img {
   max-width: 100%;
   max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
-  border-radius: 16px;
+  border-radius: 14px;
+}
+
+/* Story Stage Navigation Arrows in Inspector Popup */
+.story-nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(17, 20, 26, 0.85);
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 15;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.story-nav-arrow:hover {
+  background: var(--mlp-pink);
+  border-color: #fff;
+  transform: translateY(-50%) scale(1.08);
+}
+
+.story-nav-arrow.prev { left: 10px; }
+.story-nav-arrow.next { right: 10px; }
+
+.story-stage-indicator {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(17, 20, 26, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 12px;
+  letter-spacing: 0.5px;
 }
 
 .inspector-data-panel {
@@ -212,6 +276,7 @@ input:checked + .slider:before { transform: translateX(24px); }
   color: #e0e6ed;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .inspector-header {
@@ -220,10 +285,11 @@ input:checked + .slider:before { transform: translateX(24px); }
   align-items: center;
   border-bottom: 2px solid #333c4a;
   padding-bottom: 12px;
+  padding-right: 28px;
   margin-bottom: 20px;
 }
 
-.inspector-header h2 { font-size: 26px; font-weight: 900; margin: 0; color: #fff; }
+.inspector-header h2 { font-size: 24px; font-weight: 900; margin: 0; color: #fff; }
 
 .cost-badge {
   background: #2b3342;
@@ -325,9 +391,9 @@ input:checked + .slider:before { transform: translateX(24px); }
   align-items: stretch;
 }
 
-/* Give landscape Story stacks slightly wider grid tracks */
+/* Give landscape Story stacks wider grid tracks so full 7:5 cards scale cleanly */
 .card-grid:has(.story-stack) {
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 28px;
 }
 
@@ -346,11 +412,12 @@ input:checked + .slider:before { transform: translateX(24px); }
   position: relative;
 }
 
+/* Scale whole portrait card to fit inside the frame without horizontal/vertical cropping */
 .card-item img {
   width: 100%;
   height: 100%;
   border-radius: 10px;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
@@ -363,7 +430,7 @@ input:checked + .slider:before { transform: translateX(24px); }
 .card-item.landscape-art img {
   width: 100%;
   height: 76%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 10px 10px 0 0;
 }
 
@@ -417,7 +484,7 @@ input:checked + .slider:before { transform: translateX(24px); }
   z-index: 10;
 }
 
-/* Story cards are naturally landscape (7:5) */
+/* Story cards are naturally landscape (7:5) and scale whole card to fit */
 .story-stack {
   position: relative;
   width: 100%;
@@ -431,7 +498,7 @@ input:checked + .slider:before { transform: translateX(24px); }
   top: 0; left: 0;
   width: 100%; height: 100%;
   border-radius: 10px;
-  object-fit: cover;
+  object-fit: contain;
   background: #1a1226;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   border: 2px solid #fff;
@@ -592,8 +659,10 @@ input:checked + .slider:before { transform: translateX(24px); }
   .filters-bar { flex-wrap: wrap; }
   .input-bubble { flex: 1 1 100%; }
   .locked-toggle-pill { flex: 1 1 100%; justify-content: center; }
-  .inspector-modal { flex-direction: column; height: 85vh; overflow-y: auto; }
-  .inspector-image-container { flex: 0 0 auto; padding: 15px; }
+  .inspector-modal,
+  .inspector-modal.landscape-modal { flex-direction: column; height: 85vh; overflow-y: auto; }
+  .inspector-image-container,
+  .inspector-image-container.landscape-image-box { flex: 0 0 auto; padding: 15px 40px; }
   .inspector-image-container img { max-height: 250px; width: auto; }
   .unlock-modal { padding: 20px; }
   .unlocked-card-item img { width: 140px; }

@@ -70,7 +70,10 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importText, setImportText] = useState('');
 
+  // Inspector & Story Carousel States
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
+  const [inspectorGroup, setInspectorGroup] = useState<Card[]>([]);
+  const [inspectorIndex, setInspectorIndex] = useState<number>(0);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   // 1. Fetch entire card catalog
@@ -211,6 +214,32 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       .catch(err => console.error('Error fetching deck:', err));
   }, [deckId, cards, mode]);
 
+  // Keyboard navigation for Story set arrows inside Inspector popup
+  useEffect(() => {
+    if (!hoveredCard || inspectorGroup.length <= 1) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        setInspectorIndex(prev => {
+          const next = (prev - 1 + inspectorGroup.length) % inspectorGroup.length;
+          setHoveredCard(inspectorGroup[next]);
+          return next;
+        });
+      } else if (e.key === 'ArrowRight') {
+        setInspectorIndex(prev => {
+          const next = (prev + 1) % inspectorGroup.length;
+          setHoveredCard(inspectorGroup[next]);
+          return next;
+        });
+      } else if (e.key === 'Escape') {
+        closeInspector();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hoveredCard, inspectorGroup]);
+
   // --- Logic Helpers ---
 
   const handleImageLoad = (cardId: string, e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -218,6 +247,56 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     if (img.naturalWidth > img.naturalHeight * 1.05) {
       setLandscapeIds(prev => (prev[cardId] ? prev : { ...prev, [cardId]: true }));
     }
+  };
+
+  const openInspector = (card: Card, group: Card[] = []) => {
+    if (group.length > 0) {
+      const idx = Math.max(0, group.findIndex(c => c.id === card.id));
+      setInspectorGroup(group);
+      setInspectorIndex(idx);
+      setHoveredCard(group[idx]);
+      return;
+    }
+
+    // If inspecting a Story card from the deck zone or single click, find its 4-card story arc
+    if (card.card_type === 'Story' || card.name.includes(' - ') || card.name.includes(' – ')) {
+      const baseStoryName = card.name.split(/[-–]/)[0].trim().toLowerCase();
+      const isAlt = card.id.includes('-S');
+      const matchingArc = cards
+        .filter(
+          c =>
+            (c.card_type === 'Story' || c.name.includes(' - ') || c.name.includes(' – ')) &&
+            c.set_code === card.set_code &&
+            c.id.includes('-S') === isAlt &&
+            c.name.split(/[-–]/)[0].trim().toLowerCase() === baseStoryName
+        )
+        .sort((a, b) => a.id.localeCompare(b.id));
+
+      if (matchingArc.length > 1) {
+        const idx = Math.max(0, matchingArc.findIndex(c => c.id === card.id));
+        setInspectorGroup(matchingArc);
+        setInspectorIndex(idx);
+        setHoveredCard(matchingArc[idx]);
+        return;
+      }
+    }
+
+    setInspectorGroup([]);
+    setInspectorIndex(0);
+    setHoveredCard(card);
+  };
+
+  const closeInspector = () => {
+    setHoveredCard(null);
+    setInspectorGroup([]);
+    setInspectorIndex(0);
+  };
+
+  const stepInspectorGroup = (direction: -1 | 1) => {
+    if (inspectorGroup.length <= 1) return;
+    const nextIdx = (inspectorIndex + direction + inspectorGroup.length) % inspectorGroup.length;
+    setInspectorIndex(nextIdx);
+    setHoveredCard(inspectorGroup[nextIdx]);
   };
 
   const handleAcknowledgeUnlocks = async () => {
@@ -270,14 +349,14 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     return false;
   };
 
-  const handleContextMenu = (e: React.MouseEvent, card: Card) => {
+  const handleContextMenu = (e: React.MouseEvent, card: Card, group: Card[] = []) => {
     e.preventDefault();
-    setHoveredCard(card);
+    openInspector(card, group);
   };
 
-  const handleTouchStart = (card: Card) => {
+  const handleTouchStart = (card: Card, group: Card[] = []) => {
     longPressTimer.current = setTimeout(() => {
-      setHoveredCard(card);
+      openInspector(card, group);
     }, 500);
   };
 
@@ -536,6 +615,15 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     alert('Deck successfully imported!');
   };
 
+  const isHoveredLandscape = hoveredCard
+    ? Boolean(
+        landscapeIds[hoveredCard.id] ||
+          hoveredCard.card_type === 'Story' ||
+          hoveredCard.name.includes(' - ') ||
+          hoveredCard.name.includes(' – ')
+      )
+    : false;
+
   return (
     <div className="deck-builder-container">
 
@@ -580,11 +668,45 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
       {/* Card Inspector Tooltip */}
       {hoveredCard && (
-        <div className="inspector-overlay" style={{ pointerEvents: 'auto' }}>
-          <div className="inspector-modal">
-            <button className="inspector-close-btn" onClick={() => setHoveredCard(null)}>✕</button>
-            <div className="inspector-image-container">
-              <img src={hoveredCard.image_url} alt={hoveredCard.name} />
+        <div className="inspector-overlay" style={{ pointerEvents: 'auto' }} onClick={closeInspector}>
+          <div
+            className={`inspector-modal ${isHoveredLandscape ? 'landscape-modal' : ''}`}
+            onClick={e => e.stopPropagation()}
+          >
+            <button className="inspector-close-btn" onClick={closeInspector}>✕</button>
+            <div className={`inspector-image-container ${isHoveredLandscape ? 'landscape-image-box' : ''}`}>
+              {inspectorGroup.length > 1 && (
+                <button
+                  type="button"
+                  className="story-nav-arrow prev"
+                  onClick={() => stepInspectorGroup(-1)}
+                  title="Previous Story Stage"
+                >
+                  ‹
+                </button>
+              )}
+
+              <img
+                src={hoveredCard.image_url}
+                alt={hoveredCard.name}
+                onLoad={(e) => handleImageLoad(hoveredCard.id, e)}
+              />
+
+              {inspectorGroup.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    className="story-nav-arrow next"
+                    onClick={() => stepInspectorGroup(1)}
+                    title="Next Story Stage"
+                  >
+                    ›
+                  </button>
+                  <div className="story-stage-indicator">
+                    Stage {inspectorIndex + 1} of {inspectorGroup.length}
+                  </div>
+                </>
+              )}
             </div>
             <div className="inspector-data-panel">
               <div className="inspector-header">
@@ -694,8 +816,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                       if (isLocked) alert('You must unlock this alternate art first!');
                       else addStoryGroup(group);
                     }}
-                    onContextMenu={(e) => handleContextMenu(e, group[0])}
-                    onTouchStart={() => handleTouchStart(group[0])}
+                    onContextMenu={(e) => handleContextMenu(e, group[0], group)}
+                    onTouchStart={() => handleTouchStart(group[0], group)}
                     onTouchEnd={handleTouchEnd}
                   >
                     {group.map((card) => (
