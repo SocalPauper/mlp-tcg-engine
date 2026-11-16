@@ -232,16 +232,10 @@ export function resolveMulligan(
   };
 }
 
-/**
- * Available unexhausted Harmony (unrotated Scene cards) for paying card costs.
- */
 export function getAvailableHarmonyCost(player: PlayerState): number {
   return player.sceneArea.filter((s) => !s.isExhausted).length;
 }
 
-/**
- * Rotates `cost` unexhausted Scene cards 90 degrees clockwise (isExhausted = true).
- */
 function exhaustScenesForCost(sceneArea: SceneCardInPlay[], cost: number): SceneCardInPlay[] {
   let remainingToExhaust = cost;
   return sceneArea.map((scene) => {
@@ -454,7 +448,6 @@ export function inspireInContact(
   const sceneItem = player.sceneArea[sceneIndex];
   if (!sceneItem || !sceneItem.isFaceUp || sceneItem.isLockedFaceDown) return state;
 
-  // Flip face-up Scene card face-down to grant +1 Inspiration
   const updatedSceneArea = player.sceneArea.map((s, idx) =>
     idx === sceneIndex ? { ...s, isFaceUp: false } : s
   );
@@ -618,6 +611,19 @@ export function passInspireInContact(
   );
 }
 
+/**
+ * Helper: Checks whether `attacker` is allowed to progress to their next Story stage.
+ * Rule: To progress Story Stage N (index = attacker.storyProgress), the opponent's paired
+ * Plan card under their Story Stage N must ALREADY be cleared (isPlanRevealed === true or planCard === null).
+ */
+export function canProgressNextStoryStage(attacker: PlayerState, defender: PlayerState): boolean {
+  const nextStageIdx = attacker.storyProgress; // 0 for Story I, 1 for Story II, etc.
+  if (nextStageIdx >= 4) return false;
+  const opponentPairedStage = defender.storyStages[nextStageIdx];
+  if (!opponentPairedStage) return true;
+  return Boolean(opponentPairedStage.isPlanRevealed || !opponentPairedStage.planCard);
+}
+
 export function resolveBreakthroughChoice(
   state: KayouGameState,
   playerId: '0' | '1',
@@ -631,7 +637,13 @@ export function resolveBreakthroughChoice(
   let attacker = { ...state.players[playerId] };
   let defender = { ...state.players[defenderId] };
 
-  if (choice === 'PROGRESS_STORY') {
+  const allowedToProgress = canProgressNextStoryStage(attacker, defender);
+
+  // Enforce rule: if opponent's paired Plan card is NOT cleared yet, force/require Intervene
+  const effectiveChoice =
+    choice === 'PROGRESS_STORY' && !allowedToProgress ? 'INTERVENE_PLAN' : choice;
+
+  if (effectiveChoice === 'PROGRESS_STORY') {
     const nextProgress = Math.min(4, attacker.storyProgress + 1);
     const updatedStages = attacker.storyStages.map((st, idx) =>
       idx < nextProgress ? { ...st, isStoryCompleted: true } : st
@@ -663,7 +675,7 @@ export function resolveBreakthroughChoice(
         ],
       };
     }
-  } else if (choice === 'INTERVENE_PLAN') {
+  } else if (effectiveChoice === 'INTERVENE_PLAN') {
     const availableIdx =
       targetPlanStageIndex !== undefined &&
       defender.storyStages[targetPlanStageIndex]?.planCard &&
@@ -717,10 +729,6 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     },
   };
 
-  // Start of next player's turn:
-  // 1. Untap (ready) all exhausted Scene cards back to upright (0 degrees)
-  // 2. Draw 1 Main Deck card
-  // 3. Flip 1 Scene card from Scene Deck into Scene Area
   const startingPlayer = state.players[nextPlayerId];
   const newTurnsTaken = startingPlayer.turnsTaken + 1;
 
