@@ -109,7 +109,7 @@ function doesPassiveTextApplyToCharacter(
   const text = sanitizeCardText(rawText);
   if (!text) return 0;
 
-  if (/Inspo Boost|Inspiration Boost|Adventure\s*:|Pre-Plan|When promoted/i.test(text)) {
+  if (/Inspo Boost|Inspiration Boost|Adventure\s*:|Pre-Plan|Appear:|Farewell:|When promoted/i.test(text)) {
     return 0;
   }
 
@@ -267,6 +267,28 @@ export interface ParsedActivatedEffect {
     | 'GLOBAL_BUFF_FRIENDLY';
   amount: number;
   maxLimit?: number;
+}
+
+export function parseAppearOrFarewellEffect(effectText?: string): ParsedActivatedEffect | null {
+  const text = sanitizeCardText(effectText);
+  if (!text) return null;
+
+  const drawMatch = text.match(/draw\s+(\d+|a)\s+card/i);
+  if (drawMatch) {
+    const count = drawMatch[1].toLowerCase() === 'a' ? 1 : parseInt(drawMatch[1], 10) || 1;
+    return { kind: 'DRAW', amount: count };
+  }
+
+  const buffMatch = text.match(/\+(\d+)\s*(?:Inspiration|Power)/i);
+  if (buffMatch) {
+    return { kind: 'TARGET_BUFF_POWER', amount: parseInt(buffMatch[1], 10) || 1 };
+  }
+
+  if (/ready\s+(?:1\s+of\s+your\s+|a\s+)?character/i.test(text)) {
+    return { kind: 'TARGET_READY_FRIENDLY', amount: 1 };
+  }
+
+  return null;
 }
 
 export function parseActivatedCardEffect(card: CardDefinition): ParsedActivatedEffect {
