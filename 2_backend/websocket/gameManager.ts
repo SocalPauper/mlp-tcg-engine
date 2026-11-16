@@ -15,6 +15,7 @@ import {
   inspireInContact,
   passInspireInContact,
   resolveBreakthroughChoice,
+  acknowledgePlanReveal,
   endTurn,
 } from '../../3_engine/gameRules.js';
 import { pool } from '../../4_data/db.js';
@@ -367,7 +368,6 @@ export class GameManager {
       allRows.map((r: any) => [String(r.id).toLowerCase(), mapDbRowToCardDef(r)])
     );
 
-    // 1. Custom saved user deck from auth.decks
     if (!deckId.startsWith('starter-')) {
       const deckRes = await pool.query('SELECT * FROM auth.decks WHERE id = $1;', [deckId]);
       if (deckRes.rows.length > 0) {
@@ -396,7 +396,6 @@ export class GameManager {
       }
     }
 
-    // 2. Official Starter Deck (starter-sd01 through starter-sd06)
     const normalizedStarter = deckId.toLowerCase();
     const meta = STARTER_META[normalizedStarter] || STARTER_META['starter-sd01'];
 
@@ -430,7 +429,6 @@ export class GameManager {
           !r.element)
     );
 
-    // 4-card Story arc
     const storyRows = legalPool.filter(
       (r: any) =>
         r.card_type === 'Story' ||
@@ -448,7 +446,6 @@ export class GameManager {
       if (storyDeck.length === 4) break;
     }
 
-    // 15-card Scene deck
     const sceneRows = legalPool.filter((r: any) => r.card_type === 'Scene');
     const sceneDeck: CardDefinition[] = [];
     for (const scr of sceneRows) {
@@ -458,7 +455,6 @@ export class GameManager {
       if (sceneDeck.length >= 15) break;
     }
 
-    // 50-card Main deck
     const mainRows = legalPool.filter(
       (r: any) =>
         ['Character', 'Friend Character', 'Event', 'Item'].includes(r.card_type) &&
@@ -520,12 +516,9 @@ export class GameManager {
       case 'PASS_INSPIRE':
         return passInspireInContact(state, playerId);
       case 'BREAKTHROUGH_CHOICE':
-        return resolveBreakthroughChoice(
-          state,
-          playerId,
-          payload.choice,
-          payload.targetPlanStageIndex
-        );
+        return resolveBreakthroughChoice(state, playerId, payload.choice);
+      case 'ACK_PLAN_REVEAL':
+        return acknowledgePlanReveal(state, playerId);
       case 'END_TURN':
         return endTurn(state, playerId);
       default:

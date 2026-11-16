@@ -39,8 +39,8 @@ export interface CardDefinition {
 export interface SceneCardInPlay {
   card: CardDefinition;
   isFaceUp: boolean;
-  isExhausted: boolean;      // True = rotated 90deg clockwise (spent for Harmony cost this turn)
-  isLockedFaceDown: boolean; // True = Player 1's 1st scene (permanently face down)
+  isExhausted: boolean;
+  isLockedFaceDown: boolean;
 }
 
 export interface StoryStageSlot {
@@ -75,6 +75,7 @@ export interface PlayerState {
   };
   mulliganStatus: 'PENDING' | 'KEPT' | 'MULLIGANED';
   turnsTaken: number;
+  actedLanesThisTurn: LaneKey[];
 }
 
 export type GamePhase =
@@ -108,6 +109,17 @@ export interface ClashAnimationEvent {
   outcome: 'ATTACKER_WINS' | 'DEFENDER_WINS' | 'TIE';
 }
 
+export interface PlanRevealEvent {
+  id: number;
+  stage: 1 | 2 | 3 | 4;
+  defenderId: '0' | '1';
+  defenderName: string;
+  revealedCard: CardDefinition;
+  hasPrePlanTrigger: boolean;
+  triggeredEffectSummary: string | null;
+  acknowledgedBy: ('0' | '1')[];
+}
+
 export interface PublicAnnouncement {
   type: string;
   message: string;
@@ -131,5 +143,6 @@ export interface KayouGameState {
   players: Record<'0' | '1', PlayerState>;
   contactState: ContactCombatState | null;
   lastClashEvent: ClashAnimationEvent | null;
+  lastPlanRevealEvent: PlanRevealEvent | null;
   announcements: PublicAnnouncement[];
 }

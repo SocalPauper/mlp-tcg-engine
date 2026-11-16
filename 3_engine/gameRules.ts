@@ -44,6 +44,7 @@ function createEmptyPlayer(id: '0' | '1', name: string): PlayerState {
     },
     mulliganStatus: 'PENDING',
     turnsTaken: 0,
+    actedLanesThisTurn: [],
   };
 }
 
@@ -61,6 +62,7 @@ export function createWaitingMatch(): KayouGameState {
     },
     contactState: null,
     lastClashEvent: null,
+    lastPlanRevealEvent: null,
     announcements: [],
   };
 }
@@ -109,6 +111,7 @@ export function startSeatedMatch(
       },
       mulliganStatus: 'PENDING',
       turnsTaken: 0,
+      actedLanesThisTurn: [],
     };
   };
 
@@ -125,6 +128,7 @@ export function startSeatedMatch(
     },
     contactState: null,
     lastClashEvent: null,
+    lastPlanRevealEvent: null,
     announcements: [
       {
         type: 'SYSTEM',
@@ -349,6 +353,63 @@ export function playCardFromHand(
   };
 }
 
+/**
+ * Official Kayou Rule Check:
+ * Scene cards only grant Inspiration during Contact if they have an Inspo Boost ability
+ * matching the active lane's character/element condition.
+ */
+export function canSceneInspireCharacter(
+  scene: SceneCardInPlay,
+  targetCharacter: CardDefinition | null
+): { eligible: boolean; boostAmount: number; reason?: string } {
+  if (!scene.isFaceUp || scene.isLockedFaceDown || !targetCharacter) {
+    return { eligible: false, boostAmount: 0 };
+  }
+
+  const text = String(scene.card.effectText || '');
+  const id = String(scene.card.id || '').toUpperCase();
+
+  const hasInspoKeyword =
+    /Inspo Boost|Inspiration Boost|\+\d+\s*Inspiration/i.test(text) || id.includes('-ER');
+  if (!hasInspoKeyword) {
+    return {
+      eligible: false,
+      boostAmount: 0,
+      reason: 'This Scene does not have an Inspo Boost ability.',
+    };
+  }
+
+  const boostMatch = text.match(/\+(\d+)\s*Inspiration/i);
+  const boostAmount = boostMatch ? parseInt(boostMatch[1], 10) : 1;
+
+  const charBracketMatch = text.match(/[｢\[]([^｣\]]+)[｣\]]/);
+  if (charBracketMatch) {
+    const requiredName = charBracketMatch[1].trim().toLowerCase();
+    const actualName = String(targetCharacter.name || '').toLowerCase();
+    if (!actualName.includes(requiredName)) {
+      return {
+        eligible: false,
+        boostAmount: 0,
+        reason: `Only boosts ${charBracketMatch[1]}`,
+      };
+    }
+  }
+
+  const elements = ['magic', 'loyalty', 'honesty', 'generosity', 'kindness', 'laughter'];
+  for (const el of elements) {
+    const elRegex = new RegExp(`your\\s+${el}\\s+character`, 'i');
+    if (elRegex.test(text) && String(targetCharacter.element || '').toLowerCase() !== el) {
+      return {
+        eligible: false,
+        boostAmount: 0,
+        reason: `Only boosts ${el.toUpperCase()} characters`,
+      };
+    }
+  }
+
+  return { eligible: true, boostAmount };
+}
+
 function getSlotTotalPower(slot: {
   character: CardDefinition | null;
   items: CardDefinition[];
@@ -369,7 +430,11 @@ export function startContactPhase(state: KayouGameState, playerId: '0' | '1'): K
   }
 
   const allLanes: LaneKey[] = ['left', 'center', 'right'];
-  const activeAttackLanes = allLanes.filter((l) => attacker.adventureArea[l].character !== null);
+  const activeAttackLanes = allLanes.filter(
+    (l) =>
+      attacker.adventureArea[l].character !== null &&
+      !attacker.actedLanesThisTurn.includes(l)
+  );
 
   if (activeAttackLanes.length === 0) {
     return endTurn(state, playerId);
@@ -391,7 +456,8 @@ function advanceToNextAttackLane(
   while (remaining.length > 0) {
     const lane = remaining[0];
     const atkSlot = attacker.adventureArea[lane];
-    if (!atkSlot.character) {
+
+    if (!atkSlot.character || attacker.actedLanesThisTurn.includes(lane)) {
       remaining.shift();
       continue;
     }
@@ -446,17 +512,20 @@ export function inspireInContact(
 
   const player = state.players[playerId];
   const sceneItem = player.sceneArea[sceneIndex];
-  if (!sceneItem || !sceneItem.isFaceUp || sceneItem.isLockedFaceDown) return state;
+  const lane = state.contactState.activeLane;
+  const currentSlot = player.adventureArea[lane];
+
+  if (!sceneItem) return state;
+  const check = canSceneInspireCharacter(sceneItem, currentSlot.character);
+  if (!check.eligible) return state;
 
   const updatedSceneArea = player.sceneArea.map((s, idx) =>
     idx === sceneIndex ? { ...s, isFaceUp: false } : s
   );
 
-  const lane = state.contactState.activeLane;
-  const currentSlot = player.adventureArea[lane];
   const updatedSlot = {
     ...currentSlot,
-    inspoBoost: currentSlot.inspoBoost + 1,
+    inspoBoost: currentSlot.inspoBoost + check.boostAmount,
   };
 
   const updatedPlayer: PlayerState = {
@@ -570,6 +639,7 @@ export function passInspireInContact(
   if (outcome === 'DEFENDER_WINS') {
     nextAtkPlayer = {
       ...nextAtkPlayer,
+      actedLanesThisTurn: [...nextAtkPlayer.actedLanesThisTurn, lane],
       retirement: [...nextAtkPlayer.retirement, atkSlot.character, ...atkSlot.items],
       adventureArea: {
         ...nextAtkPlayer.adventureArea,
@@ -579,6 +649,7 @@ export function passInspireInContact(
   } else {
     nextAtkPlayer = {
       ...nextAtkPlayer,
+      actedLanesThisTurn: [...nextAtkPlayer.actedLanesThisTurn, lane],
       retirement: [...nextAtkPlayer.retirement, atkSlot.character, ...atkSlot.items],
       adventureArea: {
         ...nextAtkPlayer.adventureArea,
@@ -611,35 +682,85 @@ export function passInspireInContact(
   );
 }
 
-/**
- * Helper: Checks whether `attacker` is allowed to progress to their next Story stage.
- * Rule: To progress Story Stage N (index = attacker.storyProgress), the opponent's paired
- * Plan card under their Story Stage N must ALREADY be cleared (isPlanRevealed === true or planCard === null).
- */
 export function canProgressNextStoryStage(attacker: PlayerState, defender: PlayerState): boolean {
-  const nextStageIdx = attacker.storyProgress; // 0 for Story I, 1 for Story II, etc.
+  const nextStageIdx = attacker.storyProgress;
   if (nextStageIdx >= 4) return false;
   const opponentPairedStage = defender.storyStages[nextStageIdx];
   if (!opponentPairedStage) return true;
   return Boolean(opponentPairedStage.isPlanRevealed || !opponentPairedStage.planCard);
 }
 
+function executePrePlanEffectAndReturnToHand(
+  attacker: PlayerState,
+  defender: PlayerState,
+  revealedCard: CardDefinition,
+  activeLane: LaneKey
+): {
+  updatedAttacker: PlayerState;
+  updatedDefender: PlayerState;
+  hasPrePlanTrigger: boolean;
+  effectSummary: string | null;
+} {
+  const text = String(revealedCard.effectText || '');
+  const hasPrePlanTrigger = /Pre-Plan|Scheme|When revealed as a Plan|Plan:/i.test(text);
+
+  let updatedAttacker = { ...attacker };
+  let updatedDefender = {
+    ...defender,
+    hand: [...defender.hand, revealedCard],
+  };
+  let effectSummary: string | null = null;
+
+  if (hasPrePlanTrigger) {
+    if (/draw\s+1|draw\s+a\s+card/i.test(text) && updatedDefender.mainDeck.length > 0) {
+      const drawn = updatedDefender.mainDeck[0];
+      updatedDefender = {
+        ...updatedDefender,
+        mainDeck: updatedDefender.mainDeck.slice(1),
+        hand: [...updatedDefender.hand, drawn],
+      };
+      effectSummary = `Pre-Plan Triggered: ${defender.displayName} drew 1 card!`;
+    } else if (/retire|remove/i.test(text) && updatedAttacker.adventureArea[activeLane].character) {
+      const atkSlot = updatedAttacker.adventureArea[activeLane];
+      updatedAttacker = {
+        ...updatedAttacker,
+        retirement: [...updatedAttacker.retirement, atkSlot.character!, ...atkSlot.items],
+        adventureArea: {
+          ...updatedAttacker.adventureArea,
+          [activeLane]: { character: null, items: [], inspoBoost: 0 },
+        },
+      };
+      effectSummary = `Pre-Plan Triggered: Attacking character in ${activeLane.toUpperCase()} lane was retired!`;
+    } else {
+      effectSummary = `Pre-Plan Triggered: ${text}`;
+    }
+  }
+
+  return { updatedAttacker, updatedDefender, hasPrePlanTrigger, effectSummary };
+}
+
 export function resolveBreakthroughChoice(
   state: KayouGameState,
   playerId: '0' | '1',
-  choice: 'PROGRESS_STORY' | 'INTERVENE_PLAN',
-  targetPlanStageIndex?: number
+  choice: 'PROGRESS_STORY' | 'INTERVENE_PLAN'
 ): KayouGameState {
   if (state.phase !== 'BREAKTHROUGH_CHOICE' || !state.contactState) return state;
   if (state.turnPlayerId !== playerId) return state;
 
+  const activeLane = state.contactState.activeLane;
+  if (state.players[playerId].actedLanesThisTurn.includes(activeLane)) {
+    return state;
+  }
+
   const defenderId: '0' | '1' = playerId === '0' ? '1' : '0';
-  let attacker = { ...state.players[playerId] };
-  let defender = { ...state.players[defenderId] };
+  let attacker: PlayerState = {
+    ...state.players[playerId],
+    actedLanesThisTurn: [...state.players[playerId].actedLanesThisTurn, activeLane],
+  };
+  let defender: PlayerState = { ...state.players[defenderId] };
+  let planRevealEvent = state.lastPlanRevealEvent;
 
   const allowedToProgress = canProgressNextStoryStage(attacker, defender);
-
-  // Enforce rule: if opponent's paired Plan card is NOT cleared yet, force/require Intervene
   const effectiveChoice =
     choice === 'PROGRESS_STORY' && !allowedToProgress ? 'INTERVENE_PLAN' : choice;
 
@@ -676,24 +797,38 @@ export function resolveBreakthroughChoice(
       };
     }
   } else if (effectiveChoice === 'INTERVENE_PLAN') {
-    const availableIdx =
-      targetPlanStageIndex !== undefined &&
-      defender.storyStages[targetPlanStageIndex]?.planCard &&
-      !defender.storyStages[targetPlanStageIndex]?.isPlanRevealed
-        ? targetPlanStageIndex
-        : defender.storyStages.findIndex((s) => s.planCard !== null && !s.isPlanRevealed);
+    const sequentialStageIdx = defender.storyStages.findIndex(
+      (s) => s.planCard !== null && !s.isPlanRevealed
+    );
 
-    if (availableIdx !== -1) {
-      const targetStage = defender.storyStages[availableIdx];
-      const retiredPlan = targetStage.planCard!;
+    if (sequentialStageIdx !== -1) {
+      const targetStage = defender.storyStages[sequentialStageIdx];
+      const revealedCard = targetStage.planCard!;
+
       const updatedDefStages = defender.storyStages.map((s, idx) =>
-        idx === availableIdx ? { ...s, planCard: null, isPlanRevealed: true } : s
+        idx === sequentialStageIdx ? { ...s, planCard: null, isPlanRevealed: true } : s
       );
 
       defender = {
         ...defender,
         storyStages: updatedDefStages,
-        retirement: [...defender.retirement, retiredPlan],
+      };
+
+      const { updatedAttacker, updatedDefender, hasPrePlanTrigger, effectSummary } =
+        executePrePlanEffectAndReturnToHand(attacker, defender, revealedCard, activeLane);
+
+      attacker = updatedAttacker;
+      defender = updatedDefender;
+
+      planRevealEvent = {
+        id: Date.now(),
+        stage: targetStage.stage,
+        defenderId,
+        defenderName: defender.displayName,
+        revealedCard,
+        hasPrePlanTrigger,
+        triggeredEffectSummary: effectSummary,
+        acknowledgedBy: [],
       };
     }
   }
@@ -707,10 +842,36 @@ export function resolveBreakthroughChoice(
         [playerId]: attacker,
         [defenderId]: defender,
       },
+      lastPlanRevealEvent: planRevealEvent,
     },
     playerId,
     nextQueue
   );
+}
+
+export function acknowledgePlanReveal(
+  state: KayouGameState,
+  playerId: '0' | '1'
+): KayouGameState {
+  if (!state.lastPlanRevealEvent) return state;
+  if (state.lastPlanRevealEvent.acknowledgedBy.includes(playerId)) return state;
+
+  const updatedAck = [...state.lastPlanRevealEvent.acknowledgedBy, playerId];
+
+  if (updatedAck.length >= 2) {
+    return {
+      ...state,
+      lastPlanRevealEvent: null,
+    };
+  }
+
+  return {
+    ...state,
+    lastPlanRevealEvent: {
+      ...state.lastPlanRevealEvent,
+      acknowledgedBy: updatedAck,
+    },
+  };
 }
 
 export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameState {
@@ -722,6 +883,7 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
   const endingPlayer = state.players[playerId];
   const cleanedEndingPlayer: PlayerState = {
     ...endingPlayer,
+    actedLanesThisTurn: [],
     adventureArea: {
       left: { ...endingPlayer.adventureArea.left, inspoBoost: 0 },
       center: { ...endingPlayer.adventureArea.center, inspoBoost: 0 },
@@ -753,6 +915,7 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
   const updatedStartingPlayer: PlayerState = {
     ...startingPlayer,
     turnsTaken: newTurnsTaken,
+    actedLanesThisTurn: [],
     mainDeck: restMain,
     hand: [...startingPlayer.hand, ...drawnMain],
     sceneDeck: restScene,
