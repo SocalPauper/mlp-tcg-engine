@@ -7,6 +7,7 @@ import authRouter from './routes/auth.js';
 import cardsRouter from './routes/cards.js';
 import decksRouter from './routes/decks.js';
 import shopsRouter from './routes/shops.js';
+import { GameManager } from './websocket/gameManager.js';
 
 const app = express();
 
@@ -93,7 +94,7 @@ async function startServer() {
     console.error('[DATABASE INIT ERROR]', err.message);
   }
 
-  // Mount Routes
+  // Mount REST Routes
   app.use('/api/auth', authRouter);
   app.use('/api/users', authRouter);
   app.use('/api/shop', shopsRouter);
@@ -108,9 +109,12 @@ async function startServer() {
     res.json({ success: true, announcement: "Welcome to Equestria Clash TCG Online!" });
   });
 
+  // Create HTTP server and attach WebSocket GameManager
   const server = createServer(app);
+  const gameManager = new GameManager(server);
+
   server.listen(PORT, () => {
-    console.log(`[SERVER] MLP TCG Backend active on port ${PORT}`);
+    console.log(`[SERVER] MLP TCG Backend active on port ${PORT} with WebSocket GameManager enabled.`);
   });
 }
 
