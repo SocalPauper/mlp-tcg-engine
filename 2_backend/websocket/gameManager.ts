@@ -1,6 +1,6 @@
 import { WebSocket, WebSocketServer } from 'ws';
-import { KayouGameState, DeckId } from '../3_engine/types.js';
-import { createWaitingMatch, startSeatedMatch, drawCard, playCharacter, advancePhase } from '../3_engine/gameRules.js';
+import { KayouGameState, DeckId } from '../../3_engine/types.js';
+import { createWaitingMatch, startSeatedMatch, drawCard, playCharacter, advancePhase } from '../../3_engine/gameRules.js';
 import { pool } from '../../4_data/db.js';
 
 interface RoomClient {

@@ -1,4 +1,4 @@
-import { KayouGameState, CardDefinition, PlayerState, GamePhase } from './types.ts';
+import { KayouGameState, CardDefinition, PlayerState, GamePhase } from './types.js';
 
 /**
  * Secure Fisher-Yates shuffle utilizing crypto.getRandomValues for true randomness.
@@ -46,8 +46,8 @@ function createEmptyPlayer(id: string, name: string): PlayerState {
 }
 
 export function startSeatedMatch(
-  deck0Def: { leader: CardDefinition, cards: CardDefinition[] }, 
-  deck1Def: { leader: CardDefinition, cards: CardDefinition[] }
+  deck0Def: { leader: CardDefinition; cards: CardDefinition[] }, 
+  deck1Def: { leader: CardDefinition; cards: CardDefinition[] }
 ): KayouGameState {
   const shuffledDeck0 = secureShuffle(deck0Def.cards);
   const shuffledDeck1 = secureShuffle(deck1Def.cards);

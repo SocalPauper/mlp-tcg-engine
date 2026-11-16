@@ -6,7 +6,8 @@ export type CardType =
   | 'Item' 
   | 'Event' 
   | 'Scene' 
-  | 'Story';
+  | 'Story'
+  | 'Plan';
 
 export type HarmonyColor = 
   | 'Magic' 
@@ -29,18 +30,25 @@ export interface CardDefinition {
   effectText?: string;
 }
 
+export interface LaneSlot {
+  character: CardDefinition | null;
+  item: CardDefinition | null;
+  story: CardDefinition | null;
+  plan: CardDefinition | null;
+}
+
 export interface PlayerState {
   id: string;
   displayName: string;
-  leader: CardDefinition | null; // The Mane Character leader
+  leader: CardDefinition | null;
   deck: CardDefinition[];
   hand: CardDefinition[];
   discard: CardDefinition[];
   points: number;
   lanes: {
-    left: CardDefinition | null;
-    center: CardDefinition | null;
-    right: CardDefinition | null;
+    left: LaneSlot;
+    center: LaneSlot;
+    right: LaneSlot;
   };
 }
 
