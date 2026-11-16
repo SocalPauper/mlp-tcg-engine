@@ -12,7 +12,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'mlp_tcg_super_secret_key_2026';
 // CURRENT SESSION ENDPOINT
 router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
-    const result = await pool.query('SELECT id, username, display_name, email, is_safe_mode, is_verified, reward_points FROM auth.users WHERE id = $1', [req.user?.id]);
+    const result = await pool.query('SELECT id, username, display_name, email, is_safe_mode, is_verified, is_admin, reward_points FROM auth.users WHERE id = $1', [req.user?.id]);
     if (result.rows.length === 0) return res.status(404).json({ success: false });
     
     const user = result.rows[0];
@@ -25,6 +25,7 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
         email: user.email,
         isSafeMode: user.is_safe_mode,
         isVerified: user.is_verified,
+        isAdmin: user.is_admin,
         reward_points: user.reward_points ?? 500
       }
     });
@@ -81,12 +82,13 @@ router.post('/register', async (req, res) => {
     const verificationToken = crypto.randomBytes(32).toString('hex');
 
     const isVerified = !email;
-    const isSafeMode = !(age >= 13); // Automatically lift safe mode if 13+ and no email required, or wait for verification
+    const isSafeMode = !(age >= 13);
 
-    // Insert new user with default 500 reward points
+    // Insert new user with default 500 reward points and explicitly restrict is_admin to FALSE
     const insertResult = await client.query(
-      `INSERT INTO auth.users (username, display_name, email, password_hash, age, verification_token, is_verified, is_safe_mode, reward_points)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 500) RETURNING id, username, display_name, email, reward_points, is_safe_mode, is_verified`,
+      `INSERT INTO auth.users (username, display_name, email, password_hash, age, verification_token, is_verified, is_safe_mode, reward_points, is_admin)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 500, FALSE) 
+       RETURNING id, username, display_name, email, reward_points, is_safe_mode, is_verified, is_admin`,
       [username, displayName, email || null, passwordHash, age, verificationToken, isVerified, isSafeMode]
     );
 
@@ -108,7 +110,7 @@ router.post('/register', async (req, res) => {
 
     await client.query('COMMIT');
 
-    // Issue token upon registration so user is instantly logged in
+    // Issue token upon registration with explicitly restricted admin rights
     const token = jwt.sign(
       { id: newUser.id, username: newUser.username, isSafeMode: newUser.is_safe_mode, isVerifiedAdult: false, isAdmin: false },
       JWT_SECRET,
@@ -134,6 +136,7 @@ router.post('/register', async (req, res) => {
         email: newUser.email,
         isSafeMode: newUser.is_safe_mode,
         isVerified: newUser.is_verified,
+        isAdmin: newUser.is_admin,
         reward_points: newUser.reward_points ?? 500
       }
     });
@@ -201,6 +204,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         isSafeMode: currentSafeMode,
         isVerified: user.is_verified,
+        isAdmin: user.is_admin,
         reward_points: user.reward_points ?? 500
       }
     });
@@ -222,9 +226,8 @@ router.get('/verify', async (req, res) => {
     if (userResult.rows.length === 0) return res.status(400).json({ success: false, message: 'Token invalid or expired.' });
 
     const user = userResult.rows[0];
-
-    // Force lift safe mode if user is 13 or older upon verification
     const removeSafeMode = user.age >= 13;
+
     await pool.query(
       `UPDATE auth.users 
        SET is_verified = TRUE, 
