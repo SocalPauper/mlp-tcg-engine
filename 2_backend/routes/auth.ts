@@ -81,12 +81,12 @@ router.post('/register', async (req, res) => {
     const verificationToken = crypto.randomBytes(32).toString('hex');
 
     const isVerified = !email;
-    const isSafeMode = !(!email && age >= 13);
+    const isSafeMode = !(age >= 13); // Automatically lift safe mode if 13+ and no email required, or wait for verification
 
     // Insert new user with default 500 reward points
     const insertResult = await client.query(
       `INSERT INTO auth.users (username, display_name, email, password_hash, age, verification_token, is_verified, is_safe_mode, reward_points)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 500) RETURNING id, username, display_name, email, reward_points`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 500) RETURNING id, username, display_name, email, reward_points, is_safe_mode, is_verified`,
       [username, displayName, email || null, passwordHash, age, verificationToken, isVerified, isSafeMode]
     );
 
@@ -110,7 +110,7 @@ router.post('/register', async (req, res) => {
 
     // Issue token upon registration so user is instantly logged in
     const token = jwt.sign(
-      { id: newUser.id, username: newUser.username, isSafeMode, isVerifiedAdult: false, isAdmin: false },
+      { id: newUser.id, username: newUser.username, isSafeMode: newUser.is_safe_mode, isVerifiedAdult: false, isAdmin: false },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -131,6 +131,9 @@ router.post('/register', async (req, res) => {
         id: newUser.id,
         username: newUser.username,
         displayName: newUser.display_name,
+        email: newUser.email,
+        isSafeMode: newUser.is_safe_mode,
+        isVerified: newUser.is_verified,
         reward_points: newUser.reward_points ?? 500
       }
     });
@@ -142,11 +145,6 @@ router.post('/register', async (req, res) => {
   } finally {
     client.release();
   }
-});
-
-// LOGOUT ENDPOINT
-router.post('/logout', (req, res) => {
-  return res.json({ success: true, message: 'Logged out successfully.' });
 });
 
 // LOGIN ENDPOINT
@@ -224,18 +222,28 @@ router.get('/verify', async (req, res) => {
     if (userResult.rows.length === 0) return res.status(400).json({ success: false, message: 'Token invalid or expired.' });
 
     const user = userResult.rows[0];
-    if (user.is_verified) return res.json({ success: true, message: 'Already verified.' });
 
+    // Force lift safe mode if user is 13 or older upon verification
     const removeSafeMode = user.age >= 13;
     await pool.query(
-      'UPDATE auth.users SET is_verified = TRUE, is_safe_mode = CASE WHEN $2::boolean THEN FALSE ELSE is_safe_mode END, verification_token = NULL WHERE id = $1',
+      `UPDATE auth.users 
+       SET is_verified = TRUE, 
+           is_safe_mode = CASE WHEN $2::boolean THEN FALSE ELSE is_safe_mode END, 
+           verification_token = NULL 
+       WHERE id = $1`,
       [user.id, removeSafeMode]
     );
 
-    return res.json({ success: true, message: 'Email verified successfully! Safe mode removed.' });
+    return res.json({ success: true, message: 'Email verified successfully! Safe mode has been removed.' });
   } catch (err) {
-    return res.status(500).json({ success: false, message: 'Internal server error.' });
+    console.error('Verification error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error during verification.' });
   }
+});
+
+// LOGOUT ENDPOINT
+router.post('/logout', (req, res) => {
+  return res.json({ success: true, message: 'Logged out successfully.' });
 });
 
 export default router;

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from './config';
 import Navbar from './components/Navbar';
@@ -94,6 +95,53 @@ export const useAuth = () => {
 
 type BuilderMode = 'CREATE' | 'EDIT' | 'VIEW' | 'COPY';
 
+// Separate Verification Component to handle popup and token check via router
+function VerifyEmailRoute() {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+  const [statusMessage, setStatusMessage] = useState('Verifying your email...');
+  const [isSuccess, setIsSuccess] = useState(false);
+  const { user, login } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!token) {
+      setStatusMessage('Missing verification token.');
+      return;
+    }
+
+    fetch(`${API_BASE_URL}/api/auth/verify?token=${token}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Verification failed.');
+        
+        setIsSuccess(true);
+        setStatusMessage(data.message || 'Email verified successfully!');
+        window.alert('Success! Your email has been verified and Safe Mode has been lifted.');
+
+        if (user) {
+          const updatedUser = { ...user, isSafeMode: false, isVerified: true };
+          login(updatedUser, localStorage.getItem('token') || 'dummy-jwt-token');
+        }
+
+        setTimeout(() => navigate('/'), 2000);
+      })
+      .catch((err) => {
+        setIsSuccess(false);
+        setStatusMessage(err.message || 'An error occurred during verification.');
+      });
+  }, [token, navigate, user, login]);
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+      <div style={{ background: '#1f2937', padding: '32px', borderRadius: '16px', width: '100%', maxWidth: '450px', color: '#fff', textAlign: 'center', border: '1px solid #374151' }}>
+        <h2 style={{ marginBottom: '16px', color: isSuccess ? '#34d399' : '#f472b6' }}>Email Verification</h2>
+        <p style={{ fontSize: '0.95rem', color: '#d1d5db' }}>{statusMessage}</p>
+      </div>
+    </div>
+  );
+}
+
 function AppContent() {
   const [currentTab, setCurrentTab] = useState<string>('hub');
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -113,27 +161,32 @@ function AppContent() {
       <Navbar currentTab={currentTab} setCurrentTab={handleTabChange} onOpenAuth={() => setShowAuthModal(true)} />
 
       <main className="main-content-area">
-        {currentTab === 'hub' && <MainHub />}
-        
-        {currentTab === 'stable' && (
-          builderConfig ? (
-            <DeckBuilder 
-              deckId={builderConfig.id} 
-              mode={builderConfig.mode}
-              onClose={() => setBuilderConfig(null)} 
-            />
-          ) : (
-            <StableHub 
-              currentUserId={user?.id?.toString() || ''} 
-              onOpenBuilder={(id, mode) => setBuilderConfig({ id, mode })} 
-            />
-          )
-        )}
-
-        {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
-        {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
-        {currentTab === 'fanPage' && <div className="placeholder-tab"><h2>Fan Art & Lore Page Coming Soon</h2></div>}
-        {currentTab === 'admin' && <AdminPanel />}
+        <Routes>
+          <Route path="/verify" element={<VerifyEmailRoute />} />
+          <Route path="*" element={
+            <>
+              {currentTab === 'hub' && <MainHub />}
+              {currentTab === 'stable' && (
+                builderConfig ? (
+                  <DeckBuilder 
+                    deckId={builderConfig.id} 
+                    mode={builderConfig.mode}
+                    onClose={() => setBuilderConfig(null)} 
+                  />
+                ) : (
+                  <StableHub 
+                    currentUserId={user?.id?.toString() || ''} 
+                    onOpenBuilder={(id, mode) => setBuilderConfig({ id, mode })} 
+                  />
+                )
+              )}
+              {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
+              {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
+              {currentTab === 'fanPage' && <div className="placeholder-tab"><h2>Fan Art & Lore Page Coming Soon</h2></div>}
+              {currentTab === 'admin' && <AdminPanel />}
+            </>
+          } />
+        </Routes>
       </main>
 
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
@@ -143,8 +196,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
