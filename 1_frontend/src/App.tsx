@@ -7,6 +7,7 @@ import MainHub from './components/MainHub';
 import GameBoard, { LiveGameState } from './components/GameBoard';
 import StableHub from './components/StableHub';
 import DeckBuilder from './components/DeckBuilder';
+import ShopView from './components/ShopView';
 import AdminPanel from './components/AdminPanel';
 import AuthModal from './components/AuthModal';
 import './index.css';
@@ -212,7 +213,6 @@ function AppContent() {
         return;
       }
 
-      // Attempt automatic reconnection if a match session exists in sessionStorage
       const savedRaw = sessionStorage.getItem(MATCH_SESSION_KEY);
       if (savedRaw) {
         setActiveMatch((prev) => (prev ? { ...prev, isReconnecting: true } : null));
@@ -247,7 +247,6 @@ function AppContent() {
     }
   };
 
-  // Restore active match on page refresh if sessionStorage has valid match credentials
   useEffect(() => {
     const savedRaw = sessionStorage.getItem(MATCH_SESSION_KEY);
     if (!savedRaw) return;
@@ -277,7 +276,6 @@ function AppContent() {
     if (initialState.roomId && (seat === '0' || seat === '1')) {
       const existing = sessionStorage.getItem(MATCH_SESSION_KEY);
       if (!existing) {
-        // Will be updated with sessionToken on first STATE_UPDATE broadcast
         sessionStorage.setItem(
           MATCH_SESSION_KEY,
           JSON.stringify({ roomCode: initialState.roomId, seat, sessionToken: '' })
@@ -345,6 +343,7 @@ function AppContent() {
                     />
                   )
                 )}
+                {currentTab === 'shop' && <ShopView />}
                 {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
                 {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
                 {currentTab === 'fanPage' && <div className="placeholder-tab"><h2>Fan Art & Lore Page Coming Soon</h2></div>}

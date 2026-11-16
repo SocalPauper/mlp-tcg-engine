@@ -1,0 +1,283 @@
+.shop-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px;
+  font-family: 'Nunito', sans-serif;
+  color: #4a148c;
+}
+
+.shop-loading {
+  text-align: center;
+  font-size: 1.2rem;
+  padding: 60px;
+  color: #7e22ce;
+  font-weight: 800;
+}
+
+.shop-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #fce7f3 0%, #f3e8ff 100%);
+  border: 2px solid #f472b6;
+  border-radius: 16px;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 16px rgba(147, 51, 234, 0.15);
+}
+
+.shop-header h2 {
+  margin: 0;
+  color: #581c87;
+  font-size: 1.8rem;
+}
+
+.shop-points-badge {
+  background: #fff;
+  border: 2px solid #ffd700;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 1rem;
+  color: #78350f;
+  box-shadow: 0 2px 8px rgba(253, 224, 71, 0.4);
+}
+
+.shop-message-banner {
+  background: #fdf2f8;
+  border: 2px solid #ec4899;
+  color: #be185d;
+  padding: 12px 18px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.shop-section {
+  margin-bottom: 36px;
+}
+
+.shop-section h3 {
+  font-size: 1.4rem;
+  color: #6b21a8;
+  margin-bottom: 4px;
+}
+
+.shop-section-desc {
+  font-size: 0.95rem;
+  color: #6b7280;
+  margin-bottom: 16px;
+}
+
+.pack-tiers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.pack-tier-card {
+  background: #fff;
+  border: 2px solid #e9d5ff;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(107, 33, 168, 0.08);
+  transition: transform 0.2s ease;
+}
+
+.pack-tier-card:hover {
+  transform: translateY(-4px);
+  border-color: #c084fc;
+}
+
+.pack-price-tag {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: #fef08a;
+  border: 1.5px solid #f59e0b;
+  color: #78350f;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.pack-tier-card h4 {
+  margin: 0 0 8px 0;
+  color: #4a148c;
+  font-size: 1.2rem;
+}
+
+.pack-tier-card p {
+  color: #6b7280;
+  font-size: 0.9rem;
+  flex: 1;
+  margin-bottom: 16px;
+}
+
+.shop-buy-btn {
+  background: linear-gradient(135deg, #ec4899, #9333ea);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.shop-buy-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  opacity: 0.95;
+}
+
+.shop-buy-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.weekly-deals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+}
+
+.deal-card {
+  background: #fff;
+  border: 2px solid #fbcfe8;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.1);
+}
+
+.deal-rarity-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: #f43f5e;
+  color: #fff;
+  font-weight: 900;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.deal-card-img {
+  width: 130px;
+  height: 182px;
+  object-fit: fill;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  border: 2px solid #e9d5ff;
+}
+
+.deal-card h4 {
+  margin: 0 0 4px 0;
+  font-size: 1rem;
+  color: #4a148c;
+  text-align: center;
+}
+
+.deal-card-meta {
+  font-size: 0.8rem;
+  color: #9333ea;
+  margin-bottom: 12px;
+}
+
+.deal-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+/* PACK REVEAL MODAL */
+.pack-reveal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.pack-reveal-modal {
+  background: linear-gradient(145deg, #241036 0%, #4c1d95 100%);
+  border: 3px solid #fde047;
+  border-radius: 20px;
+  padding: 24px;
+  max-width: 650px;
+  width: 100%;
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
+}
+
+.pack-reveal-modal h3 {
+  margin-top: 0;
+  color: #fde047;
+  font-size: 1.6rem;
+}
+
+.pulled-cards-row {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin: 20px 0;
+  flex-wrap: wrap;
+}
+
+.pulled-card-item {
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid #f472b6;
+  border-radius: 12px;
+  padding: 10px;
+  width: 130px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.pulled-rarity {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: #ec4899;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 900;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.pulled-card-item img {
+  width: 100px;
+  height: 140px;
+  object-fit: fill;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.pulled-card-item h5 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #fbcfe8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.pulled-card-item span {
+  font-size: 0.75rem;
+  color: #d8b4fe;
+}

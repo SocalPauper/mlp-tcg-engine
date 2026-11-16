@@ -54,7 +54,7 @@ export interface StoryStageSlot {
 
 export interface AdventureSlot {
   character: CardDefinition | null;
-  items: CardDefinition[]; // Enforced max 1 attached Item per official rules
+  items: CardDefinition[];
   inspoBoost: number;
   isExhausted: boolean;
 }
@@ -73,7 +73,7 @@ export interface LanePowerBreakdown {
 
 export interface PendingTargetSelection {
   sourceCard: CardDefinition;
-  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY';
+  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT';
   sourceLane?: LaneKey;
   effectAction: 'BUFF_POWER' | 'RETIRE_OPPONENT' | 'MOVE_FRIENDLY' | 'READY_FRIENDLY';
   value: number;
@@ -83,7 +83,6 @@ export interface PendingTargetSelection {
     owner: 'SELF' | 'OPPONENT';
     lane: LaneKey;
   }[];
-  // Optional second step for MOVE_FRIENDLY (pick source lane first, then destination lane)
   selectedFromLane?: LaneKey;
 }
 

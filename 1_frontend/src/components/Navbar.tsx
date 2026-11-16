@@ -40,6 +40,12 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
           <span style={{ fontSize: '10px', opacity: 0.85, fontWeight: 700 }}>(Decks)</span>
         </button>
         <button 
+          className={`nav-tab-btn tab-laughter ${currentTab === 'shop' ? 'active' : ''}`}
+          onClick={() => setCurrentTab('shop')}
+        >
+          🛍️ Shop
+        </button>
+        <button 
           className={`nav-tab-btn tab-kindness ${currentTab === 'community' ? 'active' : ''}`}
           onClick={() => setCurrentTab('community')}
         >

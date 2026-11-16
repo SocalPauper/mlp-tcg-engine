@@ -57,7 +57,7 @@ async function startServer() {
           SELECT 1 FROM information_schema.columns 
           WHERE table_schema = 'auth' AND table_name = 'users' AND column_name = 'id' AND data_type = 'integer'
         ) THEN
-          ALTER TABLE public.user_cards DROP CONSTRAINT IF EXISTS user_cards_user_id_fkey;
+          ALTER TABLE auth.user_cards DROP CONSTRAINT IF EXISTS user_cards_user_id_fkey;
           ALTER TABLE auth.users ALTER COLUMN id TYPE UUID USING gen_random_uuid();
         END IF;
       END $$;
@@ -77,15 +77,27 @@ async function startServer() {
       );
     `);
 
-    // 4. Game inventory table (housed in the game schema)
+    // 4. Game inventory table matching DBeaver schema (auth.user_cards)
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS game.user_cards (
+      CREATE TABLE IF NOT EXISTS auth.user_cards (
         user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
         card_id VARCHAR(50) REFERENCES game.cards(id) ON DELETE CASCADE,
         quantity INT DEFAULT 1,
         unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         user_alerted BOOLEAN DEFAULT FALSE,
         PRIMARY KEY (user_id, card_id)
+      );
+    `);
+
+    // 5. Weekly shop deals table for guaranteed weekly rotations
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS game.weekly_shop_deals (
+        id SERIAL PRIMARY KEY,
+        card_id VARCHAR(50) REFERENCES game.cards(id) ON DELETE CASCADE,
+        price INTEGER NOT NULL,
+        week_identifier VARCHAR(20) NOT NULL,
+        slot_index INTEGER NOT NULL,
+        UNIQUE(week_identifier, slot_index)
       );
     `);
 
