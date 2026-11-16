@@ -40,6 +40,7 @@ function isValidManeCharacter(c: Card): boolean {
 
 export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps) {
   const [cards, setCards] = useState<Card[]>([]);
+  const [landscapeIds, setLandscapeIds] = useState<Record<string, boolean>>({});
   
   // Progress & Inventory States
   const [unlockedCardIds, setUnlockedCardIds] = useState<string[]>([]);
@@ -211,6 +212,13 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   }, [deckId, cards, mode]);
 
   // --- Logic Helpers ---
+
+  const handleImageLoad = (cardId: string, e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    if (img.naturalWidth > img.naturalHeight * 1.05) {
+      setLandscapeIds(prev => (prev[cardId] ? prev : { ...prev, [cardId]: true }));
+    }
+  };
 
   const handleAcknowledgeUnlocks = async () => {
     const token = localStorage.getItem('token');
@@ -706,10 +714,11 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             ) : (
               displayCards.map(card => {
                 const isLocked = isCardLocked(card);
+                const isLandscape = Boolean(landscapeIds[card.id]);
                 return (
                   <div 
                     key={card.id} 
-                    className={`card-item ${isLocked ? 'locked' : ''}`} 
+                    className={`card-item ${isLocked ? 'locked' : ''} ${isLandscape ? 'landscape-art' : ''}`} 
                     onClick={() => {
                       if (isLocked) alert('You must unlock this rare card from a pack first!');
                       else addCardToDeck(card);
@@ -718,7 +727,18 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                     onTouchStart={() => handleTouchStart(card)}
                     onTouchEnd={handleTouchEnd}
                   >
-                    <img src={card.image_url} alt={card.name} loading="lazy" />
+                    <img
+                      src={card.image_url}
+                      alt={card.name}
+                      loading="lazy"
+                      onLoad={(e) => handleImageLoad(card.id, e)}
+                    />
+                    {isLandscape && (
+                      <div className="landscape-card-caption" title={card.name}>
+                        <span className="landscape-card-title">{card.name}</span>
+                        <span className="landscape-card-meta">{card.card_type}</span>
+                      </div>
+                    )}
                     {isLocked && <div className="lock-icon">🔒</div>}
                   </div>
                 );

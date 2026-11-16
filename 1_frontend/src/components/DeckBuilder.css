@@ -319,30 +319,84 @@ input:checked + .slider:before { transform: translateX(24px); }
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 22px;
   padding-bottom: 40px;
+  align-items: stretch;
+}
+
+/* Give landscape Story stacks slightly wider grid tracks */
+.card-grid:has(.story-stack) {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 28px;
 }
 
 .card-item {
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: rgba(74, 20, 140, 0.06);
+  background: #fff;
+  border: 2px solid var(--mlp-light-purple);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   aspect-ratio: 5/7;
   overflow: hidden;
-  padding: 2px;
+  position: relative;
 }
 
 .card-item img {
   width: 100%;
   height: 100%;
-  border-radius: 8px;
-  object-fit: contain;
+  border-radius: 10px;
+  object-fit: cover;
   display: block;
+}
+
+/* Landscape / horizontal art cards (Events, Items, Scenes without vertical frames) */
+.card-item.landscape-art {
+  background: linear-gradient(180deg, #f8f0fc 0%, #ede7f6 100%);
+  justify-content: space-between;
+}
+
+.card-item.landscape-art img {
+  width: 100%;
+  height: 76%;
+  object-fit: cover;
+  border-radius: 10px 10px 0 0;
+}
+
+.landscape-card-caption {
+  width: 100%;
+  height: 24%;
+  padding: 4px 8px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  background: #fff;
+  border-top: 1px solid var(--mlp-light-purple);
+}
+
+.landscape-card-title {
+  font-size: 11px;
+  font-weight: 900;
+  color: #4a148c;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.landscape-card-meta {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--mlp-magenta);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .card-item:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(255, 102, 163, 0.3); }
@@ -360,43 +414,45 @@ input:checked + .slider:before { transform: translateX(24px); }
   opacity: 0.9;
   pointer-events: none;
   filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+  z-index: 10;
 }
 
+/* Story cards are naturally landscape (7:5) */
 .story-stack {
   position: relative;
   width: 100%;
-  aspect-ratio: 5/7;
+  aspect-ratio: 7/5;
   cursor: pointer;
-  margin-bottom: 45px;
+  margin-bottom: 42px;
 }
 
 .story-card-layer {
   position: absolute;
   top: 0; left: 0;
   width: 100%; height: 100%;
-  border-radius: 8px;
-  object-fit: contain;
+  border-radius: 10px;
+  object-fit: cover;
   background: #1a1226;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   border: 2px solid #fff;
   box-shadow: 0 4px 10px rgba(0,0,0,0.2);
 }
 
-.story-card-layer:nth-child(1) { transform: rotate(-3deg) translate(-4px, 2px); z-index: 1; }
+.story-card-layer:nth-child(1) { transform: rotate(-2.5deg) translate(-4px, 2px); z-index: 1; }
 .story-card-layer:nth-child(2) { transform: rotate(-1deg) translate(-1px, 1px); z-index: 2; }
 .story-card-layer:nth-child(3) { transform: rotate(1deg) translate(2px, 0px); z-index: 3; }
-.story-card-layer:nth-child(4) { transform: rotate(3deg) translate(5px, 2px); z-index: 4; }
+.story-card-layer:nth-child(4) { transform: rotate(2.5deg) translate(5px, 2px); z-index: 4; }
 
-.story-stack:hover .story-card-layer:nth-child(1) { transform: translateX(-42%) rotate(-14deg) scale(1.02); z-index: 5; }
-.story-stack:hover .story-card-layer:nth-child(2) { transform: translateX(-14%) rotate(-5deg) scale(1.02); z-index: 6; }
-.story-stack:hover .story-card-layer:nth-child(3) { transform: translateX(14%) rotate(5deg) scale(1.02); z-index: 7; }
-.story-stack:hover .story-card-layer:nth-child(4) { transform: translateX(42%) rotate(14deg) scale(1.02); z-index: 8; }
+.story-stack:hover .story-card-layer:nth-child(1) { transform: translate(-18%, -10%) rotate(-8deg) scale(1.02); z-index: 5; }
+.story-stack:hover .story-card-layer:nth-child(2) { transform: translate(-6%, -3%) rotate(-3deg) scale(1.02); z-index: 6; }
+.story-stack:hover .story-card-layer:nth-child(3) { transform: translate(6%, 3%) rotate(3deg) scale(1.02); z-index: 7; }
+.story-stack:hover .story-card-layer:nth-child(4) { transform: translate(18%, 10%) rotate(8deg) scale(1.02); z-index: 8; }
 
 .story-stack.locked .story-card-layer { filter: grayscale(100%) brightness(0.4); }
 
 .story-stack-label {
   position: absolute;
-  bottom: -35px;
+  bottom: -32px;
   width: 100%;
   text-align: center;
   font-weight: 800;
