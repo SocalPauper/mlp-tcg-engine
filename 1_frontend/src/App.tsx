@@ -149,7 +149,6 @@ function AppContent() {
 
   const [builderConfig, setBuilderConfig] = useState<{ id: string | null, mode: BuilderMode } | null>(null);
 
-  // Active live WebSocket match state
   const [activeMatch, setActiveMatch] = useState<{
     ws: WebSocket;
     state: LiveGameState;
@@ -157,7 +156,6 @@ function AppContent() {
   } | null>(null);
 
   const handleMatchJoined = (ws: WebSocket, initialState: LiveGameState, seat: '0' | '1' | 'spectator') => {
-    // Keep listening for subsequent STATE_UPDATE messages during the match
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -195,7 +193,10 @@ function AppContent() {
 
   return (
     <div className="app-container">
-      <Navbar currentTab={currentTab} setCurrentTab={handleTabChange} onOpenAuth={() => setShowAuthModal(true)} />
+      {/* Hide Navbar completely during active tabletop gameplay */}
+      {!activeMatch && (
+        <Navbar currentTab={currentTab} setCurrentTab={handleTabChange} onOpenAuth={() => setShowAuthModal(true)} />
+      )}
 
       <main className="main-content-area">
         <Routes>

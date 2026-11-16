@@ -15,9 +15,26 @@ interface GameLobby {
   playerCount: number;
 }
 
+interface SelectableDeck {
+  id: string;
+  name: string;
+  element: string;
+  is_starter: boolean;
+  mane_image_url?: string | null;
+}
+
 interface MainHubProps {
   onMatchJoined: (ws: WebSocket, state: LiveGameState, seat: '0' | '1' | 'spectator') => void;
 }
+
+const FALLBACK_STARTERS: SelectableDeck[] = [
+  { id: 'starter-sd01', name: 'Twilight Sparkle - Magic Starter', element: 'Magic', is_starter: true },
+  { id: 'starter-sd02', name: 'Rainbow Dash - Loyalty Starter', element: 'Loyalty', is_starter: true },
+  { id: 'starter-sd03', name: 'Applejack - Honesty Starter', element: 'Honesty', is_starter: true },
+  { id: 'starter-sd04', name: 'Rarity - Generosity Starter', element: 'Generosity', is_starter: true },
+  { id: 'starter-sd05', name: 'Fluttershy - Kindness Starter', element: 'Kindness', is_starter: true },
+  { id: 'starter-sd06', name: 'Pinkie Pie - Laughter Starter', element: 'Laughter', is_starter: true },
+];
 
 export default function MainHub({ onMatchJoined }: MainHubProps) {
   const { user } = useAuth();
@@ -26,6 +43,7 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [lobbies, setLobbies] = useState<GameLobby[]>([]);
+  const [availableDecks, setAvailableDecks] = useState<SelectableDeck[]>(FALLBACK_STARTERS);
 
   // Create Game Form Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -33,23 +51,51 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
   const [roomMode, setRoomMode] = useState<'Casual' | 'Ranked'>('Casual');
   const [allowSpectators, setAllowSpectators] = useState(true);
 
-  // Quick Play Modal State
+  // Quick Play & Selected Deck State
   const [showQuickPlayModal, setShowQuickPlayModal] = useState(false);
   const [selectedDeck, setSelectedDeck] = useState<string>(() => {
-    return localStorage.getItem('mlp_last_deck_id') || 'SD01_TWILIGHT';
+    const saved = localStorage.getItem('mlp_last_deck_id');
+    return saved && saved.startsWith('starter-sd') ? saved : 'starter-sd01';
   });
   const [isSearchingQueue, setIsSearchingQueue] = useState(false);
   const [queueStatusText, setQueueStatusText] = useState('Searching for opponent in casual queue...');
 
   // Chat state
   const [chatMessages, setChatMessages] = useState([
-    { user: 'System', text: isGuest ? 'Welcome Guest! You are in Guest Mode (Quick Play & Casual Rooms).' : 'Welcome to the Equestria Clash General Chatroom!' }
+    { user: 'System', text: isGuest ? 'Welcome Guest! Choose any of the 6 Mane Starter Decks in Quick Play.' : 'Welcome to Equestria Clash! Select any Starter or Custom Deck to battle.' }
   ]);
   const [inputMsg, setInputMsg] = useState('');
 
   useEffect(() => {
     localStorage.setItem('mlp_last_deck_id', selectedDeck);
   }, [selectedDeck]);
+
+  // Fetch all 6 starter decks + user custom decks from /api/decks
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    fetch(`${API_BASE_URL}/api/decks`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+      .then(res => (res.ok ? res.json() : []))
+      .then((data: any[]) => {
+        if (!Array.isArray(data) || data.length === 0) return;
+        const mapped: SelectableDeck[] = data.map(d => ({
+          id: d.id,
+          name: d.name,
+          element: d.element || 'Unaligned',
+          is_starter: Boolean(d.is_starter || String(d.id).startsWith('starter-')),
+          mane_image_url: d.mane_image_url || null,
+        }));
+        const filtered = isGuest ? mapped.filter(d => d.is_starter) : mapped;
+        if (filtered.length > 0) {
+          setAvailableDecks(filtered);
+          if (!filtered.some(d => d.id === selectedDeck)) {
+            setSelectedDeck(filtered[0].id);
+          }
+        }
+      })
+      .catch(err => console.error('Error loading decks for Hub:', err));
+  }, [isGuest]);
 
   // Establish live WebSocket connection to Render backend
   useEffect(() => {
@@ -86,13 +132,6 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
     socket.onclose = () => {
       setWsConnected(false);
     };
-
-    return () => {
-      // Only close socket if we didn't hand it off to an active match
-      if (socket.readyState === WebSocket.OPEN && !isSearchingQueue) {
-        // Keep socket alive if handed to GameBoard; App handles cleanup on leave
-      }
-    };
   }, []);
 
   const handleQuickPlayStart = () => {
@@ -106,7 +145,7 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
     wsRef.current.send(JSON.stringify({
       type: 'QUICK_PLAY',
       deckId: selectedDeck,
-      username: user?.username || `Guest_${Math.floor(100 + Math.random() * 900)}`
+      username: user?.displayName || user?.username || `Guest_${Math.floor(100 + Math.random() * 900)}`
     }));
   };
 
@@ -132,7 +171,7 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
       mode: roomMode,
       allowSpectators,
       deckId: selectedDeck,
-      username: user?.username || 'Player'
+      username: user?.displayName || user?.username || 'Player'
     }));
 
     setNewRoomName('');
@@ -150,7 +189,7 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
       type: 'JOIN_ROOM',
       roomCode: lobby.code,
       deckId: selectedDeck,
-      username: user?.username || `Guest_${Math.floor(100 + Math.random() * 900)}`
+      username: user?.displayName || user?.username || `Guest_${Math.floor(100 + Math.random() * 900)}`
     }));
   };
 
@@ -178,7 +217,6 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
       <BackgroundUploader tabKey="hub" />
       
       <div className="hub-grid">
-        {/* Left Column: Quick Play & Active Lobbies */}
         <div className="hub-left-column">
           
           {/* Quick Play Hero Banner */}
@@ -188,7 +226,9 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
             </div>
             <h1 style={{ color: '#fbcfe8', fontSize: '24px', marginBottom: '8px' }}>⚡ Instant Quick Play</h1>
             <p style={{ color: '#e9d5ff', fontSize: '13px', marginBottom: '16px' }}>
-              {isGuest ? 'Playing as Guest: Jump instantly into casual matches with starter decks (No Pony Points awarded).' : 'Jump straight into casual matchmaking using your selected deck.'}
+              {isGuest
+                ? 'Playing as Guest: Choose from all 6 Mane Starter Decks (No Pony Points awarded).'
+                : 'Battle with any of the 6 Official Starter Decks or your Custom Saved Decks!'}
             </p>
             <button 
               onClick={() => setShowQuickPlayModal(true)} 
@@ -274,30 +314,42 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
         </div>
       </div>
 
-      {/* Quick Play Deck Selection Modal */}
+      {/* Quick Play Deck Selection Modal (All 6 Starters + Custom Decks) */}
       {showQuickPlayModal && (
         <div className="auth-modal-overlay" onClick={() => !isSearchingQueue && setShowQuickPlayModal(false)}>
-          <div className="auth-modal" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+          <div className="auth-modal" onClick={e => e.stopPropagation()} style={{ textAlign: 'center', maxWidth: '480px' }}>
             <h2>⚡ Quick Play Matchmaking</h2>
             {isSearchingQueue ? (
               <div style={{ padding: '30px 0' }}>
-                <div className="spinner" style={{ fontSize: '24px', marginBottom: '15px' }}>🌀</div>
+                <div className="spinner" style={{ fontSize: '28px', marginBottom: '15px' }}>🌀</div>
                 <p style={{ color: '#fbcfe8', fontWeight: 'bold' }}>{queueStatusText}</p>
                 <p style={{ fontSize: '12px', color: '#d8b4fe', marginTop: '8px', marginBottom: '20px' }}>
-                  Using Deck: {selectedDeck} {isGuest ? '(Guest Casual — No Pony Points)' : ''}
+                  Deck: {availableDecks.find(d => d.id === selectedDeck)?.name || selectedDeck}
                 </p>
                 <button onClick={handleCancelQuickPlay} className="mlp-btn secondary">Cancel Search</button>
               </div>
             ) : (
               <>
-                <p style={{ fontSize: '13px', color: '#d8b4fe', marginBottom: '15px' }}>Select your starter deck for this casual match:</p>
+                <p style={{ fontSize: '13px', color: '#d8b4fe', marginBottom: '15px' }}>
+                  Select your deck ({availableDecks.length} available):
+                </p>
                 <select 
                   value={selectedDeck} 
                   onChange={e => setSelectedDeck(e.target.value)}
                   style={{ width: '100%', padding: '12px', background: '#1e1124', color: '#fbcfe8', border: '1px solid #9333ea', borderRadius: '8px', marginBottom: '20px', fontWeight: 'bold' }}
                 >
-                  <option value="SD01_TWILIGHT">Twilight Sparkle Starter Deck (Magic)</option>
-                  <option value="SD02_RAINBOW">Rainbow Dash Starter Deck (Loyalty)</option>
+                  <optgroup label="Official Mane 6 Starter Decks">
+                    {availableDecks.filter(d => d.is_starter).map(d => (
+                      <option key={d.id} value={d.id}>{d.name} ({d.element})</option>
+                    ))}
+                  </optgroup>
+                  {availableDecks.some(d => !d.is_starter) && (
+                    <optgroup label="Custom Saved Decks">
+                      {availableDecks.filter(d => !d.is_starter).map(d => (
+                        <option key={d.id} value={d.id}>{d.name} ({d.element})</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button onClick={handleQuickPlayStart} className="mlp-btn" style={{ flex: 1, padding: '12px' }}>Start Match</button>
@@ -317,11 +369,23 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
             <form onSubmit={handleCreateGameSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <input 
                 type="text" 
-                placeholder="Room Name (e.g., Chill Pauper Game)" 
+                placeholder="Room Name (e.g., Chill Harmony Game)" 
                 value={newRoomName} 
                 onChange={e => setNewRoomName(e.target.value)}
                 required
               />
+              <label style={{ fontSize: '13px', color: '#fbcfe8', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                Select Your Deck:
+                <select 
+                  value={selectedDeck} 
+                  onChange={e => setSelectedDeck(e.target.value)}
+                  style={{ padding: '10px', background: '#1e1124', color: '#fbcfe8', border: '1px solid #9333ea', borderRadius: '8px' }}
+                >
+                  {availableDecks.map(d => (
+                    <option key={d.id} value={d.id}>{d.name} ({d.element})</option>
+                  ))}
+                </select>
+              </label>
               <label style={{ fontSize: '13px', color: '#fbcfe8', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 Match Type:
                 <select 
