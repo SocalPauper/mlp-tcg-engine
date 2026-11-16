@@ -4,69 +4,129 @@ import { pool } from '../../4_data/db.js';
 const router = Router();
 
 const STARTER_DEFINITIONS = [
-  { id: 'starter-sd01', setCode: 'SD01', name: 'Twilight Sparkle - Magic Starter', element: 'Magic' },
-  { id: 'starter-sd02', setCode: 'SD02', name: 'Rainbow Dash - Loyalty Starter', element: 'Loyalty' },
-  { id: 'starter-sd03', setCode: 'SD03', name: 'Applejack - Honesty Starter', element: 'Honesty' },
-  { id: 'starter-sd04', setCode: 'SD04', name: 'Rarity - Generosity Starter', element: 'Generosity' },
-  { id: 'starter-sd05', setCode: 'SD05', name: 'Fluttershy - Kindness Starter', element: 'Kindness' },
-  { id: 'starter-sd06', setCode: 'SD06', name: 'Pinkie Pie - Laughter Starter', element: 'Laughter' },
+  { id: 'starter-sd01', name: 'Twilight Sparkle - Magic Starter', element: 'Magic', pony: 'Twilight Sparkle' },
+  { id: 'starter-sd02', name: 'Rainbow Dash - Loyalty Starter', element: 'Loyalty', pony: 'Rainbow Dash' },
+  { id: 'starter-sd03', name: 'Applejack - Honesty Starter', element: 'Honesty', pony: 'Applejack' },
+  { id: 'starter-sd04', name: 'Rarity - Generosity Starter', element: 'Generosity', pony: 'Rarity' },
+  { id: 'starter-sd05', name: 'Fluttershy - Kindness Starter', element: 'Kindness', pony: 'Fluttershy' },
+  { id: 'starter-sd06', name: 'Pinkie Pie - Laughter Starter', element: 'Laughter', pony: 'Pinkie Pie' },
 ];
+
+function isTrueManeCharacter(c: any): boolean {
+  if (c.card_type !== 'Mane Character') return false;
+  const name = String(c.name || '');
+  const id = String(c.id || '');
+  const effect = String(c.effect_text || '');
+  if (name.includes(' - ') || name.includes(' – ') || name.includes('Stage')) return false;
+  if (id.includes('SPR') || id.includes('ER')) return false;
+  if (/Experience Report|Inspo Boost|Choose 1 Character|Adventure Area/i.test(effect)) return false;
+  if (Number(c.cost) > 0) return false;
+  return true;
+}
 
 async function buildStarterDecks() {
   const cardRes = await pool.query(
-    `SELECT id, name, set_code, card_type, element
+    `SELECT id, name, set_code, card_type, element, rarity, cost, effect_text, image_url
      FROM game.cards
-     WHERE set_code IN ('SD01', 'SD02', 'SD03', 'SD04', 'SD05', 'SD06')
-        OR id ~* '^SD0[1-6]'
-     ORDER BY id ASC;`
+     ORDER BY
+       CASE WHEN set_code ILIKE 'SD%' OR id ~* '^SD' THEN 0 ELSE 1 END,
+       id ASC;`
   );
 
-  const allStarterCards = cardRes.rows;
+  const allCards = cardRes.rows;
+  const trueManes = allCards.filter(isTrueManeCharacter);
 
   return STARTER_DEFINITIONS.map((def) => {
-    const setCards = allStarterCards.filter(
+    // 1. Find the exact Mane Character for this starter pony/element (prefer SD set)
+    const maneCard =
+      trueManes.find(
+        (c) =>
+          c.name.toLowerCase().includes(def.pony.toLowerCase()) &&
+          (c.element?.toLowerCase() === def.element.toLowerCase() || !c.element) &&
+          /^SD/i.test(c.id)
+      ) ||
+      trueManes.find((c) => c.name.toLowerCase().includes(def.pony.toLowerCase())) ||
+      trueManes.find((c) => c.element?.toLowerCase() === def.element.toLowerCase()) ||
+      null;
+
+    // Pool of cards legal for this element (prioritizing SD cards, excluding alt-arts -S)
+    const legalPool = allCards.filter(
       (c) =>
-        (c.set_code && c.set_code.toUpperCase() === def.setCode) ||
-        c.id.toUpperCase().startsWith(def.setCode)
+        !c.id.includes('-S') &&
+        !c.id.includes('SPR') &&
+        (c.element?.toLowerCase() === def.element.toLowerCase() ||
+          c.element?.toLowerCase() === 'everyday' ||
+          !c.element)
     );
 
-    const maneCard =
-      setCards.find(
-        (c) =>
-          c.card_type === 'Mane Character' &&
-          !c.name.includes(' - ') &&
-          !c.name.includes(' – ') &&
-          !c.name.includes('Stage')
-      ) || setCards.find((c) => c.card_type === 'Mane Character') || null;
-
-    const storyCards = setCards.filter(
+    // 2. Pick 1 complete 4-card Story arc (4/4)
+    const storyCandidates = legalPool.filter(
       (c) =>
         c.card_type === 'Story' ||
-        /-(?:C2[5-9]|C[3-4]\d)/i.test(c.id) ||
         c.name.includes(' - ') ||
         c.name.includes(' – ')
     );
+    const storyDeck: string[] = [];
+    const seenStoryPrefixes = new Set<string>();
+    for (const sc of storyCandidates) {
+      const arcName = sc.name.split(/[-–]/)[0].trim().toLowerCase();
+      if (seenStoryPrefixes.size === 0 || seenStoryPrefixes.has(arcName)) {
+        seenStoryPrefixes.add(arcName);
+        if (storyDeck.length < 4) storyDeck.push(sc.id);
+      }
+      if (storyDeck.length === 4) break;
+    }
 
-    const sceneCards = setCards.filter((c) => c.card_type === 'Scene');
+    // 3. Pick up to 15 Scene cards (max 3 copies per element scene)
+    const sceneCandidates = legalPool.filter((c) => c.card_type === 'Scene');
+    const sceneDeck: string[] = [];
+    const sceneCounts: Record<string, number> = {};
+    for (const sc of sceneCandidates) {
+      if (sceneDeck.length >= 15) break;
+      const baseId = sc.id.replace('-S', '');
+      const isEveryday = !sc.element || sc.element.toLowerCase() === 'everyday';
+      const maxCopies = isEveryday ? 5 : 3;
+      const current = sceneCounts[baseId] || 0;
+      const toAdd = Math.min(maxCopies - current, 15 - sceneDeck.length);
+      for (let i = 0; i < toAdd; i++) {
+        sceneDeck.push(sc.id);
+      }
+      sceneCounts[baseId] = current + toAdd;
+    }
 
-    const mainCards = setCards.filter(
+    // 4. Pick exactly 50 Main Deck cards (Character, Friend Character, Event, Item; max 3 copies each)
+    const mainCandidates = legalPool.filter(
       (c) =>
-        c.id !== maneCard?.id &&
-        !storyCards.some((s) => s.id === c.id) &&
-        !sceneCards.some((sc) => sc.id === c.id)
+        ['Character', 'Friend Character', 'Event', 'Item'].includes(c.card_type) &&
+        !c.name.includes(' - ') &&
+        !c.name.includes(' – ') &&
+        !isTrueManeCharacter(c)
     );
+    const mainDeck: string[] = [];
+    const mainCounts: Record<string, number> = {};
+    for (const mc of mainCandidates) {
+      if (mainDeck.length >= 50) break;
+      const baseId = mc.id.replace('-S', '');
+      const current = mainCounts[baseId] || 0;
+      const toAdd = Math.min(3 - current, 50 - mainDeck.length);
+      for (let i = 0; i < toAdd; i++) {
+        mainDeck.push(mc.id);
+      }
+      mainCounts[baseId] = current + toAdd;
+    }
 
     return {
       id: def.id,
       name: def.name,
       author: 'Official Starter',
       element: def.element,
+      mane_image_url: maneCard?.image_url || null,
       is_public: true,
       is_starter: true,
       mane_character: maneCard ? maneCard.id : null,
-      story_deck: storyCards.map((c) => c.id),
-      scene_deck: sceneCards.map((c) => c.id),
-      main_deck: mainCards.map((c) => c.id),
+      story_deck: storyDeck,
+      scene_deck: sceneDeck,
+      main_deck: mainDeck,
     };
   });
 }
@@ -91,7 +151,7 @@ function normalizeDeckRow(row: any) {
       const obj = JSON.parse(parsedMane);
       parsedMane = obj?.id || obj?.card_id || null;
     } catch {
-      // Keep raw string ID if not JSON
+      // Keep raw string ID
     }
   } else if (parsedMane && typeof parsedMane === 'object') {
     parsedMane = parsedMane.id || parsedMane.card_id || null;

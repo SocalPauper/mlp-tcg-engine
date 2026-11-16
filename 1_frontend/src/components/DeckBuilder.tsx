@@ -26,6 +26,18 @@ interface DeckBuilderProps {
 
 const API_BASE = 'https://mlp-tcg-engine.onrender.com';
 
+function isValidManeCharacter(c: Card): boolean {
+  if (c.card_type !== 'Mane Character') return false;
+  const name = String(c.name || '');
+  const id = String(c.id || '');
+  const effect = String(c.effect_text || '');
+  if (name.includes(' - ') || name.includes(' – ') || name.includes('Stage')) return false;
+  if (id.includes('SPR') || id.includes('ER')) return false;
+  if (/Experience Report|Inspo Boost|Choose 1 Character|Adventure Area|Retire/i.test(effect)) return false;
+  if (Number(c.cost) > 0) return false;
+  return true;
+}
+
 export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps) {
   const [cards, setCards] = useState<Card[]>([]);
   
@@ -167,7 +179,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
           return hydrated;
         };
 
-        // Resolve Mane Character (handles string ID, object, or fallback inside cards array)
         const rawMane = typeof deckData.mane_character === 'object' && deckData.mane_character !== null
           ? (deckData.mane_character.card_id || deckData.mane_character.id)
           : deckData.mane_character;
@@ -181,10 +192,9 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         const loadedScene = hydrateCards(deckData.scene_deck);
         const loadedMain = hydrateCards(deckData.main_deck);
 
-        // Fallback if backend returned a combined `cards` array instead of split columns
         if (!rawMane && loadedStory.length === 0 && loadedScene.length === 0 && loadedMain.length === 0 && Array.isArray(deckData.cards)) {
           const allHydrated = hydrateCards(deckData.cards);
-          const foundMane = allHydrated.find(c => c.card_type === 'Mane Character') || null;
+          const foundMane = allHydrated.find(isValidManeCharacter) || null;
           setManeCharacter(foundMane);
           setStoryDeck(allHydrated.filter(c => c.card_type === 'Story'));
           setSceneDeck(allHydrated.filter(c => c.card_type === 'Scene'));
@@ -230,8 +240,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   };
 
   const isCardLocked = (card: Card) => {
-    // All 6 Starter Decks (SD01-SD06) are unlocked in their entirety for all players
-    if (/^SD0[1-6]/i.test(card.id) || /^SD0[1-6]/i.test(card.set_code || '')) return false;
+    // All Starter Deck cards (SD01-SD06, SD01A, SD01B) are free/unlocked for everyone
+    if (/^SD/i.test(card.id) || /^SD/i.test(card.set_code || '')) return false;
 
     // If the user owns it in auth.user_cards, it's unlocked
     if (unlockedCardIds.includes(card.id)) return false;
@@ -240,7 +250,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     const premiumRarities = ['RR', 'CR', 'GR', 'SPR'];
     if (premiumRarities.includes(card.rarity) || card.id.includes('-S')) return true;
 
-    // Base tiers are unlocked by default
     return false;
   };
 
@@ -314,7 +323,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         setBuildPhase('MANE');
       }
     } else if (zone === 'story') {
-      // Stories are treated as 1 whole unit; clearing one clears all selected stories without touching Scene or Main decks
       setStoryDeck([]);
     } else if (zone === 'scene') {
       setSceneDeck(sceneDeck.filter((_, i) => i !== index));
@@ -353,13 +361,20 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   let displayCards: Card[] = [];
   if (buildPhase === 'MANE') {
-    displayCards = baseFilteredCards.filter(c => 
-      c.card_type === 'Mane Character' && 
-      !c.name.includes(' - ') && 
-      !c.name.includes(' – ') &&
-      !c.name.includes('Stage') &&
-      !c.id.includes('ST')
-    );
+    const validManes = baseFilteredCards.filter(isValidManeCharacter);
+    // Deduplicate identical Mane Character cards (same image_url or duplicate name+set entry)
+    const seenImages = new Set<string>();
+    const seenNameSet = new Set<string>();
+    displayCards = validManes.filter(c => {
+      const imgKey = (c.image_url || '').trim().toLowerCase();
+      const nameSetKey = `${c.name.trim().toLowerCase()}|${(c.set_code || '').trim().toLowerCase()}|${c.id.includes('-S') ? 'alt' : 'std'}`;
+      if ((imgKey && seenImages.has(imgKey)) || seenNameSet.has(nameSetKey)) {
+        return false;
+      }
+      if (imgKey) seenImages.add(imgKey);
+      seenNameSet.add(nameSetKey);
+      return true;
+    });
   } else if (buildPhase === 'STORY') {
     displayCards = baseFilteredCards.filter(c => 
       c.card_type === 'Story' || 
@@ -377,7 +392,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       const isValidType = ['Character', 'Friend Character', 'Event', 'Item'].includes(c.card_type) && 
                           c.card_type !== 'Story' && 
                           !c.name.includes(' - ') && 
-                          !c.name.includes(' – ');
+                          !c.name.includes(' – ') &&
+                          !isValidManeCharacter(c);
       
       const matchesMainType = selectedMainType === 'ALL' || c.card_type === selectedMainType;
       const matchesElement = c.element === deckElement || !c.element || c.element === 'Everyday' || !deckElement;
@@ -427,7 +443,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       main_deck: mainDeck.map(c => c.id)
     };
     
-    // If copied from a starter or created new, always POST as a new user deck
     const isEditingOwnDeck = mode === 'EDIT' && deckId && !isCopiedStarter;
     const endpoint = isEditingOwnDeck ? `/api/decks/${deckId}` : '/api/decks';
     const method = isEditingOwnDeck ? 'PUT' : 'POST';
@@ -483,7 +498,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         const qty = match[1] && !isNaN(Number(match[1])) ? parseInt(match[1], 10) : 1;
         const cardObj = cards.find(c => c.id.toLowerCase() === cardId.toLowerCase());
         if (cardObj) {
-          if (cardObj.card_type === 'Mane Character') foundMane = cardObj;
+          if (isValidManeCharacter(cardObj)) foundMane = cardObj;
           else if (cardObj.card_type === 'Story') foundStories.push(cardObj);
           else if (cardObj.card_type === 'Scene') {
             for (let i = 0; i < qty; i++) foundScenes.push(cardObj);

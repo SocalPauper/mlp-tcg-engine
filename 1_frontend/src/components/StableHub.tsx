@@ -39,26 +39,39 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
 
       const rawDecks = decksRes.ok ? await decksRes.json() : [];
       const cards = cardsRes.ok ? await cardsRes.json() : [];
+      const cardList = Array.isArray(cards) ? cards : [];
       const cardMap = new Map<string, any>(
-        Array.isArray(cards) ? cards.map((c: any) => [String(c.id).toLowerCase(), c]) : []
+        cardList.map((c: any) => [String(c.id).toLowerCase(), c])
       );
 
       const mapped: DeckSummary[] = (Array.isArray(rawDecks) ? rawDecks : []).map((d: any) => {
         const maneId = d.mane_character ? String(d.mane_character).toLowerCase() : '';
-        const maneCard = maneId ? cardMap.get(maneId) : null;
+        let maneCard = maneId ? cardMap.get(maneId) : null;
+
+        // Fallback lookup by starter pony name if mane_character ID wasn't matched
+        if (!maneCard && d.name) {
+          const ponyName = String(d.name).split('-')[0].trim().toLowerCase();
+          maneCard = cardList.find(
+            (c: any) =>
+              c.card_type === 'Mane Character' &&
+              c.name &&
+              c.name.toLowerCase().includes(ponyName)
+          );
+        }
 
         const storyCount = Array.isArray(d.story_deck) ? d.story_deck.length : 0;
         const sceneCount = Array.isArray(d.scene_deck) ? d.scene_deck.length : 0;
         const mainCount = Array.isArray(d.main_deck) ? d.main_deck.length : 0;
-        const totalCount = (d.mane_character ? 1 : 0) + storyCount + sceneCount + mainCount;
+        const totalCount = (d.mane_character || maneCard ? 1 : 0) + storyCount + sceneCount + mainCount;
 
         return {
           id: d.id,
           name: d.name || 'Untitled Deck',
           author: d.author || 'Player',
           element: d.element || maneCard?.element || 'Unaligned',
-          mane_character: d.mane_character || null,
+          mane_character: d.mane_character || maneCard?.id || null,
           mane_image_url:
+            d.mane_image_url ||
             maneCard?.image_url ||
             'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp',
           is_starter: Boolean(d.is_starter || String(d.id).startsWith('starter-')),
@@ -105,7 +118,6 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
     if (activeTab === 'COMMUNITY') {
       return deck.is_public && !deck.is_starter;
     }
-    // MY_DECKS: includes all 6 starter decks + the player's own custom decks
     const isMine =
       deck.is_starter ||
       !deck.owner_id ||
