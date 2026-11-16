@@ -30,6 +30,7 @@ export interface CardDefinition {
   cost: number;
   power: number;
   defense: number;
+  traits?: string;
   effectText?: string;
   imageUrl?: string;
   rarity?: string;
@@ -53,15 +54,44 @@ export interface StoryStageSlot {
 
 export interface AdventureSlot {
   character: CardDefinition | null;
-  items: CardDefinition[];
+  items: CardDefinition[]; // Enforced max 1 attached Item per official rules
   inspoBoost: number;
-  isExhausted: boolean; // True = Tapped 90deg clockwise (used Adventure ability; cannot attack/block until readied)
+  isExhausted: boolean;
+}
+
+export interface PowerModifierLine {
+  sourceName: string;
+  sourceType: 'BASE' | 'ITEM' | 'MANE_PASSIVE' | 'SCENE_PASSIVE' | 'STORY_PASSIVE' | 'INSPO_BOOST';
+  amount: number;
+}
+
+export interface LanePowerBreakdown {
+  basePower: number;
+  modifiers: PowerModifierLine[];
+  totalPower: number;
+}
+
+export interface PendingTargetSelection {
+  sourceCard: CardDefinition;
+  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY';
+  sourceLane?: LaneKey;
+  effectAction: 'BUFF_POWER' | 'RETIRE_OPPONENT' | 'MOVE_FRIENDLY' | 'READY_FRIENDLY';
+  value: number;
+  maxTargetCostOrPower?: number;
+  promptText: string;
+  validTargets: {
+    owner: 'SELF' | 'OPPONENT';
+    lane: LaneKey;
+  }[];
+  // Optional second step for MOVE_FRIENDLY (pick source lane first, then destination lane)
+  selectedFromLane?: LaneKey;
 }
 
 export interface PlayerState {
   id: '0' | '1';
   displayName: string;
   leader: CardDefinition | null;
+  leaderAbilityUsedThisTurn: boolean;
   mainDeck: CardDefinition[];
   sceneDeck: CardDefinition[];
   hand: CardDefinition[];
@@ -85,6 +115,7 @@ export type GamePhase =
   | 'VS_INTRO'
   | 'MULLIGAN'
   | 'MAIN_PHASE'
+  | 'PENDING_TARGET'
   | 'CONTACT_INSPIRE'
   | 'CONTACT_RESOLUTION'
   | 'CLASH_HOLD'
@@ -160,6 +191,7 @@ export interface KayouGameState {
   turnDeadlineMs?: number;
   players: Record<'0' | '1', PlayerState>;
   contactState: ContactCombatState | null;
+  pendingTarget: PendingTargetSelection | null;
   pendingLaneQueueAfterReveal: LaneKey[] | null;
   lastClashEvent: ClashAnimationEvent | null;
   lastPlanRevealEvent: PlanRevealEvent | null;

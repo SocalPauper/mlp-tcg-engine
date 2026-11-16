@@ -695,6 +695,12 @@ export class GameManager {
         return acknowledgeStoryReveal(state, playerId);
       case 'END_TURN':
         return endTurn(state, playerId);
+	  case 'ACTIVATE_MANE_ABILITY':
+        return activateManeLeaderAbility(state, playerId);
+      case 'SELECT_TARGET':
+        return resolveTargetSelection(state, playerId, payload.targetOwner, payload.laneIndex);
+      case 'CANCEL_TARGET':
+        return cancelTargetSelection(state, playerId);
       default:
         return state;
     }

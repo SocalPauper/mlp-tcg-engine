@@ -39,10 +39,25 @@ interface AdventureSlot {
   isExhausted?: boolean;
 }
 
+interface PendingTargetSelection {
+  sourceCard: CardDefinition;
+  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY';
+  sourceLane?: 'left' | 'center' | 'right';
+  effectAction: 'BUFF_POWER' | 'RETIRE_OPPONENT' | 'MOVE_FRIENDLY' | 'READY_FRIENDLY';
+  value: number;
+  promptText: string;
+  validTargets: {
+    owner: 'SELF' | 'OPPONENT';
+    lane: 'left' | 'center' | 'right';
+  }[];
+  selectedFromLane?: 'left' | 'center' | 'right';
+}
+
 interface PlayerState {
   id: '0' | '1';
   displayName: string;
   leader: CardDefinition | null;
+  leaderAbilityUsedThisTurn?: boolean;
   mainDeck: CardDefinition[];
   sceneDeck: CardDefinition[];
   hand: CardDefinition[];
@@ -68,6 +83,7 @@ export interface LiveGameState {
     | 'VS_INTRO'
     | 'MULLIGAN'
     | 'MAIN_PHASE'
+    | 'PENDING_TARGET'
     | 'CONTACT_INSPIRE'
     | 'CONTACT_RESOLUTION'
     | 'CLASH_HOLD'
@@ -89,6 +105,7 @@ export interface LiveGameState {
     attackerPower: number;
     defenderPower: number;
   } | null;
+  pendingTarget?: PendingTargetSelection | null;
   lastClashEvent: {
     id: number;
     lane: 'left' | 'center' | 'right';
@@ -126,8 +143,7 @@ interface PowerBreakdownDetails {
   cardName: string;
   laneName: string;
   basePower: number;
-  itemDetails: { name: string; bonus: number }[];
-  inspoBoost: number;
+  lines: { label: string; bonus: number; color: string }[];
   totalPower: number;
 }
 
@@ -155,7 +171,100 @@ function cleanCardText(text?: string): string {
 
 function hasAdventureTapAbility(card: CardDefinition | null): boolean {
   if (!card) return false;
-  return /Adventure\s*:/i.test(String(card.effectText || ''));
+  return /Adventure\s*:/i.test(cleanCardText(card.effectText));
+}
+
+function hasManeActivatedAbility(card: CardDefinition | null): boolean {
+  if (!card) return false;
+  return /Mane Ability|Once per turn|Activate\s*:/i.test(cleanCardText(card.effectText));
+}
+
+function canAffordCardWithHarmony(player: PlayerState, card: CardDefinition): boolean {
+  const cost = Math.max(0, Number(card.cost) || 0);
+  if (cost === 0) return true;
+  const readyScenes = player.sceneArea.filter((s) => !s.isExhausted);
+  if (readyScenes.length < cost) return false;
+  const el = String(card.element || 'Everyday').toLowerCase();
+  if (!el || el === 'everyday' || el === 'none') return true;
+  return readyScenes.some((s) => {
+    const sEl = String(s.card.element || 'Everyday').toLowerCase();
+    return sEl === el || sEl === 'everyday' || sEl === 'none';
+  });
+}
+
+function computeClientPowerDetails(
+  gameState: LiveGameState,
+  player: PlayerState,
+  laneKey: 'left' | 'center' | 'right'
+): PowerBreakdownDetails {
+  const slot = player.adventureArea[laneKey];
+  const char = slot.character!;
+  const basePower = Number(char.power) || 0;
+  const lines: { label: string; bonus: number; color: string }[] = [];
+  const isOwnersTurn = gameState.turnPlayerId === player.id;
+
+  const checkPassive = (rawText?: string): number => {
+    const text = cleanCardText(rawText);
+    if (!text || /Inspo Boost|Inspiration Boost|Adventure\s*:|Pre-Plan|When promoted/i.test(text)) {
+      return 0;
+    }
+    const m = text.match(/get[s]?\s*\+(\d+)\s*(?:Inspiration|Power)/i);
+    if (!m) return 0;
+    if (/during your turn/i.test(text) && !isOwnersTurn) return 0;
+    if (/left\s+lane/i.test(text) && laneKey !== 'left') return 0;
+    if (/center\s+lane/i.test(text) && laneKey !== 'center') return 0;
+    if (/right\s+lane/i.test(text) && laneKey !== 'right') return 0;
+    if (/your\s+friend/i.test(text) && !String(char.type || '').toLowerCase().includes('friend')) return 0;
+    return parseInt(m[1], 10) || 0;
+  };
+
+  for (const it of slot.items) {
+    lines.push({
+      label: `Item (${it.name})`,
+      bonus: Number(it.power) || 1,
+      color: '#38bdf8',
+    });
+  }
+
+  if (player.leader) {
+    const lb = checkPassive(player.leader.effectText);
+    if (lb > 0) {
+      lines.push({ label: `Mane Passive (${player.leader.name})`, bonus: lb, color: '#fde047' });
+    }
+  }
+
+  for (const sc of player.sceneArea) {
+    if (!sc.isFaceUp) continue;
+    const sb = checkPassive(sc.card.effectText);
+    if (sb > 0) {
+      lines.push({ label: `Scene Passive (${sc.card.name})`, bonus: sb, color: '#34d399' });
+    }
+  }
+
+  for (const st of player.storyStages) {
+    if (!st.isStoryCompleted || !st.storyCard) continue;
+    const stb = checkPassive(st.storyCard.effectText);
+    if (stb > 0) {
+      lines.push({ label: `Story ${st.stage} (${st.storyCard.name})`, bonus: stb, color: '#c084fc' });
+    }
+  }
+
+  if ((slot.inspoBoost || 0) > 0) {
+    lines.push({
+      label: 'Inspiration / Event / Adventure Boosts',
+      bonus: slot.inspoBoost,
+      color: '#f472b6',
+    });
+  }
+
+  const totalPower = basePower + lines.reduce((sum, l) => sum + l.bonus, 0);
+  return {
+    cardName: char.name,
+    laneName: laneKey.toUpperCase(),
+    basePower,
+    lines,
+    totalPower,
+  };
 }
 
 function checkSceneInspireEligibility(
@@ -172,7 +281,7 @@ function checkSceneInspireEligibility(
     return { eligible: false, reason: 'No character in active lane' };
   }
 
-  const text = String(scene.card.effectText || '');
+  const text = cleanCardText(scene.card.effectText);
   const id = String(scene.card.id || '').toUpperCase();
   const hasInspo =
     /Inspo Boost|Inspiration Boost|\+\d+\s*Inspiration/i.test(text) || id.includes('-ER');
@@ -215,12 +324,16 @@ function checkSceneInspireEligibility(
   const elements = ['magic', 'loyalty', 'honesty', 'generosity', 'kindness', 'laughter'];
   for (const el of elements) {
     const elRegex = new RegExp(`your\\s+${el}\\s+character`, 'i');
-    if (elRegex.test(text) && String(targetChar.element || '').toLowerCase() !== el) {
+    if (elRegex.test(text) && String(targetCharacterElement(targetChar)).toLowerCase() !== el) {
       return { eligible: false, reason: `Only boosts ${el.toUpperCase()} characters` };
     }
   }
 
   return { eligible: true };
+}
+
+function targetCharacterElement(c: CardDefinition): string {
+  return c.element || '';
 }
 
 const CONFETTI_COLORS = ['#fde047', '#f472b6', '#38bdf8', '#a855f7', '#34d399', '#fb7185'];
@@ -251,7 +364,6 @@ export default function GameBoard({
   const opp = gameState.players[oppSeat];
   const isMyTurn = !isSpectator && gameState.turnPlayerId === mySeat;
 
-  // Live 3-minute inactivity countdown display
   useEffect(() => {
     const interval = setInterval(() => {
       if (gameState.turnDeadlineMs) {
@@ -274,6 +386,15 @@ export default function GameBoard({
 
   useEffect(() => {
     if (gameState.phase === 'REVEAL_HOLD' || gameState.phase === 'CLASH_HOLD') return;
+
+    if (
+      gameState.phase === 'PENDING_TARGET' &&
+      isMyTurn &&
+      gameState.pendingTarget?.validTargets.some((t) => t.owner === 'OPPONENT')
+    ) {
+      setCameraFocus('OPPONENT');
+      return;
+    }
 
     if (gameState.turnPlayerId === mySeat) {
       setCameraFocus('ME');
@@ -327,12 +448,27 @@ export default function GameBoard({
   };
 
   const selectedHandCard = me.hand.find((c) => c.id === selectedHandCardId) || null;
-  const availableHarmony = me.sceneArea.filter((s) => !s.isExhausted).length;
 
-  const handleAdventureSlotClick = (lane: 'left' | 'center' | 'right') => {
-    if (!isMyTurn || gameState.phase !== 'MAIN_PHASE' || !selectedHandCard) return;
-    sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane });
-    setSelectedHandCardId(null);
+  const handleAdventureSlotClick = (
+    ownerSide: 'SELF' | 'OPPONENT',
+    lane: 'left' | 'center' | 'right'
+  ) => {
+    if (!isMyTurn) return;
+
+    if (gameState.phase === 'PENDING_TARGET' && gameState.pendingTarget) {
+      const isValid = gameState.pendingTarget.validTargets.some(
+        (t) => t.owner === ownerSide && t.lane === lane
+      );
+      if (isValid) {
+        sendAction('SELECT_TARGET', { targetOwner: ownerSide, laneIndex: lane });
+      }
+      return;
+    }
+
+    if (ownerSide === 'SELF' && gameState.phase === 'MAIN_PHASE' && selectedHandCard) {
+      sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane });
+      setSelectedHandCardId(null);
+    }
   };
 
   const handleContextMenu = (e: React.MouseEvent, card: CardDefinition | null) => {
@@ -372,6 +508,14 @@ export default function GameBoard({
 
   const renderFocusedBoard = (player: PlayerState, isOpponent: boolean) => {
     const readyHarmony = player.sceneArea.filter((s) => !s.isExhausted).length;
+    const ownerSide: 'SELF' | 'OPPONENT' = isOpponent ? 'OPPONENT' : 'SELF';
+
+    const canActivateMane =
+      !isOpponent &&
+      isMyTurn &&
+      gameState.phase === 'MAIN_PHASE' &&
+      !player.leaderAbilityUsedThisTurn &&
+      hasManeActivatedAbility(player.leader);
 
     const renderAdventureRow = () => (
       <div className="adventure-area-row">
@@ -386,26 +530,30 @@ export default function GameBoard({
             !slot.isExhausted &&
             hasAdventureTapAbility(slot.character);
 
-          const isTargetable =
+          const isPendingAbilityTarget =
+            isMyTurn &&
+            gameState.phase === 'PENDING_TARGET' &&
+            gameState.pendingTarget?.validTargets.some(
+              (t) => t.owner === ownerSide && t.lane === laneKey
+            );
+
+          const isDeployTarget =
             !isOpponent &&
             isMyTurn &&
             gameState.phase === 'MAIN_PHASE' &&
             selectedHandCard &&
             (selectedHandCard.type.toLowerCase() !== 'item' || slot.character !== null);
 
+          const isTargetable = Boolean(isPendingAbilityTarget || isDeployTarget);
+
           const isActiveClashLane =
             (gameState.phase === 'CONTACT_INSPIRE' || gameState.phase === 'BREAKTHROUGH_CHOICE') &&
             gameState.contactState?.activeLane === laneKey;
 
-          const basePower = slot.character ? Number(slot.character.power) || 0 : 0;
-          const itemDetails = slot.items.map((it) => ({
-            name: it.name,
-            bonus: Number(it.power) || 1,
-          }));
-          const itemBonusTotal = itemDetails.reduce((s, d) => s + d.bonus, 0);
-          const inspoBonus = slot.inspoBoost || 0;
-          const totalPower = basePower + itemBonusTotal + inspoBonus;
-          const isBuffed = itemBonusTotal > 0 || inspoBonus > 0;
+          const details = slot.character
+            ? computeClientPowerDetails(gameState, player, laneKey)
+            : null;
+          const totalBonus = details ? details.totalPower - details.basePower : 0;
 
           return (
             <div
@@ -413,38 +561,31 @@ export default function GameBoard({
               className={`adventure-slot ${isTargetable ? 'targetable' : ''} ${
                 isActiveClashLane ? 'active-lane-glow' : ''
               }`}
-              onClick={() => !isOpponent && handleAdventureSlotClick(laneKey)}
+              onClick={() => handleAdventureSlotClick(ownerSide, laneKey)}
               onContextMenu={(e) => handleContextMenu(e, slot.character)}
               onTouchStart={() => handleTouchStartInspect(slot.character)}
               onTouchEnd={handleTouchEndInspect}
             >
-              {slot.character ? (
+              {slot.character && details ? (
                 <>
                   <div
-                    className={`total-power-above-badge ${isBuffed ? 'buffed' : ''}`}
-                    title="Click to view Total Power breakdown"
+                    className={`total-power-above-badge ${totalBonus > 0 ? 'buffed' : ''}`}
+                    title="Click to view Total Power & Passive Aura breakdown"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setPowerBreakdown({
-                        cardName: slot.character!.name,
-                        laneName: laneKey.toUpperCase(),
-                        basePower,
-                        itemDetails,
-                        inspoBoost: inspoBonus,
-                        totalPower,
-                      });
+                      setPowerBreakdown(details);
                     }}
                   >
-                    <span>⚡ {totalPower}</span>
+                    <span>⚡ {details.totalPower}</span>
                     <span className="power-subscript-info">
-                      {isBuffed ? `+${itemBonusTotal + inspoBonus} ⓘ` : 'ⓘ'}
+                      {totalBonus > 0 ? `+${totalBonus} ⓘ` : 'ⓘ'}
                     </span>
                   </div>
 
                   <div className={`deployed-char-card ${slot.isExhausted ? 'exhausted' : ''}`}>
                     <img src={slot.character.imageUrl} alt={slot.character.name} />
                     {slot.items.length > 0 && (
-                      <div className="item-count-tag">+{slot.items.length} Item</div>
+                      <div className="item-count-tag">Item: {slot.items[0].name}</div>
                     )}
                     {(hasActedThisTurn || slot.isExhausted) && (
                       <div
@@ -472,7 +613,7 @@ export default function GameBoard({
                 </>
               ) : (
                 <span className="slot-empty-label">
-                  {isTargetable ? 'Click to Deploy' : `${laneKey.toUpperCase()}`}
+                  {isTargetable ? 'Click to Select' : `${laneKey.toUpperCase()}`}
                 </span>
               )}
             </div>
@@ -493,6 +634,16 @@ export default function GameBoard({
             <img src={player.leader.imageUrl} alt={player.leader.name} />
           ) : (
             <img src={CARD_BACK_URL} alt="Mane Card Back" className="kayou-card-back-img" />
+          )}
+          {canActivateMane && (
+            <button
+              type="button"
+              className="adventure-tap-btn"
+              title={cleanCardText(player.leader?.effectText)}
+              onClick={() => sendAction('ACTIVATE_MANE_ABILITY')}
+            >
+              ✨ Mane Ability
+            </button>
           )}
           <span className="zone-caption">Main Character</span>
         </div>
@@ -678,7 +829,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Turn Transition Banner */}
       {turnBannerText && gameState.phase !== 'REVEAL_HOLD' && gameState.phase !== 'CLASH_HOLD' && (
         <div className="turn-transition-banner-overlay">
           <div className="turn-transition-banner">{turnBannerText}</div>
@@ -1101,12 +1251,12 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Power Breakdown Popover Modal */}
+      {/* Power & Passive Aura Breakdown Popover Modal */}
       {powerBreakdown && (
         <div className="inspector-backdrop" onClick={() => setPowerBreakdown(null)}>
           <div
             className="inspector-card-box"
-            style={{ flexDirection: 'column', maxWidth: '380px', gap: '10px' }}
+            style={{ flexDirection: 'column', maxWidth: '400px', gap: '10px' }}
             onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ margin: 0, color: '#fde047', fontSize: '18px' }}>
@@ -1130,18 +1280,15 @@ export default function GameBoard({
                 <span>Base Character Power:</span>
                 <strong>{powerBreakdown.basePower}</strong>
               </div>
-              {powerBreakdown.itemDetails.map((it, idx) => (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: '#38bdf8' }}>
-                  <span>Item ({it.name}):</span>
-                  <strong>+{it.bonus}</strong>
+              {powerBreakdown.lines.map((line, idx) => (
+                <div
+                  key={idx}
+                  style={{ display: 'flex', justifyContent: 'space-between', color: line.color }}
+                >
+                  <span>{line.label}:</span>
+                  <strong>+{line.bonus}</strong>
                 </div>
               ))}
-              {powerBreakdown.inspoBoost > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#f472b6' }}>
-                  <span>Inspiration / Event / Adventure Boosts:</span>
-                  <strong>+{powerBreakdown.inspoBoost}</strong>
-                </div>
-              )}
               <div
                 style={{
                   borderTop: '1px solid rgba(255,255,255,0.2)',
@@ -1211,6 +1358,21 @@ export default function GameBoard({
         </div>
 
         <div className="action-bar-buttons">
+          {isMyTurn && gameState.phase === 'PENDING_TARGET' && gameState.pendingTarget && (
+            <>
+              <span style={{ fontSize: '11px', color: '#fde047', fontWeight: 800 }}>
+                🎯 {gameState.pendingTarget.promptText}
+              </span>
+              <button
+                type="button"
+                className="action-bar-btn secondary"
+                onClick={() => sendAction('CANCEL_TARGET')}
+              >
+                Cancel
+              </button>
+            </>
+          )}
+
           {isMyTurn && gameState.phase === 'MAIN_PHASE' && (
             <>
               {me.turnsTaken > 1 ? (
@@ -1285,7 +1447,7 @@ export default function GameBoard({
           <div className="player-hand-dock">
             {me.hand.map((card, idx) => {
               const isSelected = selectedHandCardId === card.id;
-              const canAfford = (card.cost || 0) <= availableHarmony;
+              const canAfford = canAffordCardWithHarmony(me, card);
               return (
                 <div
                   key={`${card.id}-${idx}`}
