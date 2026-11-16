@@ -15,6 +15,7 @@ import {
   exhaustScenesWithElementPriority,
   calculateLanePowerBreakdown,
   parseActivatedCardEffect,
+  parseAppearOrFarewellEffect,
 } from './effectParser.js';
 
 export { calculateLanePowerBreakdown, canPayHarmonyCost, getEffectiveCardCost };
@@ -162,9 +163,6 @@ export function startSeatedMatch(
   };
 }
 
-/**
- * Official Kayou Rule: Drawing from an empty Main Deck causes that player to lose immediately.
- */
 function drawCardsWithDeckOutCheck(
   state: KayouGameState,
   playerId: '0' | '1',
@@ -305,11 +303,89 @@ export function resolveMulligan(
   };
 }
 
+/**
+ * Checks for Appear / Farewell effect triggers in card text.
+ */
+function executeAppearOrFarewellEffect(
+  state: KayouGameState,
+  playerId: '0' | '1',
+  card: CardDefinition,
+  lane: LaneKey,
+  type: 'Appear' | 'Farewell'
+): KayouGameState {
+  const text = sanitizeCardText(card.effectText);
+  const regex = new RegExp(`${type}\\s*:\\s*([^\\n]+)`, 'i');
+  const match = text.match(regex);
+  if (!match) return state;
+
+  const subText = match[1];
+  const parsed = parseAppearOrFarewellEffect(subText);
+  if (!parsed) return state;
+
+  const player = state.players[playerId];
+
+  if (parsed.kind === 'DRAW') {
+    return drawCardsWithDeckOutCheck(state, playerId, parsed.amount).state;
+  }
+
+  if (parsed.kind === 'TARGET_BUFF_POWER') {
+    const slot = player.adventureArea[lane];
+    if (!slot.character) return state;
+    return {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          adventureArea: {
+            ...player.adventureArea,
+            [lane]: {
+              ...slot,
+              inspoBoost: slot.inspoBoost + parsed.amount,
+            },
+          },
+        },
+      },
+    };
+  }
+
+  return state;
+}
+
+function retireCharacterWithFarewell(
+  state: KayouGameState,
+  playerId: '0' | '1',
+  lane: LaneKey
+): KayouGameState {
+  const player = state.players[playerId];
+  const slot = player.adventureArea[lane];
+  if (!slot.character) return state;
+
+  let workingState = executeAppearOrFarewellEffect(state, playerId, slot.character, lane, 'Farewell');
+  const freshPlayer = workingState.players[playerId];
+  const freshSlot = freshPlayer.adventureArea[lane];
+
+  return {
+    ...workingState,
+    players: {
+      ...workingState.players,
+      [playerId]: {
+        ...freshPlayer,
+        retirement: [...freshPlayer.retirement, freshSlot.character!, ...freshSlot.items],
+        adventureArea: {
+          ...freshPlayer.adventureArea,
+          [lane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
+        },
+      },
+    },
+  };
+}
+
 function buildPendingTargetFromEffect(
   state: KayouGameState,
   playerId: '0' | '1',
   sourceCard: CardDefinition,
-  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY',
+  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT',
   sourceLane?: LaneKey
 ): PendingTargetSelection | null {
   const oppId: '0' | '1' = playerId === '0' ? '1' : '0';
@@ -457,7 +533,6 @@ export function playCardFromHand(
 
   const card = player.hand[cardIdx];
 
-  // Official Element Harmony Cost Validation
   if (!canPayHarmonyCost(player, card)) return state;
   const effectiveCost = getEffectiveCardCost(player, card);
 
@@ -471,15 +546,25 @@ export function playCardFromHand(
   );
   const normalizedType = String(card.type || '').toLowerCase();
 
-  // 1. Deploy Character / Friend Character (Enforces Unique Character Name rule across lanes)
   if (normalizedType.includes('character')) {
     const lane: LaneKey = targetLane || 'left';
     const baseCharName = String(card.name || '').split(/[-–]/)[0].trim().toLowerCase();
 
-    const updatedAdv = { ...player.adventureArea };
-    const newlyRetired: CardDefinition[] = [];
+    let workingState: KayouGameState = {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          hand: newHand,
+          sceneArea: updatedSceneArea,
+        },
+      },
+    };
 
-    // Check uniqueness: if another lane already has the same named Character, retire it
+    const newlyRetired: CardDefinition[] = [];
+    const updatedAdv = { ...workingState.players[playerId].adventureArea };
+
     for (const l of ['left', 'center', 'right'] as const) {
       const existing = updatedAdv[l];
       if (existing.character) {
@@ -488,8 +573,11 @@ export function playCardFromHand(
           .trim()
           .toLowerCase();
         if (l === lane || existingBaseName === baseCharName) {
-          newlyRetired.push(existing.character, ...existing.items);
-          updatedAdv[l] = { character: null, items: [], inspoBoost: 0, isExhausted: false };
+          workingState = retireCharacterWithFarewell(workingState, playerId, l);
+          const freshAdv = workingState.players[playerId].adventureArea[l];
+          if (freshAdv.character === null) {
+            // Already retired with farewell
+          }
         }
       }
     }
@@ -501,22 +589,32 @@ export function playCardFromHand(
       isExhausted: false,
     };
 
-    return {
-      ...state,
+    workingState = {
+      ...workingState,
       players: {
-        ...state.players,
+        ...workingState.players,
         [playerId]: {
-          ...player,
-          hand: newHand,
-          sceneArea: updatedSceneArea,
-          retirement: [...player.retirement, ...newlyRetired],
+          ...workingState.players[playerId],
           adventureArea: updatedAdv,
         },
       },
     };
+
+    // Trigger Appear effect if character has one
+    workingState = executeAppearOrFarewellEffect(workingState, playerId, card, lane, 'Appear');
+
+    const pending = buildPendingTargetFromEffect(workingState, playerId, card, 'APPEAR_EFFECT', lane);
+    if (pending) {
+      return {
+        ...workingState,
+        phase: 'PENDING_TARGET',
+        pendingTarget: pending,
+      };
+    }
+
+    return workingState;
   }
 
-  // 2. Equip Item (Official Rule: Max 1 Item per Character; replaces previous Item if already equipped)
   if (normalizedType === 'item') {
     const lane: LaneKey = targetLane || 'left';
     const currentSlot = player.adventureArea[lane];
@@ -537,7 +635,7 @@ export function playCardFromHand(
             ...player.adventureArea,
             [lane]: {
               ...currentSlot,
-              items: [card], // Enforces 1 attached Item limit
+              items: [card],
             },
           },
         },
@@ -545,7 +643,6 @@ export function playCardFromHand(
     };
   }
 
-  // 3. Cast Event Card
   let nextState: KayouGameState = {
     ...state,
     players: {
@@ -559,7 +656,6 @@ export function playCardFromHand(
     },
   };
 
-  // If a target lane was directly clicked on the board, apply immediately; otherwise check if target selection is needed
   const pending = buildPendingTargetFromEffect(nextState, playerId, card, 'HAND_EVENT');
   if (pending) {
     if (
@@ -579,9 +675,6 @@ export function playCardFromHand(
   return executeImmediateActivatedEffect(nextState, playerId, card);
 }
 
-/**
- * Resolves interactive target selection for Events, Adventure tap abilities, and Mane Leader abilities.
- */
 export function resolveTargetSelection(
   state: KayouGameState,
   playerId: '0' | '1',
@@ -592,7 +685,6 @@ export function resolveTargetSelection(
   const pending = state.pendingTarget;
   const oppId: '0' | '1' = playerId === '0' ? '1' : '0';
 
-  // Step 1 of MOVE_FRIENDLY: select source lane first, then pick destination lane
   if (pending.effectAction === 'MOVE_FRIENDLY' && !pending.selectedFromLane) {
     if (targetOwner !== 'SELF' || !state.players[playerId].adventureArea[targetLane].character) {
       return state;
@@ -692,25 +784,11 @@ export function resolveTargetSelection(
   }
 
   if (pending.effectAction === 'RETIRE_OPPONENT' && targetOwner === 'OPPONENT') {
-    const opp = state.players[oppId];
-    const slot = opp.adventureArea[targetLane];
-    if (!slot.character) return state;
-
+    let workingState = retireCharacterWithFarewell(state, oppId, targetLane);
     return {
-      ...state,
+      ...workingState,
       phase: 'MAIN_PHASE',
       pendingTarget: null,
-      players: {
-        ...state.players,
-        [oppId]: {
-          ...opp,
-          retirement: [...opp.retirement, slot.character, ...slot.items],
-          adventureArea: {
-            ...opp.adventureArea,
-            [targetLane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
-          },
-        },
-      },
     };
   }
 
@@ -900,6 +978,10 @@ export function canSceneInspireCharacter(
   }
 
   return { eligible: true, boostAmount };
+}
+
+function getSlotTotalPower(state: KayouGameState, playerId: '0' | '1', lane: LaneKey): number {
+  return calculateLanePowerBreakdown(state, playerId, lane).totalPower;
 }
 
 export function startContactPhase(state: KayouGameState, playerId: '0' | '1'): KayouGameState {
@@ -1100,60 +1182,56 @@ export function passInspireInContact(
     acknowledgedBy: [] as ('0' | '1')[],
   };
 
-  let nextAtkPlayer: PlayerState = {
-    ...atkPlayer,
-    actedLanesThisTurn: [...atkPlayer.actedLanesThisTurn, lane],
-  };
-  let nextDefPlayer: PlayerState = { ...defPlayer };
+  let workingState = { ...state };
 
   if (outcome === 'ATTACKER_WINS') {
-    nextDefPlayer = {
-      ...nextDefPlayer,
-      retirement: [...nextDefPlayer.retirement, defSlot.character, ...defSlot.items],
-      adventureArea: {
-        ...nextDefPlayer.adventureArea,
-        [lane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
+    workingState = retireCharacterWithFarewell(workingState, defenderId, lane);
+    const atk = workingState.players[attackerId];
+    workingState = {
+      ...workingState,
+      players: {
+        ...workingState.players,
+        [attackerId]: {
+          ...atk,
+          actedLanesThisTurn: [...atk.actedLanesThisTurn, lane],
+        },
       },
     };
   } else if (outcome === 'DEFENDER_WINS') {
-    nextAtkPlayer = {
-      ...nextAtkPlayer,
-      retirement: [...nextAtkPlayer.retirement, atkSlot.character, ...atkSlot.items],
-      adventureArea: {
-        ...nextAtkPlayer.adventureArea,
-        [lane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
+    workingState = retireCharacterWithFarewell(workingState, attackerId, lane);
+    const atk = workingState.players[attackerId];
+    workingState = {
+      ...workingState,
+      players: {
+        ...workingState.players,
+        [attackerId]: {
+          ...atk,
+          actedLanesThisTurn: [...atk.actedLanesThisTurn, lane],
+        },
       },
     };
   } else {
-    nextAtkPlayer = {
-      ...nextAtkPlayer,
-      retirement: [...nextAtkPlayer.retirement, atkSlot.character, ...atkSlot.items],
-      adventureArea: {
-        ...nextAtkPlayer.adventureArea,
-        [lane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
-      },
-    };
-    nextDefPlayer = {
-      ...nextDefPlayer,
-      retirement: [...nextDefPlayer.retirement, defSlot.character, ...defSlot.items],
-      adventureArea: {
-        ...nextDefPlayer.adventureArea,
-        [lane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
+    workingState = retireCharacterWithFarewell(workingState, attackerId, lane);
+    workingState = retireCharacterWithFarewell(workingState, defenderId, lane);
+    const atk = workingState.players[attackerId];
+    workingState = {
+      ...workingState,
+      players: {
+        ...workingState.players,
+        [attackerId]: {
+          ...atk,
+          actedLanesThisTurn: [...atk.actedLanesThisTurn, lane],
+        },
       },
     };
   }
 
   const remainingQueue = state.contactState.laneQueue.slice(1);
   return {
-    ...state,
+    ...workingState,
     phase: 'CLASH_HOLD',
     contactState: null,
     pendingLaneQueueAfterReveal: remainingQueue,
-    players: {
-      ...state.players,
-      [attackerId]: nextAtkPlayer,
-      [defenderId]: nextDefPlayer,
-    },
     lastClashEvent: clashEvent,
   };
 }
@@ -1229,26 +1307,11 @@ function executePrePlanEffectAndReturnToHand(
       const drawRes = drawCardsWithDeckOutCheck(workingState, defenderId, 1);
       workingState = drawRes.state;
       effectSummary = `Pre-Plan Triggered: ${workingState.players[defenderId].displayName} drew 1 card!`;
-    } else if (/retire|remove/i.test(text) && workingState.players[attackerId].adventureArea[activeLane].character) {
-      const atkSlot = workingState.players[attackerId].adventureArea[activeLane];
-      workingState = {
-        ...workingState,
-        players: {
-          ...workingState.players,
-          [attackerId]: {
-            ...workingState.players[attackerId],
-            retirement: [
-              ...workingState.players[attackerId].retirement,
-              atkSlot.character!,
-              ...atkSlot.items,
-            ],
-            adventureArea: {
-              ...workingState.players[attackerId].adventureArea,
-              [activeLane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
-            },
-          },
-        },
-      };
+    } else if (
+      /retire|remove/i.test(text) &&
+      workingState.players[attackerId].adventureArea[activeLane].character
+    ) {
+      workingState = retireCharacterWithFarewell(workingState, attackerId, activeLane);
       effectSummary = `Pre-Plan Triggered: Attacking character in ${activeLane.toUpperCase()} lane was retired!`;
     } else {
       effectSummary = `Pre-Plan Triggered: ${text}`;
@@ -1372,6 +1435,27 @@ export function resolveBreakthroughChoice(
       },
     };
 
+    // Rule 4: Progressing to Story Stage 4 immediately wins the game without requiring acknowledgment!
+    if (nextProgress >= 4) {
+      return {
+        ...baseStateWithStory,
+        phase: 'GAME_OVER',
+        winnerId: playerId,
+        winReason: `${attacker.displayName} progressed to Story Stage 4 and won the game!`,
+        contactState: null,
+        pendingLaneQueueAfterReveal: null,
+        lastStoryRevealEvent: null,
+        announcements: [
+          ...state.announcements,
+          {
+            type: 'VICTORY',
+            message: `${attacker.displayName} completed Story Stage 4 and won the match!`,
+            timestamp: Date.now(),
+          },
+        ],
+      };
+    }
+
     const revealedStoryStage = attacker.storyStages[nextProgress - 1];
     const storyCard = revealedStoryStage?.storyCard;
 
@@ -1398,19 +1482,8 @@ export function resolveBreakthroughChoice(
           storyCard,
           triggeredEffectSummary: effectSummary,
           acknowledgedBy: [],
-          isGameWinningStage: nextProgress >= 4,
+          isGameWinningStage: false,
         },
-      };
-    }
-
-    if (nextProgress >= 4) {
-      return {
-        ...baseStateWithStory,
-        phase: 'GAME_OVER',
-        winnerId: playerId,
-        winReason: `${attacker.displayName} progressed to Story Stage 4!`,
-        contactState: null,
-        pendingLaneQueueAfterReveal: null,
       };
     }
 
@@ -1616,7 +1689,6 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
   const startingPlayer = state.players[nextPlayerId];
   const newTurnsTaken = startingPlayer.turnsTaken + 1;
 
-  // Official Deck-Out Loss Check when starting player draws for turn
   if (startingPlayer.mainDeck.length === 0) {
     return {
       ...state,
@@ -1637,7 +1709,6 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     isExhausted: false,
   }));
 
-  // Player 2 does not draw a Scene on their first turn; if Scene Deck is empty later, skip safely without decking out
   const shouldFlipNewScene = newTurnsTaken > 1 && startingPlayer.sceneDeck.length > 0;
   const drawnScene = shouldFlipNewScene ? startingPlayer.sceneDeck.slice(0, 1) : [];
   const restScene = shouldFlipNewScene
