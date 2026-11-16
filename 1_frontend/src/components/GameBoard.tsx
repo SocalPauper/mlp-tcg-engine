@@ -36,6 +36,7 @@ interface AdventureSlot {
   character: CardDefinition | null;
   items: CardDefinition[];
   inspoBoost: number;
+  isExhausted?: boolean;
 }
 
 interface PlayerState {
@@ -57,6 +58,7 @@ interface PlayerState {
   mulliganStatus: 'PENDING' | 'KEPT' | 'MULLIGANED';
   turnsTaken: number;
   actedLanesThisTurn: ('left' | 'center' | 'right')[];
+  isConnected?: boolean;
 }
 
 export interface LiveGameState {
@@ -76,6 +78,8 @@ export interface LiveGameState {
   turnPlayerId: '0' | '1';
   turnNumber: number;
   winnerId: '0' | '1' | null;
+  winReason?: string | null;
+  turnDeadlineMs?: number;
   players: Record<'0' | '1', PlayerState>;
   contactState: {
     activeLane: 'left' | 'center' | 'right';
@@ -131,6 +135,7 @@ interface GameBoardProps {
   ws: WebSocket;
   gameState: LiveGameState;
   seat: '0' | '1' | 'spectator';
+  isReconnecting?: boolean;
   onLeaveMatch: () => void;
 }
 
@@ -148,10 +153,11 @@ function cleanCardText(text?: string): string {
   return text.replace(/\{\{[^}]*$/g, '').replace(/\{\{|\}\}/g, '').trim();
 }
 
-/**
- * Strict target check so Scene Inspiration Boosts ONLY highlight/activate when the active
- * lane's character satisfies the Scene card's printed target condition (e.g., Applejack only).
- */
+function hasAdventureTapAbility(card: CardDefinition | null): boolean {
+  if (!card) return false;
+  return /Adventure\s*:/i.test(String(card.effectText || ''));
+}
+
 function checkSceneInspireEligibility(
   scene: SceneCardInPlay,
   targetChar: CardDefinition | null
@@ -177,7 +183,6 @@ function checkSceneInspireEligibility(
 
   const actualCharName = String(targetChar.name || '').toLowerCase();
 
-  // 1. Bracketed character requirement: [Applejack], ｢Twilight Sparkle｣, 「Rainbow Dash」
   const charBracketMatch = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
   if (charBracketMatch) {
     const requiredName = charBracketMatch[1].trim().toLowerCase();
@@ -185,7 +190,6 @@ function checkSceneInspireEligibility(
       return { eligible: false, reason: `Only boosts ${charBracketMatch[1].trim()}` };
     }
   } else {
-    // 2. Unbracketed named pony requirement: e.g., "Your Applejack gets +1 Inspiration" or "Boost Applejack"
     const namedPonies = [
       'Twilight Sparkle',
       'Rainbow Dash',
@@ -208,7 +212,6 @@ function checkSceneInspireEligibility(
     }
   }
 
-  // 3. Element-specific requirement
   const elements = ['magic', 'loyalty', 'honesty', 'generosity', 'kindness', 'laughter'];
   for (const el of elements) {
     const elRegex = new RegExp(`your\\s+${el}\\s+character`, 'i');
@@ -222,10 +225,17 @@ function checkSceneInspireEligibility(
 
 const CONFETTI_COLORS = ['#fde047', '#f472b6', '#38bdf8', '#a855f7', '#34d399', '#fb7185'];
 
-export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoardProps) {
+export default function GameBoard({
+  ws,
+  gameState,
+  seat,
+  isReconnecting,
+  onLeaveMatch,
+}: GameBoardProps) {
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [inspectedCard, setInspectedCard] = useState<CardDefinition | null>(null);
   const [powerBreakdown, setPowerBreakdown] = useState<PowerBreakdownDetails | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number>(180);
 
   const [turnBannerText, setTurnBannerText] = useState<string | null>(null);
   const prevTurnKeyRef = useRef<string | null>(null);
@@ -241,6 +251,17 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
   const opp = gameState.players[oppSeat];
   const isMyTurn = !isSpectator && gameState.turnPlayerId === mySeat;
 
+  // Live 3-minute inactivity countdown display
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (gameState.turnDeadlineMs) {
+        const diff = Math.max(0, Math.ceil((gameState.turnDeadlineMs - Date.now()) / 1000));
+        setSecondsLeft(diff);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [gameState.turnDeadlineMs]);
+
   const nextStoryIndex = me.storyProgress;
   const opponentPairedPlanSlot = opp.storyStages[nextStoryIndex];
   const canProgressStory =
@@ -251,7 +272,6 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     (s) => s.planCard !== null && !s.isPlanRevealed
   );
 
-  // Autofocus camera & show Turn Transition Banner ONLY when all hold states (CLASH_HOLD / REVEAL_HOLD) have finished
   useEffect(() => {
     if (gameState.phase === 'REVEAL_HOLD' || gameState.phase === 'CLASH_HOLD') return;
 
@@ -281,7 +301,6 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     }
   }, [gameState.turnPlayerId, gameState.turnNumber, gameState.phase, mySeat, isSpectator]);
 
-  // Auto-advance VS Intro screen after 3.4 seconds
   useEffect(() => {
     if (gameState.phase === 'VS_INTRO' && !isSpectator) {
       const timer = setTimeout(() => {
@@ -291,7 +310,6 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     }
   }, [gameState.phase, isSpectator]);
 
-  // Play Clash showdown animation for 3.8s, then signal ACK_CLASH_ANIMATION so turn/lane waits for animation completion
   useEffect(() => {
     if (gameState.phase === 'CLASH_HOLD' && gameState.lastClashEvent && !isSpectator) {
       if (!gameState.lastClashEvent.acknowledgedBy.includes(mySeat)) {
@@ -346,6 +364,12 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
     ? me.adventureArea[activeClashLaneForModal].character
     : null;
 
+  const formatTimer = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
+
   const renderFocusedBoard = (player: PlayerState, isOpponent: boolean) => {
     const readyHarmony = player.sceneArea.filter((s) => !s.isExhausted).length;
 
@@ -354,6 +378,13 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         {(['left', 'center', 'right'] as const).map((laneKey) => {
           const slot = player.adventureArea[laneKey];
           const hasActedThisTurn = player.actedLanesThisTurn?.includes(laneKey);
+          const canTapAdventure =
+            !isOpponent &&
+            isMyTurn &&
+            gameState.phase === 'MAIN_PHASE' &&
+            slot.character !== null &&
+            !slot.isExhausted &&
+            hasAdventureTapAbility(slot.character);
 
           const isTargetable =
             !isOpponent &&
@@ -410,20 +441,34 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
                     </span>
                   </div>
 
-                  <div className="deployed-char-card">
+                  <div className={`deployed-char-card ${slot.isExhausted ? 'exhausted' : ''}`}>
                     <img src={slot.character.imageUrl} alt={slot.character.name} />
                     {slot.items.length > 0 && (
                       <div className="item-count-tag">+{slot.items.length} Item</div>
                     )}
-                    {hasActedThisTurn && (
+                    {(hasActedThisTurn || slot.isExhausted) && (
                       <div
                         className="item-count-tag"
-                        style={{ top: 'auto', bottom: '4px', left: '4px', color: '#fbcfe8' }}
+                        style={{ top: 'auto', bottom: '4px', left: '4px', color: '#fde047' }}
                       >
-                        Acted ✓
+                        {slot.isExhausted ? 'Tapped ↷' : 'Acted ✓'}
                       </div>
                     )}
                   </div>
+
+                  {canTapAdventure && (
+                    <button
+                      type="button"
+                      className="adventure-tap-btn"
+                      title={cleanCardText(slot.character.effectText)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        sendAction('ACTIVATE_ADVENTURE', { laneIndex: laneKey });
+                      }}
+                    >
+                      ↷ Adventure
+                    </button>
+                  )}
                 </>
               ) : (
                 <span className="slot-empty-label">
@@ -580,6 +625,11 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
           <div>
             <span>{isOpponent ? '👑 Opponent: ' : '✨ Your Board: '}</span>
             <strong>{player.displayName}</strong>
+            {player.isConnected === false && (
+              <span style={{ marginLeft: '8px', fontSize: '11px', color: '#dc2626' }}>
+                ⚠️ Disconnected (3m timer active)
+              </span>
+            )}
             {gameState.firstPlayerId === player.id && (
               <span style={{ marginLeft: '6px', fontSize: '11px', color: '#ec4899' }}>★ 1st</span>
             )}
@@ -622,14 +672,20 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
 
   return (
     <div className="kayou-playmat-wrapper">
-      {/* Turn Transition Banner (Only fires after all Clash / Reveal animations finish) */}
+      {isReconnecting && (
+        <div className="reconnecting-banner">
+          🔄 Connection interrupted — Reconnecting to match room...
+        </div>
+      )}
+
+      {/* Turn Transition Banner */}
       {turnBannerText && gameState.phase !== 'REVEAL_HOLD' && gameState.phase !== 'CLASH_HOLD' && (
         <div className="turn-transition-banner-overlay">
           <div className="turn-transition-banner">{turnBannerText}</div>
         </div>
       )}
 
-      {/* 1. Street Fighter Style VS Intro Splash with Crown Above First Player */}
+      {/* 1. VS Intro Splash */}
       {gameState.phase === 'VS_INTRO' && (
         <div className="vs-intro-overlay">
           <div className="vs-fighters-stage">
@@ -674,7 +730,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 2. Simultaneous Opening Hand Mulligan Modal */}
+      {/* 2. Opening Hand Mulligan Modal */}
       {gameState.phase === 'MULLIGAN' && !isSpectator && (
         <div className="mulligan-overlay">
           <h2 className="mulligan-title">✨ Opening Hand Mulligan</h2>
@@ -721,7 +777,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 3. Dedicated Inspiration Boost Popup (Only highlights Scenes matching active lane character target) */}
+      {/* 3. Dedicated Inspiration Boost Popup */}
       {showInspireModalForMe && gameState.contactState && (
         <div className="inspector-backdrop">
           <div className="inspire-popup-modal">
@@ -784,7 +840,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 4. Clash Slam Showdown Animation Overlay (Holds turn/lane queue until animation completes) */}
+      {/* 4. Clash Slam Showdown Animation Overlay */}
       {gameState.phase === 'CLASH_HOLD' && gameState.lastClashEvent && (
         <div className="clash-showdown-overlay">
           <h2 style={{ color: '#fde047', fontSize: '24px', marginBottom: '18px' }}>
@@ -832,7 +888,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 5A. Sequential Plan Revealed Popup (Holds turn transition until BOTH players acknowledge) */}
+      {/* 5A. Sequential Plan Revealed Popup */}
       {gameState.lastPlanRevealEvent && (
         <div className="inspector-backdrop">
           <div
@@ -921,7 +977,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* 5B. Story Stage Progressed Reveal Popup (Landscape 7:5 Story Card + Printed Effect + Both-Player Ack) */}
+      {/* 5B. Story Stage Progressed Reveal Popup */}
       {gameState.lastStoryRevealEvent && (
         <div className="inspector-backdrop">
           <div className="plan-reveal-modal has-trap">
@@ -1022,7 +1078,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
             🎉🏆 {winnerPlayer.displayName} WINS! 🏆🎉
           </h1>
           <p style={{ fontSize: '16px', color: '#fbcfe8', margin: '0 0 16px', zIndex: 10 }}>
-            Completed all 4 Story Stages in Equestria Clash!
+            {gameState.winReason || 'Completed all 4 Story Stages in Equestria Clash!'}
           </p>
 
           <div className="victory-winner-card">
@@ -1082,7 +1138,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
               ))}
               {powerBreakdown.inspoBoost > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#f472b6' }}>
-                  <span>Inspiration / Event Boosts:</span>
+                  <span>Inspiration / Event / Adventure Boosts:</span>
                   <strong>+{powerBreakdown.inspoBoost}</strong>
                 </div>
               )}
@@ -1112,7 +1168,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
         </div>
       )}
 
-      {/* Card Inspector Modal (Landscape 7:5 ONLY for Story cards, Portrait 5:7 for all others) */}
+      {/* Card Inspector Modal */}
       {inspectedCard && (
         <div className="inspector-backdrop" onClick={() => setInspectedCard(null)}>
           <div
@@ -1149,12 +1205,9 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
             Active: <strong>{gameState.players[gameState.turnPlayerId].displayName}</strong>
           </span>
           <span>• {gameState.phase.replace('_', ' ')}</span>
-          {gameState.phase === 'CONTACT_INSPIRE' && gameState.contactState && (
-            <span style={{ color: '#fde047' }}>
-              | {gameState.contactState.activeLane.toUpperCase()} Clash (⚡
-              {gameState.contactState.attackerPower} vs ⚡{gameState.contactState.defenderPower})
-            </span>
-          )}
+          <span style={{ fontSize: '11px', color: secondsLeft <= 30 ? '#fca5a5' : '#fde047' }}>
+            ⏱️ {formatTimer(secondsLeft)}
+          </span>
         </div>
 
         <div className="action-bar-buttons">
@@ -1217,7 +1270,7 @@ export default function GameBoard({ ws, gameState, seat, onLeaveMatch }: GameBoa
               onLeaveMatch();
             }}
           >
-            Leave
+            Leave / Forfeit
           </button>
         </div>
       </div>

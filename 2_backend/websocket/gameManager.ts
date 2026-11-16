@@ -1,4 +1,5 @@
 import { WebSocket, WebSocketServer } from 'ws';
+import crypto from 'crypto';
 import {
   KayouGameState,
   DeckId,
@@ -11,6 +12,7 @@ import {
   acknowledgeVsIntro,
   resolveMulligan,
   playCardFromHand,
+  activateCharacterAdventureAbility,
   startContactPhase,
   inspireInContact,
   passInspireInContact,
@@ -18,9 +20,12 @@ import {
   resolveBreakthroughChoice,
   acknowledgePlanReveal,
   acknowledgeStoryReveal,
+  forfeitMatch,
   endTurn,
 } from '../../3_engine/gameRules.js';
 import { pool } from '../../4_data/db.js';
+
+const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 
 interface RoomClient {
   ws: WebSocket;
@@ -28,6 +33,7 @@ interface RoomClient {
   roomCode: string;
   selectedDeck: DeckId;
   username: string;
+  sessionToken: string;
 }
 
 interface QueuedPlayer {
@@ -44,6 +50,9 @@ interface Room {
   state: KayouGameState;
   clients: RoomClient[];
   decks: Partial<Record<'0' | '1', DeckId>>;
+  seatTokens: Partial<Record<'0' | '1', string>>;
+  disconnectedAt: Partial<Record<'0' | '1', number>>;
+  lastActivityAt: number;
 }
 
 const STARTER_META: Record<string, { element: string; pony: string }> = {
@@ -80,6 +89,61 @@ export class GameManager {
   constructor(server: any) {
     this.wss = new WebSocketServer({ server });
     this.initListeners();
+    this.startWatchdogTimer();
+  }
+
+  private startWatchdogTimer() {
+    setInterval(() => {
+      const now = Date.now();
+      for (const [code, room] of this.rooms.entries()) {
+        if (room.state.phase === 'GAME_OVER' || room.state.phase === 'WAITING_FOR_PLAYERS') {
+          continue;
+        }
+
+        // 1. Check if either seated player has been disconnected for > 3 minutes
+        for (const seat of ['0', '1'] as const) {
+          const discTime = room.disconnectedAt[seat];
+          if (discTime && now - discTime >= INACTIVITY_TIMEOUT_MS) {
+            const leaverName = room.state.players[seat].displayName;
+            room.state = forfeitMatch(
+              room.state,
+              seat,
+              `${leaverName} disconnected and did not return within 3 minutes.`
+            );
+            this.broadcastRoomState(room);
+            this.broadcastLobbyRooms();
+            break;
+          }
+        }
+
+        if (room.state.phase === 'GAME_OVER') continue;
+
+        // 2. Check if the active/prompted player has made NO move for > 3 minutes
+        if (now - room.lastActivityAt >= INACTIVITY_TIMEOUT_MS) {
+          const stalledSeat: '0' | '1' =
+            room.state.phase === 'CONTACT_INSPIRE' && room.state.contactState
+              ? room.state.contactState.promptPlayerId
+              : room.state.turnPlayerId;
+
+          const stalledName = room.state.players[stalledSeat].displayName;
+          room.state = forfeitMatch(
+            room.state,
+            stalledSeat,
+            `${stalledName} made no move for 3 minutes (Inactivity Forfeit).`
+          );
+          this.broadcastRoomState(room);
+          this.broadcastLobbyRooms();
+        }
+      }
+
+      // Clean up finished rooms with zero connected clients
+      for (const [code, room] of this.rooms.entries()) {
+        const activeSockets = room.clients.filter((c) => c.ws.readyState === WebSocket.OPEN);
+        if (activeSockets.length === 0 && room.state.phase === 'GAME_OVER') {
+          this.rooms.delete(code);
+        }
+      }
+    }, 5000);
   }
 
   private initListeners() {
@@ -92,13 +156,43 @@ export class GameManager {
         );
       };
 
-      const handleClientLeave = () => {
+      // Socket drop (network blip or page refresh) -> mark disconnected & start 3-minute grace window
+      const handleSocketDisconnect = () => {
         removeFromQueue();
         if (!userSession) return;
         const room = this.rooms.get(userSession.roomCode);
         if (room) {
           room.clients = room.clients.filter((c) => c.ws !== ws);
-          if (room.clients.length === 0) {
+          if (userSession.seat === '0' || userSession.seat === '1') {
+            room.disconnectedAt[userSession.seat] = Date.now();
+            room.state.players[userSession.seat].isConnected = false;
+            this.broadcastRoomState(room);
+          }
+        }
+        userSession = null;
+        this.broadcastLobbyRooms();
+      };
+
+      // Explicit Leave Match button -> immediate forfeit so opponent wins right away
+      const handleExplicitLeave = () => {
+        removeFromQueue();
+        if (!userSession) return;
+        const room = this.rooms.get(userSession.roomCode);
+        if (room) {
+          room.clients = room.clients.filter((c) => c.ws !== ws);
+          if (
+            (userSession.seat === '0' || userSession.seat === '1') &&
+            room.state.phase !== 'WAITING_FOR_PLAYERS' &&
+            room.state.phase !== 'GAME_OVER'
+          ) {
+            const leaverName = room.state.players[userSession.seat].displayName;
+            room.state = forfeitMatch(
+              room.state,
+              userSession.seat,
+              `${leaverName} forfeited the match.`
+            );
+          }
+          if (room.clients.length === 0 && room.state.phase === 'WAITING_FOR_PLAYERS') {
             this.rooms.delete(room.code);
           } else {
             this.broadcastRoomState(room);
@@ -112,8 +206,44 @@ export class GameManager {
         try {
           const message = JSON.parse(rawMessage.toString());
 
+          if (message.type === 'PING') {
+            ws.send(JSON.stringify({ type: 'PONG' }));
+            return;
+          }
+
           if (message.type === 'GET_ROOMS') {
             this.sendLobbyRoomsToClient(ws);
+            return;
+          }
+
+          // Reconnect after browser refresh or transient network interruption
+          if (message.type === 'RECONNECT_MATCH') {
+            const { roomCode, seat, sessionToken } = message;
+            const room = this.rooms.get(String(roomCode || '').trim().toLowerCase());
+            if (!room || room.state.phase === 'GAME_OVER') {
+              ws.send(JSON.stringify({ type: 'RECONNECT_FAILED' }));
+              return;
+            }
+            if ((seat === '0' || seat === '1') && room.seatTokens[seat] === sessionToken) {
+              room.clients = room.clients.filter((c) => c.seat !== seat);
+              delete room.disconnectedAt[seat];
+              room.state.players[seat].isConnected = true;
+
+              const restoredSession: RoomClient = {
+                ws,
+                seat,
+                roomCode: room.code,
+                selectedDeck: room.decks[seat] || 'starter-sd01',
+                username: room.state.players[seat].displayName,
+                sessionToken,
+              };
+              userSession = restoredSession;
+              room.clients.push(restoredSession);
+
+              this.broadcastRoomState(room);
+              return;
+            }
+            ws.send(JSON.stringify({ type: 'RECONNECT_FAILED' }));
             return;
           }
 
@@ -124,7 +254,7 @@ export class GameManager {
           }
 
           if (message.type === 'QUICK_PLAY') {
-            if (userSession) handleClientLeave();
+            if (userSession) handleExplicitLeave();
             removeFromQueue();
 
             const deckId: DeckId = message.deckId || 'starter-sd01';
@@ -135,6 +265,8 @@ export class GameManager {
             if (this.quickPlayQueue.length > 0) {
               const opponent = this.quickPlayQueue.shift()!;
               const roomCode = `qp-${Math.floor(10000 + Math.random() * 90000)}`;
+              const token0 = crypto.randomUUID();
+              const token1 = crypto.randomUUID();
 
               const room: Room = {
                 code: roomCode,
@@ -144,6 +276,9 @@ export class GameManager {
                 state: createWaitingMatch(),
                 clients: [],
                 decks: { '0': opponent.deckId, '1': deckId },
+                seatTokens: { '0': token0, '1': token1 },
+                disconnectedAt: {},
+                lastActivityAt: Date.now(),
               };
 
               const p0Session: RoomClient = {
@@ -152,6 +287,7 @@ export class GameManager {
                 roomCode,
                 selectedDeck: opponent.deckId,
                 username: opponent.username,
+                sessionToken: token0,
               };
               const p1Session: RoomClient = {
                 ws,
@@ -159,6 +295,7 @@ export class GameManager {
                 roomCode,
                 selectedDeck: deckId,
                 username,
+                sessionToken: token1,
               };
 
               room.clients.push(p0Session, p1Session);
@@ -168,6 +305,8 @@ export class GameManager {
               userSession = p1Session;
 
               await this.startMatchWithHydratedDecks(room);
+              room.lastActivityAt = Date.now();
+              room.state.turnDeadlineMs = room.lastActivityAt + INACTIVITY_TIMEOUT_MS;
               this.broadcastRoomState(room);
               this.broadcastLobbyRooms();
             } else {
@@ -180,7 +319,7 @@ export class GameManager {
           }
 
           if (message.type === 'CREATE_ROOM') {
-            if (userSession) handleClientLeave();
+            if (userSession) handleExplicitLeave();
             const roomCode = (message.roomCode || `pony-${Math.floor(1000 + Math.random() * 9000)}`)
               .trim()
               .toLowerCase();
@@ -189,6 +328,7 @@ export class GameManager {
             const allowSpectators = message.allowSpectators ?? true;
             const deckId: DeckId = message.deckId || 'starter-sd01';
             const username = message.username || 'Host';
+            const token0 = crypto.randomUUID();
 
             const room: Room = {
               code: roomCode,
@@ -198,11 +338,21 @@ export class GameManager {
               state: createWaitingMatch(),
               clients: [],
               decks: { '0': deckId },
+              seatTokens: { '0': token0 },
+              disconnectedAt: {},
+              lastActivityAt: Date.now(),
             };
 
             this.rooms.set(roomCode, room);
 
-            userSession = { ws, seat: '0', roomCode, selectedDeck: deckId, username };
+            userSession = {
+              ws,
+              seat: '0',
+              roomCode,
+              selectedDeck: deckId,
+              username,
+              sessionToken: token0,
+            };
             room.clients.push(userSession);
 
             this.broadcastRoomState(room);
@@ -211,7 +361,7 @@ export class GameManager {
           }
 
           if (message.type === 'JOIN_ROOM') {
-            if (userSession && userSession.roomCode !== message.roomCode) handleClientLeave();
+            if (userSession && userSession.roomCode !== message.roomCode) handleExplicitLeave();
             const roomCode = (message.roomCode || '').trim().toLowerCase();
             const chosenDeckId: DeckId = message.deckId || 'starter-sd02';
             const username = message.username || 'GuestPlayer';
@@ -221,10 +371,19 @@ export class GameManager {
 
             room.clients = room.clients.filter((c) => c.ws.readyState === WebSocket.OPEN && c.ws !== ws);
             const assignedSeat = room.clients.some((c) => c.seat === '0') ? '1' : '0';
+            const seatToken = crypto.randomUUID();
 
-            userSession = { ws, seat: assignedSeat, roomCode, selectedDeck: chosenDeckId, username };
+            userSession = {
+              ws,
+              seat: assignedSeat,
+              roomCode,
+              selectedDeck: chosenDeckId,
+              username,
+              sessionToken: seatToken,
+            };
             room.clients.push(userSession);
             room.decks[assignedSeat] = chosenDeckId;
+            room.seatTokens[assignedSeat] = seatToken;
 
             if (
               room.clients.some((c) => c.seat === '0') &&
@@ -232,6 +391,8 @@ export class GameManager {
               room.state.phase === 'WAITING_FOR_PLAYERS'
             ) {
               await this.startMatchWithHydratedDecks(room);
+              room.lastActivityAt = Date.now();
+              room.state.turnDeadlineMs = room.lastActivityAt + INACTIVITY_TIMEOUT_MS;
             }
 
             this.broadcastRoomState(room);
@@ -254,6 +415,7 @@ export class GameManager {
               roomCode,
               selectedDeck: 'starter-sd01',
               username: 'Spectator',
+              sessionToken: '',
             };
             room.clients.push(userSession);
 
@@ -275,13 +437,15 @@ export class GameManager {
             const { action, payload } = message;
             if (userSession.seat === '0' || userSession.seat === '1') {
               room.state = this.processGameAction(room.state, userSession.seat, action, payload);
+              room.lastActivityAt = Date.now();
+              room.state.turnDeadlineMs = room.lastActivityAt + INACTIVITY_TIMEOUT_MS;
               this.broadcastRoomState(room);
             }
             return;
           }
 
           if (message.type === 'LEAVE_ROOM') {
-            handleClientLeave();
+            handleExplicitLeave();
             return;
           }
         } catch (err) {
@@ -294,7 +458,7 @@ export class GameManager {
       };
 
       ws.on('close', () => {
-        handleClientLeave();
+        handleSocketDisconnect();
       });
     });
   }
@@ -340,6 +504,8 @@ export class GameManager {
             type: 'STATE_UPDATE',
             state: stateToSend,
             seat: client.seat,
+            roomCode: room.code,
+            sessionToken: client.sessionToken,
             clientCount: room.clients.length,
           })
         );
@@ -511,6 +677,8 @@ export class GameManager {
         return resolveMulligan(state, playerId, Boolean(payload?.doMulligan));
       case 'PLAY_CARD':
         return playCardFromHand(state, playerId, payload.cardId, payload.laneIndex);
+      case 'ACTIVATE_ADVENTURE':
+        return activateCharacterAdventureAbility(state, playerId, payload.laneIndex);
       case 'START_CONTACT':
         return startContactPhase(state, playerId);
       case 'INSPIRE_SCENE':

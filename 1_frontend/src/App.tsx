@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from './config';
@@ -142,6 +142,8 @@ function VerifyEmailRoute() {
   );
 }
 
+const MATCH_SESSION_KEY = 'mlp_active_match_session';
+
 function AppContent() {
   const [currentTab, setCurrentTab] = useState<string>('hub');
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -153,14 +155,49 @@ function AppContent() {
     ws: WebSocket;
     state: LiveGameState;
     seat: '0' | '1' | 'spectator';
+    isReconnecting?: boolean;
   } | null>(null);
 
-  const handleMatchJoined = (ws: WebSocket, initialState: LiveGameState, seat: '0' | '1' | 'spectator') => {
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intentionalLeaveRef = useRef<boolean>(false);
+
+  const attachMatchSocketHandlers = (
+    ws: WebSocket,
+    initialState: LiveGameState | null,
+    seat: '0' | '1' | 'spectator'
+  ) => {
+    intentionalLeaveRef.current = false;
+
+    const pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'PING' }));
+      }
+    }, 20000);
+
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'STATE_UPDATE' && data.state) {
-          setActiveMatch(prev => prev ? { ...prev, state: data.state, seat: data.seat || prev.seat } : null);
+          if (data.roomCode && data.sessionToken && (data.seat === '0' || data.seat === '1')) {
+            sessionStorage.setItem(
+              MATCH_SESSION_KEY,
+              JSON.stringify({
+                roomCode: data.roomCode,
+                seat: data.seat,
+                sessionToken: data.sessionToken,
+              })
+            );
+          }
+
+          setActiveMatch((prev) => ({
+            ws,
+            state: data.state,
+            seat: data.seat || prev?.seat || seat,
+            isReconnecting: false,
+          }));
+        } else if (data.type === 'RECONNECT_FAILED') {
+          sessionStorage.removeItem(MATCH_SESSION_KEY);
+          setActiveMatch(null);
         }
       } catch (err) {
         console.error('[MATCH WS ERROR]', err);
@@ -168,13 +205,95 @@ function AppContent() {
     };
 
     ws.onclose = () => {
-      setActiveMatch(null);
+      clearInterval(pingInterval);
+      if (intentionalLeaveRef.current) {
+        sessionStorage.removeItem(MATCH_SESSION_KEY);
+        setActiveMatch(null);
+        return;
+      }
+
+      // Attempt automatic reconnection if a match session exists in sessionStorage
+      const savedRaw = sessionStorage.getItem(MATCH_SESSION_KEY);
+      if (savedRaw) {
+        setActiveMatch((prev) => (prev ? { ...prev, isReconnecting: true } : null));
+        reconnectTimerRef.current = setTimeout(() => {
+          try {
+            const saved = JSON.parse(savedRaw);
+            const wsUrl = API_BASE_URL.replace(/^http/, 'ws');
+            const newSocket = new WebSocket(wsUrl);
+            newSocket.onopen = () => {
+              newSocket.send(
+                JSON.stringify({
+                  type: 'RECONNECT_MATCH',
+                  roomCode: saved.roomCode,
+                  seat: saved.seat,
+                  sessionToken: saved.sessionToken,
+                })
+              );
+            };
+            attachMatchSocketHandlers(newSocket, null, saved.seat);
+          } catch {
+            sessionStorage.removeItem(MATCH_SESSION_KEY);
+            setActiveMatch(null);
+          }
+        }, 1500);
+      } else {
+        setActiveMatch(null);
+      }
     };
 
-    setActiveMatch({ ws, state: initialState, seat });
+    if (initialState) {
+      setActiveMatch({ ws, state: initialState, seat, isReconnecting: false });
+    }
+  };
+
+  // Restore active match on page refresh if sessionStorage has valid match credentials
+  useEffect(() => {
+    const savedRaw = sessionStorage.getItem(MATCH_SESSION_KEY);
+    if (!savedRaw) return;
+    try {
+      const saved = JSON.parse(savedRaw);
+      if (saved?.roomCode && saved?.sessionToken) {
+        const wsUrl = API_BASE_URL.replace(/^http/, 'ws');
+        const socket = new WebSocket(wsUrl);
+        socket.onopen = () => {
+          socket.send(
+            JSON.stringify({
+              type: 'RECONNECT_MATCH',
+              roomCode: saved.roomCode,
+              seat: saved.seat,
+              sessionToken: saved.sessionToken,
+            })
+          );
+        };
+        attachMatchSocketHandlers(socket, null, saved.seat);
+      }
+    } catch {
+      sessionStorage.removeItem(MATCH_SESSION_KEY);
+    }
+  }, []);
+
+  const handleMatchJoined = (ws: WebSocket, initialState: LiveGameState, seat: '0' | '1' | 'spectator') => {
+    if (initialState.roomId && (seat === '0' || seat === '1')) {
+      const existing = sessionStorage.getItem(MATCH_SESSION_KEY);
+      if (!existing) {
+        // Will be updated with sessionToken on first STATE_UPDATE broadcast
+        sessionStorage.setItem(
+          MATCH_SESSION_KEY,
+          JSON.stringify({ roomCode: initialState.roomId, seat, sessionToken: '' })
+        );
+      }
+    }
+    attachMatchSocketHandlers(ws, initialState, seat);
   };
 
   const handleLeaveMatch = () => {
+    intentionalLeaveRef.current = true;
+    sessionStorage.removeItem(MATCH_SESSION_KEY);
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     if (activeMatch && activeMatch.ws.readyState === WebSocket.OPEN) {
       activeMatch.ws.close();
     }
@@ -193,7 +312,6 @@ function AppContent() {
 
   return (
     <div className="app-container">
-      {/* Hide Navbar completely during active tabletop gameplay */}
       {!activeMatch && (
         <Navbar currentTab={currentTab} setCurrentTab={handleTabChange} onOpenAuth={() => setShowAuthModal(true)} />
       )}
@@ -207,6 +325,7 @@ function AppContent() {
                 ws={activeMatch.ws}
                 gameState={activeMatch.state}
                 seat={activeMatch.seat}
+                isReconnecting={activeMatch.isReconnecting}
                 onLeaveMatch={handleLeaveMatch}
               />
             ) : (

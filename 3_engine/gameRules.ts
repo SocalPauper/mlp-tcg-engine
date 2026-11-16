@@ -38,13 +38,14 @@ function createEmptyPlayer(id: '0' | '1', name: string): PlayerState {
     })),
     storyProgress: 0,
     adventureArea: {
-      left: { character: null, items: [], inspoBoost: 0 },
-      center: { character: null, items: [], inspoBoost: 0 },
-      right: { character: null, items: [], inspoBoost: 0 },
+      left: { character: null, items: [], inspoBoost: 0, isExhausted: false },
+      center: { character: null, items: [], inspoBoost: 0, isExhausted: false },
+      right: { character: null, items: [], inspoBoost: 0, isExhausted: false },
     },
     mulliganStatus: 'PENDING',
     turnsTaken: 0,
     actedLanesThisTurn: [],
+    isConnected: true,
   };
 }
 
@@ -56,6 +57,7 @@ export function createWaitingMatch(): KayouGameState {
     turnPlayerId: '0',
     turnNumber: 1,
     winnerId: null,
+    winReason: null,
     players: {
       '0': createEmptyPlayer('0', 'Player 1'),
       '1': createEmptyPlayer('1', 'Player 2'),
@@ -107,13 +109,14 @@ export function startSeatedMatch(
       storyStages,
       storyProgress: 0,
       adventureArea: {
-        left: { character: null, items: [], inspoBoost: 0 },
-        center: { character: null, items: [], inspoBoost: 0 },
-        right: { character: null, items: [], inspoBoost: 0 },
+        left: { character: null, items: [], inspoBoost: 0, isExhausted: false },
+        center: { character: null, items: [], inspoBoost: 0, isExhausted: false },
+        right: { character: null, items: [], inspoBoost: 0, isExhausted: false },
       },
       mulliganStatus: 'PENDING',
       turnsTaken: 0,
       actedLanesThisTurn: [],
+      isConnected: true,
     };
   };
 
@@ -124,6 +127,7 @@ export function startSeatedMatch(
     turnPlayerId: firstPlayerId,
     turnNumber: 1,
     winnerId: null,
+    winReason: null,
     players: {
       '0': setupPlayer('0', p0Name, deck0),
       '1': setupPlayer('1', p1Name, deck1),
@@ -301,6 +305,7 @@ export function playCardFromHand(
               character: card,
               items: [],
               inspoBoost: 0,
+              isExhausted: false,
             },
           },
         },
@@ -358,10 +363,81 @@ export function playCardFromHand(
 }
 
 /**
- * Strict Rule-Based Scene Inspiration Validation:
- * Only returns eligible=true if the Scene card has an Inspo Boost ability AND its target
- * character/element condition matches `targetCharacter` (e.g. "Applejack" only matches Applejack).
+ * Official Kayou "Adventure:" Activated Tap Ability.
+ * Exhausts (rotates 90deg clockwise) the character in `lane` during MAIN_PHASE so it cannot
+ * attack/block this turn, and executes its printed Adventure effect (e.g., Winona draw/boost).
  */
+export function activateCharacterAdventureAbility(
+  state: KayouGameState,
+  playerId: '0' | '1',
+  lane: LaneKey
+): KayouGameState {
+  if (state.phase !== 'MAIN_PHASE' || state.turnPlayerId !== playerId) return state;
+
+  const player = state.players[playerId];
+  const slot = player.adventureArea[lane];
+  if (!slot.character || slot.isExhausted) return state;
+
+  const text = String(slot.character.effectText || '');
+  if (!/Adventure\s*:/i.test(text)) return state;
+
+  let updatedPlayer: PlayerState = {
+    ...player,
+    actedLanesThisTurn: [...player.actedLanesThisTurn, lane],
+    adventureArea: {
+      ...player.adventureArea,
+      [lane]: {
+        ...slot,
+        isExhausted: true, // Tapped 90deg clockwise
+      },
+    },
+  };
+
+  let announcementMsg = `${player.displayName} exhausted ${slot.character.name} to activate Adventure!`;
+
+  // Resolve printed Adventure effect (Draw 1 card, or +1 Power/Inspiration to another character)
+  if (/draw\s+1|draw\s+a\s+card/i.test(text) && updatedPlayer.mainDeck.length > 0) {
+    const drawn = updatedPlayer.mainDeck[0];
+    updatedPlayer = {
+      ...updatedPlayer,
+      mainDeck: updatedPlayer.mainDeck.slice(1),
+      hand: [...updatedPlayer.hand, drawn],
+    };
+    announcementMsg += ' Drew 1 card!';
+  } else {
+    const otherLanes: LaneKey[] = (['left', 'center', 'right'] as LaneKey[]).filter(
+      (l) => l !== lane && updatedPlayer.adventureArea[l].character !== null
+    );
+    if (otherLanes.length > 0) {
+      const targetOther = otherLanes[0];
+      const otherSlot = updatedPlayer.adventureArea[targetOther];
+      updatedPlayer = {
+        ...updatedPlayer,
+        adventureArea: {
+          ...updatedPlayer.adventureArea,
+          [targetOther]: {
+            ...otherSlot,
+            inspoBoost: otherSlot.inspoBoost + 1,
+          },
+        },
+      };
+      announcementMsg += ` Granted +1 Power to ${otherSlot.character!.name}!`;
+    }
+  }
+
+  return {
+    ...state,
+    players: {
+      ...state.players,
+      [playerId]: updatedPlayer,
+    },
+    announcements: [
+      ...state.announcements,
+      { type: 'ADVENTURE', message: announcementMsg, timestamp: Date.now() },
+    ],
+  };
+}
+
 export function canSceneInspireCharacter(
   scene: SceneCardInPlay,
   targetCharacter: CardDefinition | null
@@ -385,7 +461,7 @@ export function canSceneInspireCharacter(
     return {
       eligible: false,
       boostAmount: 0,
-      reason: 'No Inspo Boost ability on this Scene.',
+      reason: 'This Scene does not have an Inspo Boost ability.',
     };
   }
 
@@ -394,7 +470,6 @@ export function canSceneInspireCharacter(
 
   const actualCharName = String(targetCharacter.name || '').toLowerCase();
 
-  // 1. Check bracketed character requirement: e.g., [Applejack], ｢Twilight Sparkle｣, 「Rainbow Dash」
   const charBracketMatch = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
   if (charBracketMatch) {
     const requiredName = charBracketMatch[1].trim().toLowerCase();
@@ -406,7 +481,6 @@ export function canSceneInspireCharacter(
       };
     }
   } else {
-    // 2. Also check unbracketed named pony requirements: e.g., "Your Applejack gets +1 Inspiration" or "Boost Applejack"
     const namedPonies = [
       'Twilight Sparkle',
       'Rainbow Dash',
@@ -433,7 +507,6 @@ export function canSceneInspireCharacter(
     }
   }
 
-  // 3. Check element-specific requirement if stated (e.g., "Your Magic character" or "Your Honesty character")
   const elements = ['magic', 'loyalty', 'honesty', 'generosity', 'kindness', 'laughter'];
   for (const el of elements) {
     const elRegex = new RegExp(`your\\s+${el}\\s+character`, 'i');
@@ -468,10 +541,12 @@ export function startContactPhase(state: KayouGameState, playerId: '0' | '1'): K
     return endTurn(state, playerId);
   }
 
+  // Only upright (non-exhausted) characters can attack!
   const allLanes: LaneKey[] = ['left', 'center', 'right'];
   const activeAttackLanes = allLanes.filter(
     (l) =>
       attacker.adventureArea[l].character !== null &&
+      !attacker.adventureArea[l].isExhausted &&
       !attacker.actedLanesThisTurn.includes(l)
   );
 
@@ -496,14 +571,15 @@ function advanceToNextAttackLane(
     const lane = remaining[0];
     const atkSlot = attacker.adventureArea[lane];
 
-    if (!atkSlot.character || attacker.actedLanesThisTurn.includes(lane)) {
+    if (!atkSlot.character || atkSlot.isExhausted || attacker.actedLanesThisTurn.includes(lane)) {
       remaining.shift();
       continue;
     }
 
     const defSlot = defender.adventureArea[lane];
 
-    if (defSlot.character) {
+    // Only an upright (non-exhausted) defender blocks/intercepts in the lane
+    if (defSlot.character && !defSlot.isExhausted) {
       return {
         ...state,
         phase: 'CONTACT_INSPIRE',
@@ -664,7 +740,7 @@ export function passInspireInContact(
       retirement: [...nextDefPlayer.retirement, defSlot.character, ...defSlot.items],
       adventureArea: {
         ...nextDefPlayer.adventureArea,
-        [lane]: { character: null, items: [], inspoBoost: 0 },
+        [lane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
       },
     };
   } else if (outcome === 'DEFENDER_WINS') {
@@ -673,7 +749,7 @@ export function passInspireInContact(
       retirement: [...nextAtkPlayer.retirement, atkSlot.character, ...atkSlot.items],
       adventureArea: {
         ...nextAtkPlayer.adventureArea,
-        [lane]: { character: null, items: [], inspoBoost: 0 },
+        [lane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
       },
     };
   } else {
@@ -682,7 +758,7 @@ export function passInspireInContact(
       retirement: [...nextAtkPlayer.retirement, atkSlot.character, ...atkSlot.items],
       adventureArea: {
         ...nextAtkPlayer.adventureArea,
-        [lane]: { character: null, items: [], inspoBoost: 0 },
+        [lane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
       },
     };
     nextDefPlayer = {
@@ -690,12 +766,11 @@ export function passInspireInContact(
       retirement: [...nextDefPlayer.retirement, defSlot.character, ...defSlot.items],
       adventureArea: {
         ...nextDefPlayer.adventureArea,
-        [lane]: { character: null, items: [], inspoBoost: 0 },
+        [lane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
       },
     };
   }
 
-  // Enter CLASH_HOLD so both players watch the full Clash slam animation BEFORE advancing lanes or switching turns!
   const remainingQueue = state.contactState.laneQueue.slice(1);
   return {
     ...state,
@@ -711,10 +786,6 @@ export function passInspireInContact(
   };
 }
 
-/**
- * Called by each client once the Clash slam animation completes on their screen.
- * Waits until BOTH players finish watching the combat animation before resuming the lane queue or ending the turn.
- */
 export function acknowledgeClashAnimation(
   state: KayouGameState,
   playerId: '0' | '1'
@@ -795,7 +866,7 @@ function executePrePlanEffectAndReturnToHand(
         retirement: [...updatedAttacker.retirement, atkSlot.character!, ...atkSlot.items],
         adventureArea: {
           ...updatedAttacker.adventureArea,
-          [activeLane]: { character: null, items: [], inspoBoost: 0 },
+          [activeLane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
         },
       };
       effectSummary = `Pre-Plan Triggered: Attacking character in ${activeLane.toUpperCase()} lane was retired!`;
@@ -941,6 +1012,7 @@ export function resolveBreakthroughChoice(
         ...state,
         phase: 'GAME_OVER',
         winnerId: playerId,
+        winReason: `${attacker.displayName} progressed to Story Stage 4!`,
         contactState: null,
         pendingLaneQueueAfterReveal: null,
         players: {
@@ -1081,6 +1153,7 @@ export function acknowledgeStoryReveal(
       ...state,
       phase: 'GAME_OVER',
       winnerId: revealEvent.attackerId,
+      winReason: `${revealEvent.attackerName} completed Story Stage 4!`,
       lastStoryRevealEvent: null,
       pendingLaneQueueAfterReveal: null,
       announcements: [
@@ -1106,6 +1179,34 @@ export function acknowledgeStoryReveal(
   );
 }
 
+export function forfeitMatch(
+  state: KayouGameState,
+  forfeitingPlayerId: '0' | '1',
+  reason: string
+): KayouGameState {
+  if (state.phase === 'GAME_OVER' || state.phase === 'WAITING_FOR_PLAYERS') return state;
+  const winnerId: '0' | '1' = forfeitingPlayerId === '0' ? '1' : '0';
+  return {
+    ...state,
+    phase: 'GAME_OVER',
+    winnerId,
+    winReason: reason,
+    contactState: null,
+    pendingLaneQueueAfterReveal: null,
+    lastClashEvent: null,
+    lastPlanRevealEvent: null,
+    lastStoryRevealEvent: null,
+    announcements: [
+      ...state.announcements,
+      {
+        type: 'FORFEIT',
+        message: reason,
+        timestamp: Date.now(),
+      },
+    ],
+  };
+}
+
 export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameState {
   if (state.turnPlayerId !== playerId) return state;
 
@@ -1123,10 +1224,10 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     },
   };
 
+  // Start of next player's turn: Ready (untap) both exhausted Scenes AND exhausted Adventure Characters!
   const startingPlayer = state.players[nextPlayerId];
   const newTurnsTaken = startingPlayer.turnsTaken + 1;
 
-  // Draw 1 Main Deck card
   const drawnMain = startingPlayer.mainDeck.slice(0, 1);
   const restMain = startingPlayer.mainDeck.slice(1);
 
@@ -1135,8 +1236,6 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     isExhausted: false,
   }));
 
-  // Rule 3: On Player 2's first turn (newTurnsTaken === 1), they do NOT draw/flip a Scene card
-  // so both players start their first turn with exactly 2 Scene cards.
   const shouldFlipNewScene = newTurnsTaken > 1;
   const drawnScene = shouldFlipNewScene ? startingPlayer.sceneDeck.slice(0, 1) : [];
   const restScene = shouldFlipNewScene
@@ -1158,6 +1257,11 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     hand: [...startingPlayer.hand, ...drawnMain],
     sceneDeck: restScene,
     sceneArea: [...readiedExistingScenes, ...addedScenes],
+    adventureArea: {
+      left: { ...startingPlayer.adventureArea.left, isExhausted: false },
+      center: { ...startingPlayer.adventureArea.center, isExhausted: false },
+      right: { ...startingPlayer.adventureArea.right, isExhausted: false },
+    },
   };
 
   return {

@@ -55,6 +55,7 @@ export interface AdventureSlot {
   character: CardDefinition | null;
   items: CardDefinition[];
   inspoBoost: number;
+  isExhausted: boolean; // True = Tapped 90deg clockwise (used Adventure ability; cannot attack/block until readied)
 }
 
 export interface PlayerState {
@@ -76,6 +77,7 @@ export interface PlayerState {
   mulliganStatus: 'PENDING' | 'KEPT' | 'MULLIGANED';
   turnsTaken: number;
   actedLanesThisTurn: LaneKey[];
+  isConnected?: boolean;
 }
 
 export type GamePhase =
@@ -154,6 +156,8 @@ export interface KayouGameState {
   turnPlayerId: '0' | '1';
   turnNumber: number;
   winnerId: '0' | '1' | null;
+  winReason?: string | null;
+  turnDeadlineMs?: number;
   players: Record<'0' | '1', PlayerState>;
   contactState: ContactCombatState | null;
   pendingLaneQueueAfterReveal: LaneKey[] | null;
