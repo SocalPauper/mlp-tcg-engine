@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
-import { initDatabase, pool } from './4_data/db.js';
+import { initDatabase, pool } from '../4_data/db.js';
 
 import authRouter from './routes/auth.js';
 import cardsRouter from './routes/cards.js';
