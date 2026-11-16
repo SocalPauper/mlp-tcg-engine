@@ -39,14 +39,15 @@ export interface CardDefinition {
 export interface SceneCardInPlay {
   card: CardDefinition;
   isFaceUp: boolean;
-  isLockedFaceDown: boolean; // True for Player 1's 1st scene (permanently face down)
+  isExhausted: boolean;      // True = rotated 90deg clockwise (spent for Harmony cost this turn)
+  isLockedFaceDown: boolean; // True = Player 1's 1st scene (permanently face down)
 }
 
 export interface StoryStageSlot {
   stage: 1 | 2 | 3 | 4;
   storyCard: CardDefinition | null;
   isStoryCompleted: boolean;
-  planCard: CardDefinition | null; // Face-down Plan card dealt from Main Deck
+  planCard: CardDefinition | null;
   isPlanRevealed: boolean;
 }
 
@@ -66,7 +67,7 @@ export interface PlayerState {
   retirement: CardDefinition[];
   sceneArea: SceneCardInPlay[];
   storyStages: StoryStageSlot[];
-  storyProgress: number; // 0 to 4 (4 = Win)
+  storyProgress: number;
   adventureArea: {
     left: AdventureSlot;
     center: AdventureSlot;

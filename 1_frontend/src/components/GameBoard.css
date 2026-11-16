@@ -2,56 +2,61 @@
 
 .kayou-playmat-wrapper {
   width: 100vw;
-  min-height: 100vh;
+  min-height: 100dvh;
   background: linear-gradient(135deg, #fff0f6 0%, #f3e8ff 50%, #e0f2fe 100%);
   color: #4a148c;
   font-family: 'Nunito', sans-serif;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 10px 18px 16px;
+  padding: 8px 16px 12px;
   box-sizing: border-box;
   overflow-x: hidden;
   user-select: none;
 }
 
-/* Official Kayou Card Back Pattern */
-.kayou-card-back {
+/* Official R2 Card Back Image Styling */
+.kayou-card-back-img {
   width: 100%;
   height: 100%;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #f472b6 0%, #c084fc 50%, #60a5fa 100%);
-  border: 2px solid #fff;
-  box-shadow: 0 4px 10px rgba(74, 20, 140, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 900;
-  font-size: 11px;
-  text-align: center;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-  position: relative;
-  overflow: hidden;
+  object-fit: fill;
+  border-radius: 9px;
+  border: 1.5px solid #fff;
+  box-shadow: 0 3px 8px rgba(74, 20, 140, 0.25);
+  display: block;
 }
 
-.kayou-card-back::after {
-  content: '✦';
+.deck-pile-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.deck-count-pill {
   position: absolute;
-  font-size: 28px;
-  opacity: 0.25;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 17, 36, 0.86);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 1px 7px;
+  border-radius: 10px;
+  border: 1px solid #f472b6;
+  white-space: nowrap;
 }
 
 /* Player Half Playmat Container */
 .playmat-half {
   background: rgba(255, 255, 255, 0.72);
   border: 2px solid rgba(216, 180, 254, 0.85);
-  border-radius: 18px;
-  padding: 10px 16px;
-  box-shadow: 0 6px 20px rgba(147, 51, 234, 0.08);
+  border-radius: 16px;
+  padding: 8px 14px;
+  box-shadow: 0 4px 16px rgba(147, 51, 234, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .playmat-half.opponent-half {
@@ -63,24 +68,24 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   color: #581c87;
-  padding: 0 6px;
+  padding: 0 4px;
 }
 
 .hud-pills {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
 .hud-pill {
   background: #fff;
   border: 1px solid #e9d5ff;
-  padding: 3px 10px;
-  border-radius: 14px;
-  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 12px;
+  font-size: 11px;
   color: #6b21a8;
 }
 
@@ -94,14 +99,14 @@
 .adventure-area-row {
   display: flex;
   justify-content: center;
-  gap: 28px;
+  gap: 24px;
 }
 
 .adventure-slot {
-  width: 104px;
-  height: 145px;
+  width: 96px;
+  height: 134px;
   border: 2px dashed #d8b4fe;
-  border-radius: 12px;
+  border-radius: 11px;
   background: rgba(255, 255, 255, 0.6);
   display: flex;
   align-items: center;
@@ -127,9 +132,9 @@
   width: 100%;
   height: 100%;
   position: relative;
-  border-radius: 10px;
+  border-radius: 9px;
   overflow: hidden;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   cursor: pointer;
 }
 
@@ -142,28 +147,28 @@
 
 .char-power-badge {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
+  bottom: 3px;
+  right: 3px;
   background: linear-gradient(135deg, #ec4899, #9333ea);
   color: #fff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
-  padding: 2px 7px;
-  border-radius: 10px;
+  padding: 1px 6px;
+  border-radius: 9px;
   border: 1.5px solid #ffd700;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
 .item-count-tag {
   position: absolute;
-  top: 4px;
-  left: 4px;
+  top: 3px;
+  left: 3px;
   background: rgba(17, 24, 39, 0.85);
   color: #fde047;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
-  padding: 1px 6px;
-  border-radius: 8px;
+  padding: 1px 5px;
+  border-radius: 7px;
 }
 
 /* Row 2: Main Character + 4 Landscape Story Stages + Retirement Area */
@@ -171,14 +176,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .side-portrait-zone {
-  width: 92px;
-  height: 128px;
+  width: 84px;
+  height: 118px;
   border: 2px solid #e9d5ff;
-  border-radius: 12px;
+  border-radius: 11px;
   background: rgba(255, 255, 255, 0.7);
   display: flex;
   flex-direction: column;
@@ -192,13 +197,13 @@
   width: 100%;
   height: 100%;
   object-fit: fill;
-  border-radius: 10px;
+  border-radius: 9px;
 }
 
 .zone-caption {
   position: absolute;
-  bottom: -16px;
-  font-size: 10px;
+  bottom: -14px;
+  font-size: 9px;
   font-weight: 800;
   color: #7e22ce;
   white-space: nowrap;
@@ -207,26 +212,46 @@
 .story-four-strip {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   flex: 1;
 }
 
 .story-stage-box {
-  width: 144px;
-  height: 102px; /* 7:5 landscape proportion */
-  border-radius: 10px;
+  width: 136px;
+  height: 96px; /* 7:5 landscape proportion */
+  border-radius: 9px;
   border: 2px solid #d8b4fe;
   position: relative;
   background: #fff;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
 }
 
 .story-stage-box img {
   width: 100%;
   height: 100%;
   object-fit: fill;
-  border-radius: 8px;
+  border-radius: 7px;
   display: block;
+}
+
+.story-uncompleted-overlay {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.story-stage-label-pill {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 17, 36, 0.82);
+  color: #fbcfe8;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 8px;
+  white-space: nowrap;
 }
 
 /* Overlaid Face-Down Plan Card on Story Stage */
@@ -234,8 +259,8 @@
   position: absolute;
   top: -8px;
   right: -8px;
-  width: 46px;
-  height: 64px;
+  width: 42px;
+  height: 58px;
   z-index: 5;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -247,99 +272,138 @@
   border-radius: 8px;
 }
 
+.plan-tag-badge {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(88, 28, 135, 0.9);
+  color: #fde047;
+  font-size: 7.5px;
+  font-weight: 900;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
 /* Row 3: Scene Deck + Scene Area + Main Deck */
 .resource-deck-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   margin-top: 6px;
 }
 
 .scene-area-tray {
   flex: 1;
-  min-height: 112px;
+  min-height: 106px;
   border: 2px dashed #c084fc;
-  border-radius: 14px;
+  border-radius: 13px;
   background: rgba(243, 232, 255, 0.45);
-  padding: 8px 12px;
+  padding: 6px 14px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 18px;
   overflow-x: auto;
 }
 
+/* Scene Card Slot + 90deg Clockwise Exhausted Rotation (MTG Tap style) */
 .scene-card-slot {
-  width: 74px;
-  height: 102px;
+  width: 68px;
+  height: 94px;
   flex-shrink: 0;
   border-radius: 8px;
   position: relative;
-  transition: transform 0.2s ease;
+  transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+.scene-card-slot.exhausted {
+  transform: rotate(90deg);
+  margin: 0 12px;
+  filter: brightness(0.85);
 }
 
 .scene-card-slot.inspire-clickable {
   cursor: pointer;
-  box-shadow: 0 0 15px #ec4899;
+  box-shadow: 0 0 16px #ec4899;
   border: 2px solid #ec4899;
   transform: translateY(-4px);
+}
+
+.scene-card-slot.exhausted.inspire-clickable {
+  transform: rotate(90deg) translateX(-4px);
 }
 
 .scene-card-slot img {
   width: 100%;
   height: 100%;
   object-fit: fill;
-  border-radius: 8px;
+  border-radius: 7px;
+  display: block;
+}
+
+.scene-status-tag {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(17, 24, 39, 0.85);
+  color: #fde047;
+  font-size: 8px;
+  font-weight: 900;
+  padding: 1px 5px;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 
 /* Center Dedicated Action Bar */
 .center-action-bar {
   background: linear-gradient(135deg, #581c87 0%, #9d174d 100%);
   color: #fff;
-  border-radius: 16px;
-  padding: 10px 20px;
-  margin: 8px 0;
+  border-radius: 14px;
+  padding: 8px 16px;
+  margin: 6px 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 6px 20px rgba(88, 28, 135, 0.3);
+  box-shadow: 0 4px 16px rgba(88, 28, 135, 0.3);
   border: 2px solid #f472b6;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .action-bar-status {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 14px;
+  gap: 10px;
+  font-size: 13px;
   font-weight: 800;
 }
 
 .turn-badge {
   background: #ffd700;
   color: #4a148c;
-  padding: 3px 10px;
-  border-radius: 12px;
+  padding: 2px 9px;
+  border-radius: 10px;
   font-weight: 900;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .action-bar-buttons {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .action-bar-btn {
   border: none;
-  border-radius: 12px;
-  padding: 8px 16px;
+  border-radius: 10px;
+  padding: 6px 14px;
   font-family: 'Nunito', sans-serif;
   font-weight: 900;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
-  transition: transform 0.15s ease, opacity 0.15s ease;
+  transition: transform 0.15s ease;
 }
 
 .action-bar-btn:hover {
@@ -349,7 +413,7 @@
 .action-bar-btn.primary {
   background: linear-gradient(135deg, #ff66a3, #ec4899);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.45);
+  box-shadow: 0 3px 10px rgba(236, 72, 153, 0.45);
 }
 
 .action-bar-btn.gold {
@@ -368,19 +432,19 @@
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 10px;
-  padding: 12px 10px 4px;
-  min-height: 155px;
+  gap: 8px;
+  padding: 8px 8px 2px;
+  min-height: 140px;
 }
 
 .hand-card-item {
-  width: 106px;
-  height: 148px;
-  border-radius: 10px;
+  width: 98px;
+  height: 136px;
+  border-radius: 9px;
   position: relative;
   cursor: pointer;
   transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease;
-  box-shadow: 0 6px 14px rgba(74, 20, 140, 0.22);
+  box-shadow: 0 5px 12px rgba(74, 20, 140, 0.22);
   border: 2px solid #fff;
   background: #fff;
   overflow: hidden;
@@ -421,36 +485,34 @@
   align-items: center;
   justify-content: center;
   color: #fff;
-  animation: fadeIn 0.3s ease;
 }
 
 .vs-fighters-stage {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 48px;
-  margin-bottom: 28px;
+  gap: 42px;
+  margin-bottom: 24px;
 }
 
 .vs-fighter-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  animation: slideInFighter 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  gap: 10px;
 }
 
 .vs-fighter-card img {
-  width: 220px;
-  height: 308px;
+  width: 200px;
+  height: 280px;
   object-fit: fill;
-  border-radius: 16px;
+  border-radius: 14px;
   border: 4px solid #ffd700;
-  box-shadow: 0 0 35px rgba(255, 215, 0, 0.5);
+  box-shadow: 0 0 32px rgba(255, 215, 0, 0.5);
 }
 
 .vs-emblem {
-  font-size: 72px;
+  font-size: 64px;
   font-weight: 900;
   font-style: italic;
   background: linear-gradient(135deg, #fde047, #f43f5e);
@@ -477,22 +539,21 @@
 .clash-cards-arena {
   display: flex;
   align-items: center;
-  gap: 50px;
+  gap: 44px;
 }
 
 .clash-combatant {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  transition: transform 0.5s ease, opacity 0.5s ease;
+  gap: 8px;
 }
 
 .clash-combatant img {
-  width: 190px;
-  height: 266px;
+  width: 175px;
+  height: 245px;
   object-fit: fill;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 3px solid #fff;
 }
 
@@ -524,4 +585,164 @@
 @keyframes pulseTarget {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.12); }
+}
+
+/* ========================================================================= */
+/* MOBILE LANDSCAPE ZERO-SCROLL VIEWPORT & PORTRAIT ROTATE OVERLAY            */
+/* ========================================================================= */
+
+.portrait-rotate-overlay {
+  display: none;
+}
+
+/* Portrait phone prompt encouraging horizontal tabletop play */
+@media screen and (max-width: 640px) and (orientation: portrait) {
+  .portrait-rotate-overlay {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(135deg, #4c1d95 0%, #831843 100%);
+    color: #fff;
+    z-index: 10005;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+    gap: 16px;
+  }
+}
+
+/* Compact Zero-Scroll 100dvh Fit for Mobile Landscape Screens */
+@media screen and (max-height: 560px) and (orientation: landscape) {
+  .kayou-playmat-wrapper {
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+    padding: 4px 10px 44px; /* Leaves room for docked bottom hand */
+    gap: 3px;
+  }
+
+  .playmat-half {
+    padding: 4px 10px;
+    gap: 3px;
+    border-radius: 10px;
+  }
+
+  .player-hud-bar {
+    font-size: 10px;
+  }
+
+  .hud-pill {
+    padding: 1px 6px;
+    font-size: 9px;
+  }
+
+  .adventure-area-row {
+    gap: 14px;
+  }
+
+  .adventure-slot {
+    width: 48px;
+    height: 67px;
+    border-radius: 7px;
+  }
+
+  .side-portrait-zone {
+    width: 44px;
+    height: 61px;
+    border-radius: 7px;
+  }
+
+  .zone-caption {
+    display: none;
+  }
+
+  .story-four-strip {
+    gap: 6px;
+  }
+
+  .story-stage-box {
+    width: 76px;
+    height: 54px;
+    border-radius: 6px;
+  }
+
+  .plan-card-overlay {
+    width: 24px;
+    height: 34px;
+    top: -4px;
+    right: -4px;
+  }
+
+  .resource-deck-row {
+    margin-top: 2px;
+    gap: 8px;
+  }
+
+  .scene-area-tray {
+    min-height: 56px;
+    padding: 3px 8px;
+    gap: 10px;
+  }
+
+  .scene-card-slot {
+    width: 38px;
+    height: 52px;
+  }
+
+  .scene-card-slot.exhausted {
+    margin: 0 7px;
+  }
+
+  .center-action-bar {
+    padding: 3px 10px;
+    margin: 2px 0;
+    border-radius: 9px;
+  }
+
+  .action-bar-status {
+    font-size: 10px;
+    gap: 6px;
+  }
+
+  .action-bar-btn {
+    padding: 3px 9px;
+    font-size: 10px;
+  }
+
+  /* Docked Bottom Hand Drawer that raises smoothly on tap/hover */
+  .player-hand-dock {
+    position: fixed;
+    bottom: -58px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(45, 27, 54, 0.92);
+    border: 2px solid #f472b6;
+    border-bottom: none;
+    border-radius: 16px 16px 0 0;
+    padding: 6px 14px 8px;
+    min-height: auto;
+    z-index: 500;
+    transition: bottom 0.22s ease;
+  }
+
+  .player-hand-dock.mobile-expanded,
+  .player-hand-dock:hover {
+    bottom: 0;
+  }
+
+  .hand-card-item {
+    width: 64px;
+    height: 90px;
+  }
+
+  .vs-fighter-card img {
+    width: 110px;
+    height: 154px;
+  }
+
+  .vs-emblem {
+    font-size: 40px;
+  }
 }

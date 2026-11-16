@@ -71,7 +71,6 @@ export function startSeatedMatch(
   p0Name = 'Player 1',
   p1Name = 'Player 2'
 ): KayouGameState {
-  // Coin flip for who goes first
   const rand = new Uint32Array(1);
   crypto.getRandomValues(rand);
   const firstPlayerId: '0' | '1' = rand[0] % 2 === 0 ? '0' : '1';
@@ -80,9 +79,7 @@ export function startSeatedMatch(
     const shuffledMain = secureShuffle(deck.mainDeck);
     const shuffledScenes = secureShuffle(deck.sceneDeck);
 
-    // Deal 4 face-down Plan cards from top of Main Deck
     const planCards = shuffledMain.slice(0, 4);
-    // Deal 5 opening hand cards
     const openingHand = shuffledMain.slice(4, 9);
     const remainingMain = shuffledMain.slice(9);
 
@@ -158,7 +155,6 @@ export function resolveMulligan(
   let updatedPlayer: PlayerState;
 
   if (doMulligan) {
-    // Place current hand at bottom of Main Deck, draw 5 new cards
     const combinedBottom = [...player.mainDeck, ...player.hand];
     const newHand = combinedBottom.slice(0, 5);
     const remainingMain = combinedBottom.slice(5);
@@ -181,7 +177,6 @@ export function resolveMulligan(
     [playerId]: updatedPlayer,
   };
 
-  // Once BOTH players have kept or mulliganed, flip initial 2 scenes & start Turn 1
   if (
     nextPlayers['0'].mulliganStatus !== 'PENDING' &&
     nextPlayers['1'].mulliganStatus !== 'PENDING'
@@ -193,8 +188,8 @@ export function resolveMulligan(
 
       const sceneArea: SceneCardInPlay[] = topTwo.map((card, idx) => ({
         card,
-        // Rule 3: First player's 1st scene is permanently face-down
         isFaceUp: isFirst && idx === 0 ? false : true,
+        isExhausted: false,
         isLockedFaceDown: isFirst && idx === 0 ? true : false,
       }));
 
@@ -209,7 +204,6 @@ export function resolveMulligan(
     const p0Ready = dealInitialScenes(nextPlayers['0']);
     const p1Ready = dealInitialScenes(nextPlayers['1']);
 
-    // Rule 5: Player 1 does NOT draw on their first turn
     return {
       ...state,
       phase: 'MAIN_PHASE',
@@ -238,8 +232,25 @@ export function resolveMulligan(
   };
 }
 
+/**
+ * Available unexhausted Harmony (unrotated Scene cards) for paying card costs.
+ */
 export function getAvailableHarmonyCost(player: PlayerState): number {
-  return player.sceneArea.length;
+  return player.sceneArea.filter((s) => !s.isExhausted).length;
+}
+
+/**
+ * Rotates `cost` unexhausted Scene cards 90 degrees clockwise (isExhausted = true).
+ */
+function exhaustScenesForCost(sceneArea: SceneCardInPlay[], cost: number): SceneCardInPlay[] {
+  let remainingToExhaust = cost;
+  return sceneArea.map((scene) => {
+    if (remainingToExhaust > 0 && !scene.isExhausted) {
+      remainingToExhaust--;
+      return { ...scene, isExhausted: true };
+    }
+    return scene;
+  });
 }
 
 export function playCardFromHand(
@@ -255,20 +266,20 @@ export function playCardFromHand(
   if (cardIdx === -1) return state;
 
   const card = player.hand[cardIdx];
+  const cardCost = Math.max(0, Number(card.cost) || 0);
   const availableHarmony = getAvailableHarmonyCost(player);
-  if ((card.cost || 0) > availableHarmony) return state;
+  if (cardCost > availableHarmony) return state;
 
   const newHand = [...player.hand];
   newHand.splice(cardIdx, 1);
 
+  const updatedSceneArea = exhaustScenesForCost(player.sceneArea, cardCost);
   const normalizedType = String(card.type || '').toLowerCase();
 
-  // Play Character or Friend Character into an Adventure Area slot
   if (normalizedType.includes('character')) {
     const lane: LaneKey = targetLane || 'left';
     const currentSlot = player.adventureArea[lane];
 
-    // If slot already has a character, send existing character + items to retirement (replace)
     const retiredFromSlot = currentSlot.character
       ? [currentSlot.character, ...currentSlot.items]
       : [];
@@ -280,6 +291,7 @@ export function playCardFromHand(
         [playerId]: {
           ...player,
           hand: newHand,
+          sceneArea: updatedSceneArea,
           retirement: [...player.retirement, ...retiredFromSlot],
           adventureArea: {
             ...player.adventureArea,
@@ -294,7 +306,6 @@ export function playCardFromHand(
     };
   }
 
-  // Attach Item onto an existing Character in target lane
   if (normalizedType === 'item') {
     const lane: LaneKey = targetLane || 'left';
     const currentSlot = player.adventureArea[lane];
@@ -307,6 +318,7 @@ export function playCardFromHand(
         [playerId]: {
           ...player,
           hand: newHand,
+          sceneArea: updatedSceneArea,
           adventureArea: {
             ...player.adventureArea,
             [lane]: {
@@ -319,7 +331,6 @@ export function playCardFromHand(
     };
   }
 
-  // Cast Event -> goes to Retirement Area and grants +1 Inspo to target lane character if applicable
   const lane: LaneKey = targetLane || 'left';
   const currentSlot = player.adventureArea[lane];
   const boostedSlot = currentSlot.character
@@ -333,6 +344,7 @@ export function playCardFromHand(
       [playerId]: {
         ...player,
         hand: newHand,
+        sceneArea: updatedSceneArea,
         retirement: [...player.retirement, card],
         adventureArea: {
           ...player.adventureArea,
@@ -343,7 +355,11 @@ export function playCardFromHand(
   };
 }
 
-function getSlotTotalPower(slot: { character: CardDefinition | null; items: CardDefinition[]; inspoBoost: number }): number {
+function getSlotTotalPower(slot: {
+  character: CardDefinition | null;
+  items: CardDefinition[];
+  inspoBoost: number;
+}): number {
   if (!slot.character) return 0;
   const base = Number(slot.character.power) || 0;
   const itemBonus = slot.items.reduce((sum, it) => sum + (Number(it.power) || 1), 0);
@@ -354,12 +370,10 @@ export function startContactPhase(state: KayouGameState, playerId: '0' | '1'): K
   if (state.phase !== 'MAIN_PHASE' || state.turnPlayerId !== playerId) return state;
   const attacker = state.players[playerId];
 
-  // Rule 6: Neither player can attack on their first turn
   if (attacker.turnsTaken <= 1) {
     return endTurn(state, playerId);
   }
 
-  // Rule 7: Go lane by lane starting Left -> Center -> Right
   const allLanes: LaneKey[] = ['left', 'center', 'right'];
   const activeAttackLanes = allLanes.filter((l) => attacker.adventureArea[l].character !== null);
 
@@ -379,7 +393,6 @@ function advanceToNextAttackLane(
   const attacker = state.players[attackerId];
   const defender = state.players[defenderId];
 
-  // Find next lane where attacker still has a character
   const remaining = [...laneQueue];
   while (remaining.length > 0) {
     const lane = remaining[0];
@@ -391,7 +404,6 @@ function advanceToNextAttackLane(
 
     const defSlot = defender.adventureArea[lane];
 
-    // If opposing lane has a defending character -> enter alternating Inspire prompt!
     if (defSlot.character) {
       return {
         ...state,
@@ -399,7 +411,7 @@ function advanceToNextAttackLane(
         contactState: {
           activeLane: lane,
           laneQueue: remaining,
-          promptPlayerId: attackerId, // Turn player prompted first
+          promptPlayerId: attackerId,
           consecutivePasses: 0,
           attackerPower: getSlotTotalPower(atkSlot),
           defenderPower: getSlotTotalPower(defSlot),
@@ -407,7 +419,6 @@ function advanceToNextAttackLane(
       };
     }
 
-    // Open / unblocked lane -> prompt Breakthrough Choice (Progress Story vs. Intervene Plan)
     return {
       ...state,
       phase: 'BREAKTHROUGH_CHOICE',
@@ -422,7 +433,6 @@ function advanceToNextAttackLane(
     };
   }
 
-  // All lanes resolved -> end turn
   return endTurn(
     {
       ...state,
@@ -444,7 +454,7 @@ export function inspireInContact(
   const sceneItem = player.sceneArea[sceneIndex];
   if (!sceneItem || !sceneItem.isFaceUp || sceneItem.isLockedFaceDown) return state;
 
-  // Flip scene face-down to grant +1 Inspiration to character in active lane
+  // Flip face-up Scene card face-down to grant +1 Inspiration
   const updatedSceneArea = player.sceneArea.map((s, idx) =>
     idx === sceneIndex ? { ...s, isFaceUp: false } : s
   );
@@ -497,7 +507,6 @@ export function passInspireInContact(
   const newPasses = state.contactState.consecutivePasses + 1;
   const nextPrompt: '0' | '1' = playerId === '0' ? '1' : '0';
 
-  // If both players haven't passed consecutively yet, prompt the other player
   if (newPasses < 2) {
     return {
       ...state,
@@ -509,7 +518,6 @@ export function passInspireInContact(
     };
   }
 
-  // Both players passed -> resolve Clash!
   const attackerId = state.turnPlayerId;
   const defenderId: '0' | '1' = attackerId === '0' ? '1' : '0';
   const lane = state.contactState.activeLane;
@@ -531,7 +539,7 @@ export function passInspireInContact(
   if (atkPower > defPower) outcome = 'ATTACKER_WINS';
   else if (defPower > atkPower) outcome = 'DEFENDER_WINS';
 
-  const clashEvent: ClashAnimationEvent = {
+  const clashEvent = {
     id: Date.now(),
     lane,
     attackerCard: atkSlot.character,
@@ -545,7 +553,6 @@ export function passInspireInContact(
   let nextDefPlayer = { ...defPlayer };
 
   if (outcome === 'ATTACKER_WINS') {
-    // Defender character + items retired
     nextDefPlayer = {
       ...nextDefPlayer,
       retirement: [...nextDefPlayer.retirement, defSlot.character, ...defSlot.items],
@@ -555,7 +562,6 @@ export function passInspireInContact(
       },
     };
 
-    // Attacker wins lane -> now gets Breakthrough Choice (Progress Story vs. Intervene Plan)!
     return {
       ...state,
       phase: 'BREAKTHROUGH_CHOICE',
@@ -569,7 +575,6 @@ export function passInspireInContact(
   }
 
   if (outcome === 'DEFENDER_WINS') {
-    // Attacker character + items retired
     nextAtkPlayer = {
       ...nextAtkPlayer,
       retirement: [...nextAtkPlayer.retirement, atkSlot.character, ...atkSlot.items],
@@ -579,7 +584,6 @@ export function passInspireInContact(
       },
     };
   } else {
-    // TIE: Both characters destroyed and sent to retirement
     nextAtkPlayer = {
       ...nextAtkPlayer,
       retirement: [...nextAtkPlayer.retirement, atkSlot.character, ...atkSlot.items],
@@ -639,7 +643,6 @@ export function resolveBreakthroughChoice(
       storyStages: updatedStages,
     };
 
-    // First player to progress to Story 4 wins the game!
     if (nextProgress >= 4) {
       return {
         ...state,
@@ -661,7 +664,6 @@ export function resolveBreakthroughChoice(
       };
     }
   } else if (choice === 'INTERVENE_PLAN') {
-    // Flip and retire one of opponent's unrevealed face-down Plan cards
     const availableIdx =
       targetPlanStageIndex !== undefined &&
       defender.storyStages[targetPlanStageIndex]?.planCard &&
@@ -705,7 +707,6 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
   const nextPlayerId: '0' | '1' = playerId === '0' ? '1' : '0';
   const nextTurnNumber = state.turnNumber + 1;
 
-  // Reset temporary inspo boosts on current player's characters at end of turn
   const endingPlayer = state.players[playerId];
   const cleanedEndingPlayer: PlayerState = {
     ...endingPlayer,
@@ -717,20 +718,27 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
   };
 
   // Start of next player's turn:
-  // Rule 4 & 5: Next player draws 1 Main Deck card and flips 1 Scene card into Scene Area
+  // 1. Untap (ready) all exhausted Scene cards back to upright (0 degrees)
+  // 2. Draw 1 Main Deck card
+  // 3. Flip 1 Scene card from Scene Deck into Scene Area
   const startingPlayer = state.players[nextPlayerId];
   const newTurnsTaken = startingPlayer.turnsTaken + 1;
 
-  // Draw 1 Main Deck card
   const drawnMain = startingPlayer.mainDeck.slice(0, 1);
   const restMain = startingPlayer.mainDeck.slice(1);
 
-  // Flip 1 Scene card from Scene Deck into Scene Area
   const drawnScene = startingPlayer.sceneDeck.slice(0, 1);
   const restScene = startingPlayer.sceneDeck.slice(1);
+
+  const readiedExistingScenes: SceneCardInPlay[] = startingPlayer.sceneArea.map((s) => ({
+    ...s,
+    isExhausted: false,
+  }));
+
   const addedScenes: SceneCardInPlay[] = drawnScene.map((c) => ({
     card: c,
     isFaceUp: true,
+    isExhausted: false,
     isLockedFaceDown: false,
   }));
 
@@ -740,7 +748,7 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     mainDeck: restMain,
     hand: [...startingPlayer.hand, ...drawnMain],
     sceneDeck: restScene,
-    sceneArea: [...startingPlayer.sceneArea, ...addedScenes],
+    sceneArea: [...readiedExistingScenes, ...addedScenes],
   };
 
   return {
