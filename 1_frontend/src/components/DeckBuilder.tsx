@@ -243,6 +243,15 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     // All Starter Deck cards (SD01-SD06, SD01A, SD01B) are free/unlocked for everyone
     if (/^SD/i.test(card.id) || /^SD/i.test(card.set_code || '')) return false;
 
+    // Everyday Scenes are always unlocked by default for everyone
+    const isEverydayScene =
+      card.card_type === 'Scene' &&
+      (!card.element ||
+        card.element.toLowerCase() === 'everyday' ||
+        /everyday/i.test(card.name || '') ||
+        /-EV/i.test(card.id));
+    if (isEverydayScene) return false;
+
     // If the user owns it in auth.user_cards, it's unlocked
     if (unlockedCardIds.includes(card.id)) return false;
 
@@ -362,7 +371,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   let displayCards: Card[] = [];
   if (buildPhase === 'MANE') {
     const validManes = baseFilteredCards.filter(isValidManeCharacter);
-    // Deduplicate identical Mane Character cards (same image_url or duplicate name+set entry)
     const seenImages = new Set<string>();
     const seenNameSet = new Set<string>();
     displayCards = validManes.filter(c => {
