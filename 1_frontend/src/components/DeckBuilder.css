@@ -176,10 +176,10 @@ input:checked + .slider:before { transform: translateX(24px); }
   position: relative;
 }
 
-/* Wide modal layout when inspecting landscape Story or Scene cards */
-.inspector-modal.landscape-modal {
+/* Story-only landscape popup exception */
+.inspector-modal.story-landscape-modal {
   width: 960px;
-  height: 460px;
+  height: 450px;
 }
 
 .inspector-close-btn {
@@ -201,8 +201,9 @@ input:checked + .slider:before { transform: translateX(24px); }
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* Portrait 5:7 inspector container for all standard cards */
 .inspector-image-container {
-  flex: 0 0 370px;
+  flex: 0 0 360px;
   background: #090a0c;
   padding: 20px;
   display: flex;
@@ -211,17 +212,23 @@ input:checked + .slider:before { transform: translateX(24px); }
   position: relative;
 }
 
-.inspector-image-container.landscape-image-box {
+.inspector-image-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  border-radius: 14px;
+}
+
+/* Landscape 7:5 inspector container exception for Story cards only */
+.inspector-image-container.story-landscape-box {
   flex: 0 0 540px;
   padding: 24px 48px;
 }
 
-.inspector-image-container img {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
+.inspector-image-container.story-landscape-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
   border-radius: 14px;
 }
 
@@ -230,13 +237,13 @@ input:checked + .slider:before { transform: translateX(24px); }
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(17, 20, 26, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(17, 20, 26, 0.88);
   color: #fff;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1;
   display: flex;
   align-items: center;
@@ -252,20 +259,20 @@ input:checked + .slider:before { transform: translateX(24px); }
   transform: translateY(-50%) scale(1.08);
 }
 
-.story-nav-arrow.prev { left: 10px; }
-.story-nav-arrow.next { right: 10px; }
+.story-nav-arrow.prev { left: 8px; }
+.story-nav-arrow.next { right: 8px; }
 
 .story-stage-indicator {
   position: absolute;
-  bottom: 10px;
+  bottom: 8px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(17, 20, 26, 0.85);
+  background: rgba(17, 20, 26, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.25);
   color: #fff;
   font-size: 11px;
   font-weight: 800;
-  padding: 4px 12px;
+  padding: 3px 12px;
   border-radius: 12px;
   letter-spacing: 0.5px;
 }
@@ -385,85 +392,33 @@ input:checked + .slider:before { transform: translateX(24px); }
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 22px;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 20px;
   padding-bottom: 40px;
-  align-items: stretch;
 }
 
-/* Give landscape Story stacks wider grid tracks so full 7:5 cards scale cleanly */
+/* Wider grid tracks ONLY when displaying landscape Story stacks */
 .card-grid:has(.story-stack) {
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 28px;
 }
 
+/* All standard cards remain portrait 5:7 and scale to fit inside the container */
 .card-item {
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: #fff;
-  border: 2px solid var(--mlp-light-purple);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   aspect-ratio: 5/7;
   overflow: hidden;
   position: relative;
 }
 
-/* Scale whole portrait card to fit inside the frame without horizontal/vertical cropping */
 .card-item img {
   width: 100%;
   height: 100%;
   border-radius: 10px;
-  object-fit: contain;
+  object-fit: fill;
   display: block;
-}
-
-/* Landscape / horizontal art cards (Events, Items, Scenes without vertical frames) */
-.card-item.landscape-art {
-  background: linear-gradient(180deg, #f8f0fc 0%, #ede7f6 100%);
-  justify-content: space-between;
-}
-
-.card-item.landscape-art img {
-  width: 100%;
-  height: 76%;
-  object-fit: contain;
-  border-radius: 10px 10px 0 0;
-}
-
-.landscape-card-caption {
-  width: 100%;
-  height: 24%;
-  padding: 4px 8px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  background: #fff;
-  border-top: 1px solid var(--mlp-light-purple);
-}
-
-.landscape-card-title {
-  font-size: 11px;
-  font-weight: 900;
-  color: #4a148c;
-  width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.landscape-card-meta {
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--mlp-magenta);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .card-item:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(255, 102, 163, 0.3); }
@@ -484,7 +439,7 @@ input:checked + .slider:before { transform: translateX(24px); }
   z-index: 10;
 }
 
-/* Story cards are naturally landscape (7:5) and scale whole card to fit */
+/* Story cards are the landscape (7:5) exception in the main builder */
 .story-stack {
   position: relative;
   width: 100%;
@@ -498,8 +453,7 @@ input:checked + .slider:before { transform: translateX(24px); }
   top: 0; left: 0;
   width: 100%; height: 100%;
   border-radius: 10px;
-  object-fit: contain;
-  background: #1a1226;
+  object-fit: fill;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   border: 2px solid #fff;
   box-shadow: 0 4px 10px rgba(0,0,0,0.2);
@@ -660,10 +614,11 @@ input:checked + .slider:before { transform: translateX(24px); }
   .input-bubble { flex: 1 1 100%; }
   .locked-toggle-pill { flex: 1 1 100%; justify-content: center; }
   .inspector-modal,
-  .inspector-modal.landscape-modal { flex-direction: column; height: 85vh; overflow-y: auto; }
+  .inspector-modal.story-landscape-modal { flex-direction: column; height: 85vh; overflow-y: auto; }
   .inspector-image-container,
-  .inspector-image-container.landscape-image-box { flex: 0 0 auto; padding: 15px 40px; }
-  .inspector-image-container img { max-height: 250px; width: auto; }
+  .inspector-image-container.story-landscape-box { flex: 0 0 auto; padding: 15px 40px; }
+  .inspector-image-container img,
+  .inspector-image-container.story-landscape-box img { max-height: 250px; width: auto; }
   .unlock-modal { padding: 20px; }
   .unlocked-card-item img { width: 140px; }
 }

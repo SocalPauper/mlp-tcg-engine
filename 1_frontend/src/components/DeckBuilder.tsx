@@ -38,9 +38,17 @@ function isValidManeCharacter(c: Card): boolean {
   return true;
 }
 
+function isStoryCard(c: Card): boolean {
+  return (
+    c.card_type === 'Story' ||
+    /-(?:C2[5-9]|C[3-4]\d)/i.test(c.id || '') ||
+    (c.name || '').includes(' - ') ||
+    (c.name || '').includes(' – ')
+  );
+}
+
 export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps) {
   const [cards, setCards] = useState<Card[]>([]);
-  const [landscapeIds, setLandscapeIds] = useState<Record<string, boolean>>({});
   
   // Progress & Inventory States
   const [unlockedCardIds, setUnlockedCardIds] = useState<string[]>([]);
@@ -242,13 +250,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   // --- Logic Helpers ---
 
-  const handleImageLoad = (cardId: string, e: React.SyntheticEvent<HTMLImageElement>) => {
-    const img = e.currentTarget;
-    if (img.naturalWidth > img.naturalHeight * 1.05) {
-      setLandscapeIds(prev => (prev[cardId] ? prev : { ...prev, [cardId]: true }));
-    }
-  };
-
   const openInspector = (card: Card, group: Card[] = []) => {
     if (group.length > 0) {
       const idx = Math.max(0, group.findIndex(c => c.id === card.id));
@@ -258,14 +259,13 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       return;
     }
 
-    // If inspecting a Story card from the deck zone or single click, find its 4-card story arc
-    if (card.card_type === 'Story' || card.name.includes(' - ') || card.name.includes(' – ')) {
+    if (isStoryCard(card)) {
       const baseStoryName = card.name.split(/[-–]/)[0].trim().toLowerCase();
       const isAlt = card.id.includes('-S');
       const matchingArc = cards
         .filter(
           c =>
-            (c.card_type === 'Story' || c.name.includes(' - ') || c.name.includes(' – ')) &&
+            isStoryCard(c) &&
             c.set_code === card.set_code &&
             c.id.includes('-S') === isAlt &&
             c.name.split(/[-–]/)[0].trim().toLowerCase() === baseStoryName
@@ -471,12 +471,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       return true;
     });
   } else if (buildPhase === 'STORY') {
-    displayCards = baseFilteredCards.filter(c => 
-      c.card_type === 'Story' || 
-      /-(?:C2[5-9]|C[3-4]\d)/.test(c.id) ||
-      c.name.includes(' - ') || 
-      c.name.includes(' – ')
-    );
+    displayCards = baseFilteredCards.filter(isStoryCard);
   } else if (buildPhase === 'SCENE') {
     displayCards = baseFilteredCards.filter(c => 
       c.card_type === 'Scene' && 
@@ -594,7 +589,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         const cardObj = cards.find(c => c.id.toLowerCase() === cardId.toLowerCase());
         if (cardObj) {
           if (isValidManeCharacter(cardObj)) foundMane = cardObj;
-          else if (cardObj.card_type === 'Story') foundStories.push(cardObj);
+          else if (isStoryCard(cardObj)) foundStories.push(cardObj);
           else if (cardObj.card_type === 'Scene') {
             for (let i = 0; i < qty; i++) foundScenes.push(cardObj);
           } else {
@@ -615,14 +610,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     alert('Deck successfully imported!');
   };
 
-  const isHoveredLandscape = hoveredCard
-    ? Boolean(
-        landscapeIds[hoveredCard.id] ||
-          hoveredCard.card_type === 'Story' ||
-          hoveredCard.name.includes(' - ') ||
-          hoveredCard.name.includes(' – ')
-      )
-    : false;
+  // ONLY Story cards use the landscape exception; all other cards stay portrait 5:7
+  const isHoveredStory = hoveredCard ? isStoryCard(hoveredCard) : false;
 
   return (
     <div className="deck-builder-container">
@@ -670,11 +659,11 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       {hoveredCard && (
         <div className="inspector-overlay" style={{ pointerEvents: 'auto' }} onClick={closeInspector}>
           <div
-            className={`inspector-modal ${isHoveredLandscape ? 'landscape-modal' : ''}`}
+            className={`inspector-modal ${isHoveredStory ? 'story-landscape-modal' : ''}`}
             onClick={e => e.stopPropagation()}
           >
             <button className="inspector-close-btn" onClick={closeInspector}>✕</button>
-            <div className={`inspector-image-container ${isHoveredLandscape ? 'landscape-image-box' : ''}`}>
+            <div className={`inspector-image-container ${isHoveredStory ? 'story-landscape-box' : ''}`}>
               {inspectorGroup.length > 1 && (
                 <button
                   type="button"
@@ -686,11 +675,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                 </button>
               )}
 
-              <img
-                src={hoveredCard.image_url}
-                alt={hoveredCard.name}
-                onLoad={(e) => handleImageLoad(hoveredCard.id, e)}
-              />
+              <img src={hoveredCard.image_url} alt={hoveredCard.name} />
 
               {inspectorGroup.length > 1 && (
                 <>
@@ -836,11 +821,10 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             ) : (
               displayCards.map(card => {
                 const isLocked = isCardLocked(card);
-                const isLandscape = Boolean(landscapeIds[card.id]);
                 return (
                   <div 
                     key={card.id} 
-                    className={`card-item ${isLocked ? 'locked' : ''} ${isLandscape ? 'landscape-art' : ''}`} 
+                    className={`card-item ${isLocked ? 'locked' : ''}`} 
                     onClick={() => {
                       if (isLocked) alert('You must unlock this rare card from a pack first!');
                       else addCardToDeck(card);
@@ -849,18 +833,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                     onTouchStart={() => handleTouchStart(card)}
                     onTouchEnd={handleTouchEnd}
                   >
-                    <img
-                      src={card.image_url}
-                      alt={card.name}
-                      loading="lazy"
-                      onLoad={(e) => handleImageLoad(card.id, e)}
-                    />
-                    {isLandscape && (
-                      <div className="landscape-card-caption" title={card.name}>
-                        <span className="landscape-card-title">{card.name}</span>
-                        <span className="landscape-card-meta">{card.card_type}</span>
-                      </div>
-                    )}
+                    <img src={card.image_url} alt={card.name} loading="lazy" />
                     {isLocked && <div className="lock-icon">🔒</div>}
                   </div>
                 );
