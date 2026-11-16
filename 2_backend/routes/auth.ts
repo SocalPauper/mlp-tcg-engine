@@ -144,6 +144,11 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// LOGOUT ENDPOINT
+router.post('/logout', (req, res) => {
+  return res.json({ success: true, message: 'Logged out successfully.' });
+});
+
 // LOGIN ENDPOINT
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
