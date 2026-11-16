@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import './StableHub.css';
 
-// Using a simplified Deck interface for the grid display
 export interface DeckSummary {
   id: string;
   name: string;
   author: string;
   element: string;
+  mane_character: string | null;
   mane_image_url: string;
   is_starter: boolean;
   is_public: boolean;
   card_count: number;
-  owner_id: string; // Used to check if the current user can edit
+  owner_id?: string;
 }
 
 interface StableHubProps {
@@ -19,32 +19,99 @@ interface StableHubProps {
   onOpenBuilder: (deckId: string | null, mode: 'CREATE' | 'EDIT' | 'VIEW' | 'COPY') => void;
 }
 
+const API_BASE = 'https://mlp-tcg-engine.onrender.com';
+
 export default function StableHub({ currentUserId, onOpenBuilder }: StableHubProps) {
   const [activeTab, setActiveTab] = useState<'MY_DECKS' | 'STARTERS' | 'COMMUNITY'>('MY_DECKS');
-  const [decks, setDecks] = useState<DeckSummary[]>([]);
+  const [allDecks, setAllDecks] = useState<DeckSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // In production, this useEffect will fetch from your '/api/decks' based on the active tab
-  useEffect(() => {
+  const fetchDecks = async () => {
     setLoading(true);
-    // MOCK DATA: Replace with real fetch() to your PostgreSQL backend later
-    setTimeout(() => {
-      const mockDecks: DeckSummary[] = [
-        { id: '1', name: 'Twilight Control', author: 'Jesse A.', element: 'Magic', mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp', is_starter: false, is_public: true, card_count: 70, owner_id: currentUserId },
-        { id: '2', name: 'Applejack Beatdown', author: 'Equestria Games', element: 'Honesty', mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C04.webp', is_starter: true, is_public: true, card_count: 70, owner_id: 'admin' },
-        { id: '3', name: 'Rainbow Rush', author: 'Wonderbolt_99', element: 'Loyalty', mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP01-C05.webp', is_starter: false, is_public: true, card_count: 65, owner_id: 'user_456' },
-      ];
+    try {
+      const token = localStorage.getItem('token');
+      const [decksRes, cardsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/decks`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        }),
+        fetch(`${API_BASE}/api/cards`)
+      ]);
 
-      if (activeTab === 'MY_DECKS') {
-        setDecks(mockDecks.filter(d => d.owner_id === currentUserId));
-      } else if (activeTab === 'STARTERS') {
-        setDecks(mockDecks.filter(d => d.is_starter));
-      } else if (activeTab === 'COMMUNITY') {
-        setDecks(mockDecks.filter(d => d.is_public && !d.is_starter));
-      }
+      const rawDecks = decksRes.ok ? await decksRes.json() : [];
+      const cards = cardsRes.ok ? await cardsRes.json() : [];
+      const cardMap = new Map<string, any>(
+        Array.isArray(cards) ? cards.map((c: any) => [String(c.id).toLowerCase(), c]) : []
+      );
+
+      const mapped: DeckSummary[] = (Array.isArray(rawDecks) ? rawDecks : []).map((d: any) => {
+        const maneId = d.mane_character ? String(d.mane_character).toLowerCase() : '';
+        const maneCard = maneId ? cardMap.get(maneId) : null;
+
+        const storyCount = Array.isArray(d.story_deck) ? d.story_deck.length : 0;
+        const sceneCount = Array.isArray(d.scene_deck) ? d.scene_deck.length : 0;
+        const mainCount = Array.isArray(d.main_deck) ? d.main_deck.length : 0;
+        const totalCount = (d.mane_character ? 1 : 0) + storyCount + sceneCount + mainCount;
+
+        return {
+          id: d.id,
+          name: d.name || 'Untitled Deck',
+          author: d.author || 'Player',
+          element: d.element || maneCard?.element || 'Unaligned',
+          mane_character: d.mane_character || null,
+          mane_image_url:
+            maneCard?.image_url ||
+            'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp',
+          is_starter: Boolean(d.is_starter || String(d.id).startsWith('starter-')),
+          is_public: d.is_public ?? true,
+          card_count: totalCount,
+          owner_id: d.user_id || d.owner_id || currentUserId,
+        };
+      });
+
+      setAllDecks(mapped);
+    } catch (err) {
+      console.error('Failed to load decks in StableHub:', err);
+      setAllDecks([]);
+    } finally {
       setLoading(false);
-    }, 400);
-  }, [activeTab, currentUserId]);
+    }
+  };
+
+  useEffect(() => {
+    fetchDecks();
+  }, [currentUserId]);
+
+  const handleDeleteDeck = async (deckId: string, deckName: string) => {
+    if (!window.confirm(`Are you sure you want to delete "${deckName}"?`)) return;
+
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_BASE}/api/decks/${deckId}`, {
+        method: 'DELETE',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (!res.ok) throw new Error('Delete failed');
+      setAllDecks(prev => prev.filter(d => d.id !== deckId));
+    } catch (err) {
+      console.error('Error deleting deck:', err);
+      alert('Failed to delete deck.');
+    }
+  };
+
+  const filteredDecks = allDecks.filter(deck => {
+    if (activeTab === 'STARTERS') {
+      return deck.is_starter;
+    }
+    if (activeTab === 'COMMUNITY') {
+      return deck.is_public && !deck.is_starter;
+    }
+    // MY_DECKS: includes all 6 starter decks + the player's own custom decks
+    const isMine =
+      deck.is_starter ||
+      !deck.owner_id ||
+      deck.owner_id === currentUserId;
+    return isMine;
+  });
 
   return (
     <div className="stable-hub-container">
@@ -69,7 +136,7 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
           className={`stable-tab-btn ${activeTab === 'STARTERS' ? 'active' : ''}`}
           onClick={() => setActiveTab('STARTERS')}
         >
-          Starter Decks
+          Starter Decks (6)
         </button>
         <button 
           className={`stable-tab-btn ${activeTab === 'COMMUNITY' ? 'active' : ''}`}
@@ -85,8 +152,8 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
         </div>
       ) : (
         <div className="deck-grid">
-          {decks.map(deck => {
-            const isOwner = deck.owner_id === currentUserId;
+          {filteredDecks.map(deck => {
+            const isEditable = !deck.is_starter && (!deck.owner_id || deck.owner_id === currentUserId);
 
             return (
               <div key={deck.id} className="deck-card">
@@ -107,35 +174,50 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
                   </div>
 
                   <div className="deck-card-actions">
-                    {isOwner && !deck.is_starter ? (
-                      <button 
-                        className="deck-action-btn btn-primary"
-                        onClick={() => onOpenBuilder(deck.id, 'EDIT')}
-                      >
-                        Edit Deck
-                      </button>
+                    {isEditable ? (
+                      <>
+                        <button 
+                          className="deck-action-btn btn-primary"
+                          onClick={() => onOpenBuilder(deck.id, 'EDIT')}
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          className="deck-action-btn btn-copy"
+                          onClick={() => onOpenBuilder(deck.id, 'COPY')}
+                        >
+                          Copy
+                        </button>
+                        <button 
+                          className="deck-action-btn btn-danger"
+                          onClick={() => handleDeleteDeck(deck.id, deck.name)}
+                        >
+                          Delete
+                        </button>
+                      </>
                     ) : (
-                      <button 
-                        className="deck-action-btn btn-secondary"
-                        onClick={() => onOpenBuilder(deck.id, 'VIEW')}
-                      >
-                        View List
-                      </button>
+                      <>
+                        <button 
+                          className="deck-action-btn btn-secondary"
+                          onClick={() => onOpenBuilder(deck.id, 'VIEW')}
+                        >
+                          View List
+                        </button>
+                        <button 
+                          className="deck-action-btn btn-copy"
+                          onClick={() => onOpenBuilder(deck.id, 'COPY')}
+                        >
+                          Copy to Mine
+                        </button>
+                      </>
                     )}
-                    
-                    <button 
-                      className="deck-action-btn btn-copy"
-                      onClick={() => onOpenBuilder(deck.id, 'COPY')}
-                    >
-                      Copy to Mine
-                    </button>
                   </div>
                 </div>
               </div>
             );
           })}
 
-          {!loading && decks.length === 0 && (
+          {!loading && filteredDecks.length === 0 && (
             <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#888', padding: '40px' }}>
               No decks found in this category.
             </div>

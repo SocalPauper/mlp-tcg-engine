@@ -145,6 +145,7 @@ input:checked + .slider:before { transform: translateX(24px); }
 
 .action-btn:hover { transform: translateY(-2px); }
 .save-btn { background: var(--mlp-magenta); }
+.clear-btn { background: #e53935; }
 .import-btn { background: var(--mlp-purple); }
 .export-btn { background: #3f51b5; }
 
@@ -236,7 +237,7 @@ input:checked + .slider:before { transform: translateX(24px); }
   flex-direction: column;
 }
 
-.filters-bar { display: flex; gap: 12px; margin-bottom: 16px; }
+.filters-bar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
 
 .input-bubble {
   padding: 10px 14px;
@@ -252,6 +253,29 @@ input:checked + .slider:before { transform: translateX(24px); }
 
 .search-input { flex: 2; }
 .rarity-select { flex: 1; cursor: pointer; }
+
+.locked-toggle-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #fff;
+  border: 2px solid var(--mlp-light-purple);
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--mlp-purple);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.locked-toggle-pill input {
+  accent-color: var(--mlp-pink);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
 
 .phase-tracker {
   display: flex;
@@ -474,6 +498,7 @@ input:checked + .slider:before { transform: translateX(24px); }
   }
   .filters-bar { flex-wrap: wrap; }
   .input-bubble { flex: 1 1 100%; }
+  .locked-toggle-pill { flex: 1 1 100%; justify-content: center; }
   .inspector-modal { flex-direction: column; height: 85vh; overflow-y: auto; }
   .inspector-image-container { flex: 0 0 auto; padding: 15px; }
   .inspector-image-container img { max-height: 250px; width: auto; }

@@ -24,6 +24,8 @@ interface DeckBuilderProps {
   onClose: () => void;
 }
 
+const API_BASE = 'https://mlp-tcg-engine.onrender.com';
+
 export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps) {
   const [cards, setCards] = useState<Card[]>([]);
   
@@ -31,6 +33,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [unlockedCardIds, setUnlockedCardIds] = useState<string[]>([]);
   const [newlyUnlockedCards, setNewlyUnlockedCards] = useState<Card[]>([]);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [showLockedCards, setShowLockedCards] = useState(false); // Off by default
 
   // Deck Structure States
   const [maneCharacter, setManeCharacter] = useState<Card | null>(null);
@@ -50,6 +53,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [loading, setLoading] = useState(true);
 
   const [isStarter, setIsStarter] = useState(mode === 'VIEW');
+  const [isCopiedStarter, setIsCopiedStarter] = useState(mode === 'COPY');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importText, setImportText] = useState('');
 
@@ -58,10 +62,10 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   // 1. Fetch entire card catalog
   useEffect(() => {
-    fetch('https://mlp-tcg-engine.onrender.com/api/cards')
+    fetch(`${API_BASE}/api/cards`)
       .then(res => res.json())
       .then(data => {
-        setCards(data);
+        setCards(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(err => {
@@ -70,102 +74,173 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       });
   }, []);
 
-  // 2. Fetch User Inventory & New Alerts (Depends on cards being loaded)
+  // 2. Fetch User Inventory & New Alerts from auth.user_cards
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (token && cards.length > 0) {
-      fetch('https://mlp-tcg-engine.onrender.com/api/users/me/collection', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      .then(res => res.json())
-      .then(data => {
+    if (!token || cards.length === 0) return;
+
+    const loadCollection = async () => {
+      try {
+        let res = await fetch(`${API_BASE}/api/auth/me/collection`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          res = await fetch(`${API_BASE}/api/users/me/collection`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+        }
+        if (!res.ok) return;
+
+        const data = await res.json();
         if (Array.isArray(data)) {
-          // Map all owned cards for the lock logic
           const ownedIds = data.map((item: any) => item.card_id);
           setUnlockedCardIds(ownedIds);
 
-          // Find cards the user hasn't been alerted about yet
           const unalertedItems = data.filter((item: any) => item.user_alerted === false);
           if (unalertedItems.length > 0) {
             const newCards = unalertedItems
               .map((item: any) => cards.find(c => c.id === item.card_id))
               .filter(Boolean) as Card[];
-            
+
             if (newCards.length > 0) {
               setNewlyUnlockedCards(newCards);
               setShowUnlockModal(true);
             }
           }
         }
-      })
-      .catch(err => console.error('Failed to load collection:', err));
-    }
+      } catch (err) {
+        console.error('Failed to load collection:', err);
+      }
+    };
+
+    loadCollection();
   }, [cards]);
 
-  // 3. Fetch existing deck data if editing/viewing
+  // 3. Fetch existing deck data if editing/viewing/copying
   useEffect(() => {
-    if (deckId && cards.length > 0) {
-      const token = localStorage.getItem('token');
-      fetch(`https://mlp-tcg-engine.onrender.com/api/decks/${deckId}`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    if (!deckId || cards.length === 0) return;
+
+    const token = localStorage.getItem('token');
+    fetch(`${API_BASE}/api/decks/${deckId}`, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Deck not found');
+        return res.json();
       })
-        .then(res => {
-          if (!res.ok) throw new Error('Deck not found');
-          return res.json();
-        })
-        .then(deckData => {
-          setDeckName(mode === 'COPY' ? `${deckData.name} (Copy)` : deckData.name);
-          setIsPublic(deckData.is_public);
-          setIsStarter(deckData.is_starter || mode === 'VIEW');
-          
-          if (deckData.mane_character) {
-            const mane = cards.find(c => c.id === deckData.mane_character);
-            if (mane) setManeCharacter(mane);
+      .then(deckData => {
+        const starterFlag = Boolean(deckData.is_starter);
+        setDeckName(mode === 'COPY' ? `${deckData.name} (Copy)` : deckData.name);
+        setIsPublic(deckData.is_public ?? true);
+        setIsStarter(starterFlag && mode !== 'COPY' ? true : mode === 'VIEW');
+        setIsCopiedStarter(mode === 'COPY');
+
+        const parseDeckField = (raw: any): any[] => {
+          if (!raw) return [];
+          if (typeof raw === 'string') {
+            try {
+              const parsed = JSON.parse(raw);
+              return Array.isArray(parsed) ? parsed : [];
+            } catch {
+              return [];
+            }
           }
-          
-          const hydrateCards = (idArray: string[]) => 
-            idArray.map(id => cards.find(c => c.id === id)).filter(Boolean) as Card[];
-            
-          setStoryDeck(hydrateCards(deckData.story_deck || []));
-          setSceneDeck(hydrateCards(deckData.scene_deck || []));
-          setMainDeck(hydrateCards(deckData.main_deck || []));
-          
-          setBuildPhase('MAIN');
-        })
-        .catch(err => console.error('Error fetching deck:', err));
-    }
+          return Array.isArray(raw) ? raw : [];
+        };
+
+        const hydrateCards = (rawField: any): Card[] => {
+          const list = parseDeckField(rawField);
+          const hydrated: Card[] = [];
+          for (const entry of list) {
+            if (typeof entry === 'string') {
+              const found = cards.find(c => c.id.toLowerCase() === entry.toLowerCase());
+              if (found) hydrated.push(found);
+            } else if (entry && typeof entry === 'object') {
+              const id = entry.card_id || entry.id;
+              const qty = Number(entry.quantity) || 1;
+              const found = id ? cards.find(c => c.id.toLowerCase() === String(id).toLowerCase()) : null;
+              if (found) {
+                for (let i = 0; i < qty; i++) hydrated.push(found);
+              }
+            }
+          }
+          return hydrated;
+        };
+
+        // Resolve Mane Character (handles string ID, object, or fallback inside cards array)
+        const rawMane = typeof deckData.mane_character === 'object' && deckData.mane_character !== null
+          ? (deckData.mane_character.card_id || deckData.mane_character.id)
+          : deckData.mane_character;
+
+        if (rawMane) {
+          const mane = cards.find(c => c.id.toLowerCase() === String(rawMane).toLowerCase());
+          if (mane) setManeCharacter(mane);
+        }
+
+        const loadedStory = hydrateCards(deckData.story_deck);
+        const loadedScene = hydrateCards(deckData.scene_deck);
+        const loadedMain = hydrateCards(deckData.main_deck);
+
+        // Fallback if backend returned a combined `cards` array instead of split columns
+        if (!rawMane && loadedStory.length === 0 && loadedScene.length === 0 && loadedMain.length === 0 && Array.isArray(deckData.cards)) {
+          const allHydrated = hydrateCards(deckData.cards);
+          const foundMane = allHydrated.find(c => c.card_type === 'Mane Character') || null;
+          setManeCharacter(foundMane);
+          setStoryDeck(allHydrated.filter(c => c.card_type === 'Story'));
+          setSceneDeck(allHydrated.filter(c => c.card_type === 'Scene'));
+          setMainDeck(allHydrated.filter(c => !['Mane Character', 'Story', 'Scene'].includes(c.card_type)));
+        } else {
+          setStoryDeck(loadedStory);
+          setSceneDeck(loadedScene);
+          setMainDeck(loadedMain);
+        }
+
+        setBuildPhase('MAIN');
+      })
+      .catch(err => console.error('Error fetching deck:', err));
   }, [deckId, cards, mode]);
 
   // --- Logic Helpers ---
 
-  const handleAcknowledgeUnlocks = () => {
+  const handleAcknowledgeUnlocks = async () => {
     const token = localStorage.getItem('token');
-    if (!token) return;
-
-    // Acknowledge these cards on the backend so the modal doesn't pop up again
-    fetch('https://mlp-tcg-engine.onrender.com/api/users/me/collection/acknowledge', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(() => {
+    if (!token) {
       setShowUnlockModal(false);
       setNewlyUnlockedCards([]);
-    })
-    .catch(console.error);
+      return;
+    }
+
+    try {
+      let res = await fetch(`${API_BASE}/api/auth/me/collection/acknowledge`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        await fetch(`${API_BASE}/api/users/me/collection/acknowledge`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setShowUnlockModal(false);
+      setNewlyUnlockedCards([]);
+    }
   };
 
   const isCardLocked = (card: Card) => {
-    // Starter Deck base cards are always free
-    if (card.id.startsWith('SD01')) return false;
+    // All 6 Starter Decks (SD01-SD06) are unlocked in their entirety for all players
+    if (/^SD0[1-6]/i.test(card.id) || /^SD0[1-6]/i.test(card.set_code || '')) return false;
 
-    // If the user owns it, it's unlocked
+    // If the user owns it in auth.user_cards, it's unlocked
     if (unlockedCardIds.includes(card.id)) return false;
 
-    // Otherwise, premium hits and alternates are locked by default
+    // Premium hits and alternate arts require unlocking
     const premiumRarities = ['RR', 'CR', 'GR', 'SPR'];
     if (premiumRarities.includes(card.rarity) || card.id.includes('-S')) return true;
 
-    // Commons, Uncommons, SR, ER are base tiers (unlocked by default)
+    // Base tiers are unlocked by default
     return false;
   };
 
@@ -207,8 +282,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         return alert('You can only have up to 3 copies of an element-specific Scene.');
       }
       
-      const newSceneDeck = [...sceneDeck, card];
-      setSceneDeck(newSceneDeck);
+      setSceneDeck([...sceneDeck, card]);
     } 
     else if (buildPhase === 'MAIN') {
       if (mainDeck.length >= 50) return alert('Main Deck is full (50/50).');
@@ -224,22 +298,23 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     if (group.some(c => isCardLocked(c))) return alert('You must unlock this alternate art first!');
     if (storyDeck.length + group.length > 4) return alert('Story Deck can only hold 4 cards.');
     
-    const newStoryDeck = [...storyDeck, ...group];
-    setStoryDeck(newStoryDeck);
+    setStoryDeck([...storyDeck, ...group]);
   };
 
   const removeCard = (zone: string, index: number) => {
     if (isStarter) return; 
 
     if (zone === 'mane') {
-      const confirmReset = window.confirm('Removing your Mane Character will clear all other cards to prevent element conflicts. Continue?');
+      const confirmReset = window.confirm('Removing your Mane Character will clear the entire deck to prevent element conflicts. Continue?');
       if (confirmReset) {
         setManeCharacter(null);
         setStoryDeck([]);
         setSceneDeck([]);
         setMainDeck([]);
+        setBuildPhase('MANE');
       }
     } else if (zone === 'story') {
+      // Stories are treated as 1 whole unit; clearing one clears all selected stories without touching Scene or Main decks
       setStoryDeck([]);
     } else if (zone === 'scene') {
       setSceneDeck(sceneDeck.filter((_, i) => i !== index));
@@ -248,8 +323,21 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     }
   };
 
+  const handleClearDeck = () => {
+    if (isStarter) return;
+    const confirmed = window.confirm('Are you sure you want to clear all cards from this deck?');
+    if (!confirmed) return;
+
+    setManeCharacter(null);
+    setStoryDeck([]);
+    setSceneDeck([]);
+    setMainDeck([]);
+    setBuildPhase('MANE');
+  };
+
   const handleCopyDeck = () => {
     setIsStarter(false);
+    setIsCopiedStarter(true);
     setDeckName(`${deckName} (Copy)`);
     alert('Deck copied! You can now make changes and save it to your account.');
   };
@@ -259,7 +347,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const baseFilteredCards = cards.filter(card => {
     const matchesSearch = card.name.toLowerCase().includes(searchQuery.toLowerCase()) || card.id.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRarity = selectedRarity === 'ALL' || card.rarity === selectedRarity;
-    return matchesSearch && matchesRarity;
+    const matchesUnlockVisibility = showLockedCards || !isCardLocked(card);
+    return matchesSearch && matchesRarity && matchesUnlockVisibility;
   });
 
   let displayCards: Card[] = [];
@@ -338,10 +427,12 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       main_deck: mainDeck.map(c => c.id)
     };
     
-    const endpoint = (mode === 'EDIT' && deckId) ? `/api/decks/${deckId}` : '/api/decks';
-    const method = (mode === 'EDIT' && deckId) ? 'PUT' : 'POST';
+    // If copied from a starter or created new, always POST as a new user deck
+    const isEditingOwnDeck = mode === 'EDIT' && deckId && !isCopiedStarter;
+    const endpoint = isEditingOwnDeck ? `/api/decks/${deckId}` : '/api/decks';
+    const method = isEditingOwnDeck ? 'PUT' : 'POST';
 
-    fetch(`https://mlp-tcg-engine.onrender.com${endpoint}`, {
+    fetch(`${API_BASE}${endpoint}`, {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -349,7 +440,10 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       },
       body: JSON.stringify(deckPayload)
     })
-    .then(res => res.json())
+    .then(res => {
+      if (!res.ok) throw new Error('Save failed');
+      return res.json();
+    })
     .then(() => {
       alert('Deck successfully saved!');
       onClose(); 
@@ -542,6 +636,15 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             <option value="SR">Silver Rare</option>
             <option value="SSR">Super Secret Rare</option>
           </select>
+
+          <label className="locked-toggle-pill">
+            <input
+              type="checkbox"
+              checked={showLockedCards}
+              onChange={e => setShowLockedCards(e.target.checked)}
+            />
+            <span>Show Locked 🔒</span>
+          </label>
         </div>
 
         {loading ? (
@@ -622,7 +725,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
         {isStarter && (
           <div style={{ background: 'var(--mlp-purple)', color: 'white', padding: '12px', borderRadius: '12px', textAlign: 'center', fontWeight: 'bold', marginBottom: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
-            This deck is Read-Only. <br/>
+            This starter deck is Read-Only. <br/>
             <span style={{ fontSize: '13px', fontWeight: 'normal' }}>Copy it to make changes.</span>
           </div>
         )}
@@ -705,6 +808,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
           ) : (
             <>
               <button className="action-btn save-btn" onClick={handleSaveDeck}>Save 💾</button>
+              <button className="action-btn clear-btn" onClick={handleClearDeck}>Clear 🗑️</button>
               <button className="action-btn import-btn" onClick={() => setImportModalOpen(true)}>Import 📥</button>
             </>
           )}
