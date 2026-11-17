@@ -7,6 +7,7 @@ import MainHub from './components/MainHub';
 import GameBoard, { LiveGameState } from './components/GameBoard';
 import StableHub from './components/StableHub';
 import DeckBuilder from './components/DeckBuilder';
+import CollectionBinder from './components/CollectionBinder';
 import ShopView from './components/ShopView';
 import AdminPanel from './components/AdminPanel';
 import AuthModal from './components/AuthModal';
@@ -342,6 +343,9 @@ function AppContent() {
                       onOpenBuilder={(id, mode) => setBuilderConfig({ id, mode })} 
                     />
                   )
+                )}
+                {currentTab === 'collection' && (
+                  <CollectionBinder onBackToStable={() => handleTabChange('stable')} />
                 )}
                 {currentTab === 'shop' && <ShopView />}
                 {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}

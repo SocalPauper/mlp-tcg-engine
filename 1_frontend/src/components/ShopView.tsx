@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
+import CardPreviewModal, { PreviewableCard } from './CardPreviewModal';
 import './ShopView.css';
 
-interface CardItem {
+interface CardItem extends PreviewableCard {
   id: string;
   name: string;
   card_type: string;
@@ -45,6 +46,7 @@ export default function ShopView() {
   const [packStage, setPackStage] = useState<'SEALED' | 'RIPPING' | 'REVEALING'>('SEALED');
   const [pulledCards, setPulledCards] = useState<CardItem[] | null>(null);
   const [flippedIndices, setFlippedIndices] = useState<Record<number, boolean>>({});
+  const [previewCard, setPreviewCard] = useState<PreviewableCard | null>(null);
 
   const fetchShopData = async () => {
     try {
@@ -100,8 +102,12 @@ export default function ShopView() {
     }, 680);
   };
 
-  const toggleFlipCard = (idx: number) => {
-    setFlippedIndices((prev) => ({ ...prev, [idx]: true }));
+  const handleCardSlotClick = (card: CardItem, idx: number) => {
+    if (!flippedIndices[idx]) {
+      setFlippedIndices((prev) => ({ ...prev, [idx]: true }));
+    } else {
+      setPreviewCard(card);
+    }
   };
 
   const revealAllCards = () => {
@@ -118,6 +124,7 @@ export default function ShopView() {
     setActivePackTier(null);
     setPackStage('SEALED');
     setFlippedIndices({});
+    setPreviewCard(null);
   };
 
   const handleBuyDeal = async (dealId: number, price: number) => {
@@ -153,6 +160,9 @@ export default function ShopView() {
 
   return (
     <div className="shop-container">
+      {/* Full-resolution Card Preview Inspector */}
+      <CardPreviewModal card={previewCard} onClose={() => setPreviewCard(null)} />
+
       <div className="shop-header">
         <h2>✨ The Pony Point Shop ✨</h2>
         <div className="shop-points-badge">
@@ -202,13 +212,31 @@ export default function ShopView() {
       {/* WEEKLY FEATURED DEALS SECTION */}
       <div className="shop-section">
         <h3>🌟 Weekly Featured Deals</h3>
-        <p className="shop-section-desc">Guaranteed high-rarity cards. Refreshed weekly!</p>
+        <p className="shop-section-desc">Guaranteed high-rarity cards (click card art to preview). Refreshed weekly!</p>
 
         <div className="weekly-deals-grid">
           {deals.map((deal) => (
             <div key={deal.id} className="deal-card">
               <span className="deal-rarity-badge">{deal.rarity}</span>
-              <img src={deal.image_url || CARD_BACK_URL} alt={deal.name} className="deal-card-img" />
+              <img
+                src={deal.image_url || CARD_BACK_URL}
+                alt={deal.name}
+                className="deal-card-img"
+                style={{ cursor: 'pointer' }}
+                onClick={() =>
+                  setPreviewCard({
+                    id: deal.card_id,
+                    name: deal.name,
+                    card_type: deal.card_type,
+                    element: deal.element,
+                    rarity: deal.rarity,
+                    cost: deal.cost,
+                    power: deal.power,
+                    effect_text: deal.effect_text,
+                    image_url: deal.image_url,
+                  })
+                }
+              />
               <h4>{deal.name}</h4>
               <div className="deal-card-meta">
                 {deal.card_type} • {deal.element}
@@ -231,7 +259,7 @@ export default function ShopView() {
         <div
           className="pack-reveal-backdrop"
           onClick={() => {
-            if (packStage === 'REVEALING' && allRevealed) closePackModal();
+            if (packStage === 'REVEALING' && allRevealed && !previewCard) closePackModal();
           }}
         >
           <div className="pack-reveal-modal" onClick={(e) => e.stopPropagation()}>
@@ -269,8 +297,8 @@ export default function ShopView() {
               </div>
             ) : (
               <>
-                <h3>🎉 Tap Each Card to Flip &amp; Reveal!</h3>
-                <p>Click any face-down card to reveal your new foil pull.</p>
+                <h3>🎉 Tap to Flip — Click Revealed Cards to Preview!</h3>
+                <p>Click a face-down card to flip it, or click an open card to inspect its rules text.</p>
 
                 <div className="pulled-cards-row">
                   {pulledCards.map((card, idx) => {
@@ -283,7 +311,7 @@ export default function ShopView() {
                           isUltra ? 'ultra-foil' : ''
                         }`}
                         style={{ animationDelay: `${idx * 0.08}s` }}
-                        onClick={() => toggleFlipCard(idx)}
+                        onClick={() => handleCardSlotClick(card, idx)}
                       >
                         <div className="flip-card-inner">
                           {/* Back of Card */}
@@ -299,7 +327,7 @@ export default function ShopView() {
                             </span>
                             <img src={card.image_url || CARD_BACK_URL} alt={card.name} />
                             <h5>{card.name}</h5>
-                            <span>{card.card_type}</span>
+                            <span>🔍 Click to Preview</span>
                           </div>
                         </div>
                       </div>

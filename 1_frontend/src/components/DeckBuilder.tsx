@@ -785,10 +785,30 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         <div className="inspector-overlay" style={{ pointerEvents: 'auto', zIndex: 10000 }}>
           <div className="unlock-modal">
             <h2 className="unlock-title">✨ New Rares Unlocked! ✨</h2>
+            <p style={{ color: '#e9d5ff', marginTop: '-18px', marginBottom: '22px', fontSize: '14px' }}>
+              Click any card to preview its abilities!
+            </p>
             <div className="unlocked-cards-grid">
               {newlyUnlockedCards.map(c => (
-                <div key={c.id} className="unlocked-card-item">
+                <div
+                  key={c.id}
+                  className="unlocked-card-item"
+                  style={{ cursor: 'pointer', position: 'relative' }}
+                  onClick={() => openInspector(c)}
+                  title="Click to preview rules text"
+                >
                   <img src={c.image_url} alt={c.name} />
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      textAlign: 'center',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      color: '#fde047',
+                    }}
+                  >
+                    🔍 {c.name} ({c.rarity})
+                  </div>
                 </div>
               ))}
             </div>
@@ -819,9 +839,9 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         </div>
       )}
 
-      {/* Card Inspector Tooltip */}
+      {/* Card Inspector Tooltip (zIndex 10005 so it layers cleanly above Unlock Modal) */}
       {hoveredCard && (
-        <div className="inspector-overlay" style={{ pointerEvents: 'auto' }} onClick={closeInspector}>
+        <div className="inspector-overlay" style={{ pointerEvents: 'auto', zIndex: 10005 }} onClick={closeInspector}>
           <div
             className={`inspector-modal ${isHoveredStory ? 'story-landscape-modal' : ''}`}
             onClick={e => e.stopPropagation()}
