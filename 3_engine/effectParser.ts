@@ -109,7 +109,7 @@ function doesPassiveTextApplyToCharacter(
   const text = sanitizeCardText(rawText);
   if (!text) return 0;
 
-  if (/Inspo Boost|Inspiration Boost|Adventure\s*:|Pre-Plan|Appear:|Farewell:|When promoted/i.test(text)) {
+  if (/Inspo Boost|Inspiration Boost|Adventure\s*:|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted/i.test(text)) {
     return 0;
   }
 
@@ -267,34 +267,33 @@ export interface ParsedActivatedEffect {
     | 'GLOBAL_BUFF_FRIENDLY';
   amount: number;
   maxLimit?: number;
+  isSelfOnly?: boolean;
 }
 
-export function parseAppearOrFarewellEffect(effectText?: string): ParsedActivatedEffect | null {
+/**
+ * Extracts the clause belonging specifically to Appear or Farewell
+ * without bleeding into other triggered abilities on the same card.
+ */
+export function extractTriggerClause(
+  effectText: string | undefined,
+  triggerType: 'Appear' | 'Farewell'
+): string | null {
   const text = sanitizeCardText(effectText);
   if (!text) return null;
 
-  const drawMatch = text.match(/draw\s+(\d+|a)\s+card/i);
-  if (drawMatch) {
-    const count = drawMatch[1].toLowerCase() === 'a' ? 1 : parseInt(drawMatch[1], 10) || 1;
-    return { kind: 'DRAW', amount: count };
-  }
-
-  const buffMatch = text.match(/\+(\d+)\s*(?:Inspiration|Power)/i);
-  if (buffMatch) {
-    return { kind: 'TARGET_BUFF_POWER', amount: parseInt(buffMatch[1], 10) || 1 };
-  }
-
-  if (/ready\s+(?:1\s+of\s+your\s+|a\s+)?character/i.test(text)) {
-    return { kind: 'TARGET_READY_FRIENDLY', amount: 1 };
-  }
-
-  return null;
+  const regex = new RegExp(
+    `${triggerType}\\s*:\\s*([\\s\\S]*?)(?=(?:\\n|\\r|(?:Appear|Farewell|Adventure|Inspo Boost|Inspiration Boost|Pre-Plan|Mane Ability|Activate)\\s*:|$))`,
+    'i'
+  );
+  const match = text.match(regex);
+  return match ? match[1].trim() : null;
 }
 
-export function parseActivatedCardEffect(card: CardDefinition): ParsedActivatedEffect {
-  const text = sanitizeCardText(card.effectText);
+export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | null {
+  const text = sanitizeCardText(clauseText);
+  if (!text) return null;
 
-  if (/move\s+(?:1\s+of\s+your\s+|a\s+)?character/i.test(text)) {
+  if (/move\s+(?:1\s+of\s+your\s+|a\s+|an?\s+)?(?:friendly\s+)?character/i.test(text)) {
     return { kind: 'TARGET_MOVE_FRIENDLY', amount: 1 };
   }
 
@@ -307,24 +306,47 @@ export function parseActivatedCardEffect(card: CardDefinition): ParsedActivatedE
     };
   }
 
-  if (/ready\s+(?:1\s+of\s+your\s+|a\s+)?character/i.test(text)) {
+  if (/ready\s+(?:1\s+of\s+your\s+|a\s+|an?\s+)?character/i.test(text)) {
     return { kind: 'TARGET_READY_FRIENDLY', amount: 1 };
   }
 
-  if (/from\s+your\s+retirement\s+area\s+to\s+your\s+hand/i.test(text)) {
+  if (/from\s+your\s+retirement\s+(?:area\s+|pile\s+)?to\s+your\s+hand/i.test(text)) {
     return { kind: 'RECOVER_RETIREMENT', amount: 1 };
   }
 
-  const drawMatch = text.match(/draw\s+(\d+|a)\s+card/i);
-  if (drawMatch && !/choose|target/i.test(text)) {
-    const count = drawMatch[1].toLowerCase() === 'a' ? 1 : parseInt(drawMatch[1], 10) || 1;
+  const drawMatch = text.match(/draw\s+(\d+|a|an)\s+card/i);
+  if (drawMatch) {
+    const rawCount = drawMatch[1].toLowerCase();
+    const count = rawCount === 'a' || rawCount === 'an' ? 1 : parseInt(rawCount, 10) || 1;
     return { kind: 'DRAW', amount: count };
   }
 
-  const globalMatch = text.match(/all\s+your\s+characters?\s+get[s]?\s*\+(\d+)/i);
+  const globalMatch = text.match(/all\s+(?:of\s+)?your\s+characters?\s+get[s]?\s*\+(\d+)/i);
   if (globalMatch) {
     return { kind: 'GLOBAL_BUFF_FRIENDLY', amount: parseInt(globalMatch[1], 10) || 1 };
   }
+
+  const buffMatch = text.match(/\+(\d+)\s*(?:Inspiration|Power)/i);
+  if (buffMatch) {
+    const isTargeted = /choose|target|1\s+of\s+your|another/i.test(text);
+    return {
+      kind: 'TARGET_BUFF_POWER',
+      amount: parseInt(buffMatch[1], 10) || 1,
+      isSelfOnly: !isTargeted,
+    };
+  }
+
+  return null;
+}
+
+export function parseAppearOrFarewellEffect(effectText?: string): ParsedActivatedEffect | null {
+  return parseEffectClause(effectText);
+}
+
+export function parseActivatedCardEffect(card: CardDefinition): ParsedActivatedEffect {
+  const text = sanitizeCardText(card.effectText);
+  const parsed = parseEffectClause(text);
+  if (parsed) return parsed;
 
   const buffMatch = text.match(/\+(\d+)\s*(?:Inspiration|Power)/i);
   return {

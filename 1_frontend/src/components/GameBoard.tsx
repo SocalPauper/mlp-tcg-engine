@@ -41,7 +41,7 @@ interface AdventureSlot {
 
 interface PendingTargetSelection {
   sourceCard: CardDefinition;
-  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY';
+  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT';
   sourceLane?: 'left' | 'center' | 'right';
   effectAction: 'BUFF_POWER' | 'RETIRE_OPPONENT' | 'MOVE_FRIENDLY' | 'READY_FRIENDLY';
   value: number;
@@ -205,7 +205,7 @@ function computeClientPowerDetails(
 
   const checkPassive = (rawText?: string): number => {
     const text = cleanCardText(rawText);
-    if (!text || /Inspo Boost|Inspiration Boost|Adventure\s*:|Pre-Plan|When promoted/i.test(text)) {
+    if (!text || /Inspo Boost|Inspiration Boost|Adventure\s*:|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted/i.test(text)) {
       return 0;
     }
     const m = text.match(/get[s]?\s*\+(\d+)\s*(?:Inspiration|Power)/i);
@@ -324,16 +324,12 @@ function checkSceneInspireEligibility(
   const elements = ['magic', 'loyalty', 'honesty', 'generosity', 'kindness', 'laughter'];
   for (const el of elements) {
     const elRegex = new RegExp(`your\\s+${el}\\s+character`, 'i');
-    if (elRegex.test(text) && String(targetCharacterElement(targetChar)).toLowerCase() !== el) {
+    if (elRegex.test(text) && String(targetChar.element || '').toLowerCase() !== el) {
       return { eligible: false, reason: `Only boosts ${el.toUpperCase()} characters` };
     }
   }
 
   return { eligible: true };
-}
-
-function targetCharacterElement(c: CardDefinition): string {
-  return c.element || '';
 }
 
 const CONFETTI_COLORS = ['#fde047', '#f472b6', '#38bdf8', '#a855f7', '#34d399', '#fb7185'];
@@ -353,7 +349,7 @@ export default function GameBoard({
   const [turnBannerText, setTurnBannerText] = useState<string | null>(null);
   const prevTurnKeyRef = useRef<string | null>(null);
 
-  const [cameraFocus, setCameraFocus] = useState<'ME' | 'OPPONENT'>('ME');
+  const [zoneFocus, setZoneFocus] = useState<'ME' | 'OPPONENT'>('ME');
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mySeat: '0' | '1' = seat === '1' ? '1' : '0';
@@ -363,6 +359,7 @@ export default function GameBoard({
   const me = gameState.players[mySeat];
   const opp = gameState.players[oppSeat];
   const isMyTurn = !isSpectator && gameState.turnPlayerId === mySeat;
+  const isOppTurn = gameState.turnPlayerId === oppSeat;
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -386,21 +383,6 @@ export default function GameBoard({
 
   useEffect(() => {
     if (gameState.phase === 'REVEAL_HOLD' || gameState.phase === 'CLASH_HOLD') return;
-
-    if (
-      gameState.phase === 'PENDING_TARGET' &&
-      isMyTurn &&
-      gameState.pendingTarget?.validTargets.some((t) => t.owner === 'OPPONENT')
-    ) {
-      setCameraFocus('OPPONENT');
-      return;
-    }
-
-    if (gameState.turnPlayerId === mySeat) {
-      setCameraFocus('ME');
-    } else {
-      setCameraFocus('OPPONENT');
-    }
 
     if (
       gameState.phase === 'MAIN_PHASE' ||
@@ -506,9 +488,124 @@ export default function GameBoard({
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
-  const renderFocusedBoard = (player: PlayerState, isOpponent: boolean) => {
-    const readyHarmony = player.sceneArea.filter((s) => !s.isExhausted).length;
+  const renderLaneStrip = (player: PlayerState, isOpponent: boolean) => {
     const ownerSide: 'SELF' | 'OPPONENT' = isOpponent ? 'OPPONENT' : 'SELF';
+
+    return (
+      <div className={`lane-strip-band ${isOpponent ? 'opponent-band' : 'self-band'}`}>
+        <span className={`lane-band-tag ${isOpponent ? 'opponent-tag' : 'self-tag'}`}>
+          {isOpponent ? `👑 ${player.displayName}'s Lanes` : `✨ ${player.displayName}'s Lanes`}
+        </span>
+
+        <div className="adventure-area-row">
+          {(['left', 'center', 'right'] as const).map((laneKey) => {
+            const slot = player.adventureArea[laneKey];
+            const hasActedThisTurn = player.actedLanesThisTurn?.includes(laneKey);
+            const canTapAdventure =
+              !isOpponent &&
+              isMyTurn &&
+              gameState.phase === 'MAIN_PHASE' &&
+              slot.character !== null &&
+              !slot.isExhausted &&
+              hasAdventureTapAbility(slot.character);
+
+            const isPendingAbilityTarget =
+              isMyTurn &&
+              gameState.phase === 'PENDING_TARGET' &&
+              gameState.pendingTarget?.validTargets.some(
+                (t) => t.owner === ownerSide && t.lane === laneKey
+              );
+
+            const isDeployTarget =
+              !isOpponent &&
+              isMyTurn &&
+              gameState.phase === 'MAIN_PHASE' &&
+              selectedHandCard &&
+              (selectedHandCard.type.toLowerCase() !== 'item' || slot.character !== null);
+
+            const isTargetable = Boolean(isPendingAbilityTarget || isDeployTarget);
+
+            const isActiveClashLane =
+              (gameState.phase === 'CONTACT_INSPIRE' || gameState.phase === 'BREAKTHROUGH_CHOICE') &&
+              gameState.contactState?.activeLane === laneKey;
+
+            const details = slot.character
+              ? computeClientPowerDetails(gameState, player, laneKey)
+              : null;
+            const totalBonus = details ? details.totalPower - details.basePower : 0;
+
+            return (
+              <div
+                key={laneKey}
+                className={`adventure-slot ${isOpponent ? 'opponent-slot' : 'self-slot'} ${
+                  isTargetable ? 'targetable' : ''
+                } ${isActiveClashLane ? 'active-lane-glow' : ''}`}
+                onClick={() => handleAdventureSlotClick(ownerSide, laneKey)}
+                onContextMenu={(e) => handleContextMenu(e, slot.character)}
+                onTouchStart={() => handleTouchStartInspect(slot.character)}
+                onTouchEnd={handleTouchEndInspect}
+              >
+                {slot.character && details ? (
+                  <>
+                    <div
+                      className={`total-power-above-badge ${totalBonus > 0 ? 'buffed' : ''}`}
+                      title="Click to view Total Power & Passive Aura breakdown"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPowerBreakdown(details);
+                      }}
+                    >
+                      <span>⚡ {details.totalPower}</span>
+                      <span className="power-subscript-info">
+                        {totalBonus > 0 ? `+${totalBonus} ⓘ` : 'ⓘ'}
+                      </span>
+                    </div>
+
+                    <div className={`deployed-char-card ${slot.isExhausted ? 'exhausted' : ''}`}>
+                      <img src={slot.character.imageUrl} alt={slot.character.name} />
+                      {slot.items.length > 0 && (
+                        <div className="item-count-tag">Item: {slot.items[0].name}</div>
+                      )}
+                      {(hasActedThisTurn || slot.isExhausted) && (
+                        <div
+                          className="item-count-tag"
+                          style={{ top: 'auto', bottom: '4px', left: '4px', color: '#fde047' }}
+                        >
+                          {slot.isExhausted ? 'Tapped ↷' : 'Acted ✓'}
+                        </div>
+                      )}
+                    </div>
+
+                    {canTapAdventure && (
+                      <button
+                        type="button"
+                        className="adventure-tap-btn"
+                        title={cleanCardText(slot.character.effectText)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          sendAction('ACTIVATE_ADVENTURE', { laneIndex: laneKey });
+                        }}
+                      >
+                        ↷ Adventure
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <span className="slot-empty-label">
+                    {isTargetable ? 'Click to Select' : `${laneKey.toUpperCase()}`}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPlayerZonesMat = (player: PlayerState, isOpponent: boolean) => {
+    const readyHarmony = player.sceneArea.filter((s) => !s.isExhausted).length;
+    const isPlayersTurn = gameState.turnPlayerId === player.id;
 
     const canActivateMane =
       !isOpponent &&
@@ -517,265 +614,17 @@ export default function GameBoard({
       !player.leaderAbilityUsedThisTurn &&
       hasManeActivatedAbility(player.leader);
 
-    const renderAdventureRow = () => (
-      <div className="adventure-area-row">
-        {(['left', 'center', 'right'] as const).map((laneKey) => {
-          const slot = player.adventureArea[laneKey];
-          const hasActedThisTurn = player.actedLanesThisTurn?.includes(laneKey);
-          const canTapAdventure =
-            !isOpponent &&
-            isMyTurn &&
-            gameState.phase === 'MAIN_PHASE' &&
-            slot.character !== null &&
-            !slot.isExhausted &&
-            hasAdventureTapAbility(slot.character);
-
-          const isPendingAbilityTarget =
-            isMyTurn &&
-            gameState.phase === 'PENDING_TARGET' &&
-            gameState.pendingTarget?.validTargets.some(
-              (t) => t.owner === ownerSide && t.lane === laneKey
-            );
-
-          const isDeployTarget =
-            !isOpponent &&
-            isMyTurn &&
-            gameState.phase === 'MAIN_PHASE' &&
-            selectedHandCard &&
-            (selectedHandCard.type.toLowerCase() !== 'item' || slot.character !== null);
-
-          const isTargetable = Boolean(isPendingAbilityTarget || isDeployTarget);
-
-          const isActiveClashLane =
-            (gameState.phase === 'CONTACT_INSPIRE' || gameState.phase === 'BREAKTHROUGH_CHOICE') &&
-            gameState.contactState?.activeLane === laneKey;
-
-          const details = slot.character
-            ? computeClientPowerDetails(gameState, player, laneKey)
-            : null;
-          const totalBonus = details ? details.totalPower - details.basePower : 0;
-
-          return (
-            <div
-              key={laneKey}
-              className={`adventure-slot ${isTargetable ? 'targetable' : ''} ${
-                isActiveClashLane ? 'active-lane-glow' : ''
-              }`}
-              onClick={() => handleAdventureSlotClick(ownerSide, laneKey)}
-              onContextMenu={(e) => handleContextMenu(e, slot.character)}
-              onTouchStart={() => handleTouchStartInspect(slot.character)}
-              onTouchEnd={handleTouchEndInspect}
-            >
-              {slot.character && details ? (
-                <>
-                  <div
-                    className={`total-power-above-badge ${totalBonus > 0 ? 'buffed' : ''}`}
-                    title="Click to view Total Power & Passive Aura breakdown"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPowerBreakdown(details);
-                    }}
-                  >
-                    <span>⚡ {details.totalPower}</span>
-                    <span className="power-subscript-info">
-                      {totalBonus > 0 ? `+${totalBonus} ⓘ` : 'ⓘ'}
-                    </span>
-                  </div>
-
-                  <div className={`deployed-char-card ${slot.isExhausted ? 'exhausted' : ''}`}>
-                    <img src={slot.character.imageUrl} alt={slot.character.name} />
-                    {slot.items.length > 0 && (
-                      <div className="item-count-tag">Item: {slot.items[0].name}</div>
-                    )}
-                    {(hasActedThisTurn || slot.isExhausted) && (
-                      <div
-                        className="item-count-tag"
-                        style={{ top: 'auto', bottom: '4px', left: '4px', color: '#fde047' }}
-                      >
-                        {slot.isExhausted ? 'Tapped ↷' : 'Acted ✓'}
-                      </div>
-                    )}
-                  </div>
-
-                  {canTapAdventure && (
-                    <button
-                      type="button"
-                      className="adventure-tap-btn"
-                      title={cleanCardText(slot.character.effectText)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        sendAction('ACTIVATE_ADVENTURE', { laneIndex: laneKey });
-                      }}
-                    >
-                      ↷ Adventure
-                    </button>
-                  )}
-                </>
-              ) : (
-                <span className="slot-empty-label">
-                  {isTargetable ? 'Click to Select' : `${laneKey.toUpperCase()}`}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-
-    const renderStoryAndCoreRow = () => (
-      <div className="core-story-row">
-        <div
-          className="side-portrait-zone"
-          onContextMenu={(e) => handleContextMenu(e, player.leader)}
-          onTouchStart={() => handleTouchStartInspect(player.leader)}
-          onTouchEnd={handleTouchEndInspect}
-        >
-          {player.leader?.imageUrl ? (
-            <img src={player.leader.imageUrl} alt={player.leader.name} />
-          ) : (
-            <img src={CARD_BACK_URL} alt="Mane Card Back" className="kayou-card-back-img" />
-          )}
-          {canActivateMane && (
-            <button
-              type="button"
-              className="adventure-tap-btn"
-              title={cleanCardText(player.leader?.effectText)}
-              onClick={() => sendAction('ACTIVATE_MANE_ABILITY')}
-            >
-              ✨ Mane Ability
-            </button>
-          )}
-          <span className="zone-caption">Main Character</span>
-        </div>
-
-        <div className="story-four-strip">
-          {player.storyStages.map((st) => {
-            const isNextSequentialPlan =
-              isOpponent &&
-              nextOpponentPlanStage &&
-              nextOpponentPlanStage.stage === st.stage &&
-              !st.isPlanRevealed;
-
-            return (
-              <div
-                key={st.stage}
-                className="story-stage-box"
-                onContextMenu={(e) => handleContextMenu(e, st.isStoryCompleted ? st.storyCard : null)}
-                onTouchStart={() => handleTouchStartInspect(st.isStoryCompleted ? st.storyCard : null)}
-                onTouchEnd={handleTouchEndInspect}
-              >
-                {st.isStoryCompleted && st.storyCard?.imageUrl ? (
-                  <img src={st.storyCard.imageUrl} alt={st.storyCard.name} />
-                ) : (
-                  <div className="story-uncompleted-overlay">
-                    <img src={CARD_BACK_URL} alt={`Story ${st.stage}`} className="kayou-card-back-img" />
-                    <span className="story-stage-label-pill">Story {st.stage}</span>
-                  </div>
-                )}
-
-                {st.planCard && !st.isPlanRevealed && (
-                  <div
-                    className={`plan-card-overlay ${
-                      isNextSequentialPlan && gameState.phase === 'BREAKTHROUGH_CHOICE' && isMyTurn
-                        ? 'intervene-target'
-                        : ''
-                    }`}
-                    title={`Story ${st.stage} Face-Down Plan`}
-                  >
-                    <img src={CARD_BACK_URL} alt="Plan Card" className="kayou-card-back-img" />
-                    <span className="plan-tag-badge">Plan {st.stage}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div
-          className="side-portrait-zone"
-          onContextMenu={(e) =>
-            handleContextMenu(e, player.retirement[player.retirement.length - 1] || null)
-          }
-          onTouchStart={() =>
-            handleTouchStartInspect(player.retirement[player.retirement.length - 1] || null)
-          }
-          onTouchEnd={handleTouchEndInspect}
-        >
-          {player.retirement.length > 0 ? (
-            <img
-              src={player.retirement[player.retirement.length - 1].imageUrl}
-              alt="Retirement Top"
-            />
-          ) : (
-            <span className="slot-empty-label">Empty</span>
-          )}
-          <span className="zone-caption">Retirement ({player.retirement.length})</span>
-        </div>
-      </div>
-    );
-
-    const renderResourceAndDecksRow = () => (
-      <div className="resource-deck-row">
-        <div className="side-portrait-zone">
-          <div className="deck-pile-wrapper">
-            <img src={CARD_BACK_URL} alt="Scene Deck" className="kayou-card-back-img" />
-            <span className="deck-count-pill">{player.sceneDeck.length}</span>
-          </div>
-          <span className="zone-caption">Scene Deck</span>
-        </div>
-
-        <div className="scene-area-tray">
-          {player.sceneArea.length === 0 ? (
-            <span className="slot-empty-label" style={{ margin: '0 auto' }}>
-              Scene Area (Harmony Resources)
-            </span>
-          ) : (
-            player.sceneArea.map((sc, idx) => (
-              <div
-                key={`${sc.card.id}-${idx}`}
-                className={`scene-card-slot ${sc.isExhausted ? 'exhausted' : ''}`}
-                title={
-                  sc.isLockedFaceDown
-                    ? 'First-Turn Locked Scene (Cannot be used for Inspo)'
-                    : !sc.isFaceUp
-                    ? 'Inspo Boost already used'
-                    : sc.card.name
-                }
-                onContextMenu={(e) => handleContextMenu(e, sc.isFaceUp ? sc.card : null)}
-                onTouchStart={() => handleTouchStartInspect(sc.isFaceUp ? sc.card : null)}
-                onTouchEnd={handleTouchEndInspect}
-              >
-                {sc.isFaceUp && sc.card.imageUrl ? (
-                  <img src={sc.card.imageUrl} alt={sc.card.name} />
-                ) : (
-                  <>
-                    <img src={CARD_BACK_URL} alt="Face-Down Scene" className="kayou-card-back-img" />
-                    <span className="scene-status-tag">
-                      {sc.isLockedFaceDown ? '🔒 Locked' : 'Inspo Used'}
-                    </span>
-                  </>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="side-portrait-zone">
-          <div className="deck-pile-wrapper">
-            <img src={CARD_BACK_URL} alt="Main Deck" className="kayou-card-back-img" />
-            <span className="deck-count-pill">{player.mainDeck.length}</span>
-          </div>
-          <span className="zone-caption">Main Deck</span>
-        </div>
-      </div>
-    );
-
     return (
-      <div className={`playmat-half ${isOpponent ? 'opponent-half' : ''}`}>
+      <div
+        className={`playmat-half ${isOpponent ? 'opponent-mat' : 'self-mat'} ${
+          isPlayersTurn ? 'is-active-turn' : ''
+        }`}
+      >
         <div className="player-hud-bar">
           <div>
-            <span>{isOpponent ? '👑 Opponent: ' : '✨ Your Board: '}</span>
+            <span>{isOpponent ? '👑 Opponent Zones: ' : '✨ Your Zones: '}</span>
             <strong>{player.displayName}</strong>
+            {isPlayersTurn && <span className="active-turn-mat-badge">Active Turn</span>}
             {player.isConnected === false && (
               <span style={{ marginLeft: '8px', fontSize: '11px', color: '#dc2626' }}>
                 ⚠️ Disconnected (3m timer active)
@@ -787,7 +636,9 @@ export default function GameBoard({
           </div>
 
           <div className="hud-pills">
-            <span className="hud-pill story-pill">📖 Story: {player.storyProgress}/4</span>
+            <span className="hud-pill story-pill">
+              📖 Story: {me.storyProgress}/4 (You) vs {opp.storyProgress}/4 (Opp)
+            </span>
             <span className="hud-pill">
               🌈 Harmony: {readyHarmony}/{player.sceneArea.length}
             </span>
@@ -795,26 +646,158 @@ export default function GameBoard({
             <button
               type="button"
               className="board-camera-switch-btn"
-              onClick={() => setCameraFocus((prev) => (prev === 'ME' ? 'OPPONENT' : 'ME'))}
+              onClick={() => setZoneFocus((prev) => (prev === 'ME' ? 'OPPONENT' : 'ME'))}
             >
-              {cameraFocus === 'ME' ? "👁️ Show Opponent's Board" : '👁️ Show My Board'}
+              {zoneFocus === 'ME' ? "👁️ View Opponent's Story/Scenes" : '👁️ View My Story/Scenes'}
             </button>
           </div>
         </div>
 
-        {isOpponent ? (
-          <>
-            {renderResourceAndDecksRow()}
-            {renderStoryAndCoreRow()}
-            {renderAdventureRow()}
-          </>
-        ) : (
-          <>
-            {renderAdventureRow()}
-            {renderStoryAndCoreRow()}
-            {renderResourceAndDecksRow()}
-          </>
-        )}
+        {/* Row: Main Character + 4 Landscape Story Stages + Retirement Area */}
+        <div className="core-story-row">
+          <div
+            className="side-portrait-zone"
+            onContextMenu={(e) => handleContextMenu(e, player.leader)}
+            onTouchStart={() => handleTouchStartInspect(player.leader)}
+            onTouchEnd={handleTouchEndInspect}
+          >
+            {player.leader?.imageUrl ? (
+              <img src={player.leader.imageUrl} alt={player.leader.name} />
+            ) : (
+              <img src={CARD_BACK_URL} alt="Mane Card Back" className="kayou-card-back-img" />
+            )}
+            {canActivateMane && (
+              <button
+                type="button"
+                className="adventure-tap-btn"
+                title={cleanCardText(player.leader?.effectText)}
+                onClick={() => sendAction('ACTIVATE_MANE_ABILITY')}
+              >
+                ✨ Mane Ability
+              </button>
+            )}
+            <span className="zone-caption">Main Character</span>
+          </div>
+
+          <div className="story-four-strip">
+            {player.storyStages.map((st) => {
+              const isNextSequentialPlan =
+                isOpponent &&
+                nextOpponentPlanStage &&
+                nextOpponentPlanStage.stage === st.stage &&
+                !st.isPlanRevealed;
+
+              return (
+                <div
+                  key={st.stage}
+                  className="story-stage-box"
+                  onContextMenu={(e) => handleContextMenu(e, st.isStoryCompleted ? st.storyCard : null)}
+                  onTouchStart={() => handleTouchStartInspect(st.isStoryCompleted ? st.storyCard : null)}
+                  onTouchEnd={handleTouchEndInspect}
+                >
+                  {st.isStoryCompleted && st.storyCard?.imageUrl ? (
+                    <img src={st.storyCard.imageUrl} alt={st.storyCard.name} />
+                  ) : (
+                    <div className="story-uncompleted-overlay">
+                      <img src={CARD_BACK_URL} alt={`Story ${st.stage}`} className="kayou-card-back-img" />
+                      <span className="story-stage-label-pill">Story {st.stage}</span>
+                    </div>
+                  )}
+
+                  {st.planCard && !st.isPlanRevealed && (
+                    <div
+                      className={`plan-card-overlay ${
+                        isNextSequentialPlan && gameState.phase === 'BREAKTHROUGH_CHOICE' && isMyTurn
+                          ? 'intervene-target'
+                          : ''
+                      }`}
+                      title={`Story ${st.stage} Face-Down Plan`}
+                    >
+                      <img src={CARD_BACK_URL} alt="Plan Card" className="kayou-card-back-img" />
+                      <span className="plan-tag-badge">Plan {st.stage}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div
+            className="side-portrait-zone"
+            onContextMenu={(e) =>
+              handleContextMenu(e, player.retirement[player.retirement.length - 1] || null)
+            }
+            onTouchStart={() =>
+              handleTouchStartInspect(player.retirement[player.retirement.length - 1] || null)
+            }
+            onTouchEnd={handleTouchEndInspect}
+          >
+            {player.retirement.length > 0 ? (
+              <img
+                src={player.retirement[player.retirement.length - 1].imageUrl}
+                alt="Retirement Top"
+              />
+            ) : (
+              <span className="slot-empty-label">Empty</span>
+            )}
+            <span className="zone-caption">Retirement ({player.retirement.length})</span>
+          </div>
+        </div>
+
+        {/* Row: Scene Deck + Scene Area + Main Deck */}
+        <div className="resource-deck-row">
+          <div className="side-portrait-zone">
+            <div className="deck-pile-wrapper">
+              <img src={CARD_BACK_URL} alt="Scene Deck" className="kayou-card-back-img" />
+              <span className="deck-count-pill">{player.sceneDeck.length}</span>
+            </div>
+            <span className="zone-caption">Scene Deck</span>
+          </div>
+
+          <div className="scene-area-tray">
+            {player.sceneArea.length === 0 ? (
+              <span className="slot-empty-label" style={{ margin: '0 auto' }}>
+                Scene Area (Harmony Resources)
+              </span>
+            ) : (
+              player.sceneArea.map((sc, idx) => (
+                <div
+                  key={`${sc.card.id}-${idx}`}
+                  className={`scene-card-slot ${sc.isExhausted ? 'exhausted' : ''}`}
+                  title={
+                    sc.isLockedFaceDown
+                      ? 'First-Turn Locked Scene (Cannot be used for Inspo)'
+                      : !sc.isFaceUp
+                      ? 'Inspo Boost already used'
+                      : sc.card.name
+                  }
+                  onContextMenu={(e) => handleContextMenu(e, sc.isFaceUp ? sc.card : null)}
+                  onTouchStart={() => handleTouchStartInspect(sc.isFaceUp ? sc.card : null)}
+                  onTouchEnd={handleTouchEndInspect}
+                >
+                  {sc.isFaceUp && sc.card.imageUrl ? (
+                    <img src={sc.card.imageUrl} alt={sc.card.name} />
+                  ) : (
+                    <>
+                      <img src={CARD_BACK_URL} alt="Face-Down Scene" className="kayou-card-back-img" />
+                      <span className="scene-status-tag">
+                        {sc.isLockedFaceDown ? '🔒 Locked' : 'Inspo Used'}
+                      </span>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="side-portrait-zone">
+            <div className="deck-pile-wrapper">
+              <img src={CARD_BACK_URL} alt="Main Deck" className="kayou-card-back-img" />
+              <span className="deck-count-pill">{player.mainDeck.length}</span>
+            </div>
+            <span className="zone-caption">Main Deck</span>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1345,11 +1328,16 @@ export default function GameBoard({
       )}
 
       {/* Dedicated Top Action Bar */}
-      <div className="center-action-bar">
+      <div
+        className={`center-action-bar ${
+          isMyTurn ? 'my-turn-bar' : isOppTurn ? 'opp-turn-bar' : ''
+        }`}
+      >
         <div className="action-bar-status">
           <span className="turn-badge">TURN {gameState.turnNumber}</span>
           <span>
-            Active: <strong>{gameState.players[gameState.turnPlayerId].displayName}</strong>
+            {isMyTurn ? '🔵 YOUR TURN: ' : '🔴 OPPONENT TURN: '}
+            <strong>{gameState.players[gameState.turnPlayerId].displayName}</strong>
           </span>
           <span>• {gameState.phase.replace('_', ' ')}</span>
           <span style={{ fontSize: '11px', color: secondsLeft <= 30 ? '#fca5a5' : '#fde047' }}>
@@ -1437,8 +1425,21 @@ export default function GameBoard({
         </div>
       </div>
 
-      {/* Single Focused Playmat */}
-      {cameraFocus === 'ME' ? renderFocusedBoard(me, false) : renderFocusedBoard(opp, true)}
+      {/* FULL-SCREEN DUAL-LANE ADVENTURE ARENA (Both Players' Lanes Visible Simultaneously) */}
+      <div className="dual-adventure-arena">
+        {renderLaneStrip(opp, true)}
+
+        <div className="center-clash-divider">
+          <span className="lane-axis-pill">LEFT LANE</span>
+          <span className="lane-axis-pill">CENTER LANE</span>
+          <span className="lane-axis-pill">RIGHT LANE</span>
+        </div>
+
+        {renderLaneStrip(me, false)}
+      </div>
+
+      {/* Color-Coded Story, Scene & Deck Playmat */}
+      {zoneFocus === 'ME' ? renderPlayerZonesMat(me, false) : renderPlayerZonesMat(opp, true)}
 
       {/* Player Hand Dock with "My Hand" Label */}
       {!isSpectator && (
@@ -1457,7 +1458,6 @@ export default function GameBoard({
                   onClick={() => {
                     if (!isMyTurn || gameState.phase !== 'MAIN_PHASE') return;
                     if (!canAfford) return;
-                    if (cameraFocus !== 'ME') setCameraFocus('ME');
                     setSelectedHandCardId(isSelected ? null : card.id);
                   }}
                   onContextMenu={(e) => handleContextMenu(e, card)}
