@@ -4,6 +4,7 @@
   padding: 24px 16px 48px;
   font-family: 'Nunito', sans-serif;
   color: #4a148c;
+  box-sizing: border-box;
 }
 
 .binder-loading {
@@ -165,11 +166,14 @@
 /* 4 x 4 Virtual Binder Sheet */
 .virtual-binder-wrapper {
   position: relative;
+  box-sizing: border-box;
+  width: 100%;
   background: linear-gradient(145deg, #2e1065 0%, #1e1b4b 100%);
   border: 4px solid #a855f7;
   border-radius: 24px;
   padding: 24px 24px 24px 44px;
   box-shadow: 0 20px 50px rgba(30, 27, 75, 0.38), inset 0 0 30px rgba(168, 85, 247, 0.25);
+  overflow: hidden;
 }
 
 .binder-spine-rings {
@@ -193,11 +197,15 @@
 
 .binder-sheet-4x4 {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .binder-pocket {
+  min-width: 0;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.06);
   border: 2px solid rgba(255, 255, 255, 0.16);
   border-radius: 14px;
@@ -205,6 +213,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: space-between;
   cursor: pointer;
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
@@ -244,6 +253,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
+  gap: 6px;
 }
 
 .pocket-id {
@@ -251,6 +261,9 @@
   font-size: 0.74rem;
   color: #e9d5ff;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pocket-rarity {
@@ -260,6 +273,7 @@
   border-radius: 6px;
   background: #6b21a8;
   color: #fff;
+  flex-shrink: 0;
 }
 
 .pocket-rarity.rarity-ur,
@@ -345,10 +359,12 @@
   width: 100%;
   margin-top: 8px;
   text-align: center;
+  min-width: 0;
 }
 
 .pocket-name {
   display: block;
+  width: 100%;
   font-size: 0.8rem;
   font-weight: 800;
   color: #f3e8ff;
@@ -408,7 +424,7 @@
 
 @media (max-width: 900px) {
   .binder-sheet-4x4 {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
   .virtual-binder-wrapper {
