@@ -1,0 +1,912 @@
+[
+  {
+    "id": "BP01-CR03",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "Appear: Reveal the top 3 cards of your Deck, choose 1 Item from them, add it to Hand, move the rest to Retirement Area.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP01-CR03.webp?v=1794807954076"
+  },
+  {
+    "id": "BP01-CR03-S",
+    "name": "Shining Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "Appear: Reveal the top 3 cards of your Deck, choose 1 Item from them, add it to Hand, move the rest to Retirement Area.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP01-CR03-S.webp?v=1794807955443"
+  },
+  {
+    "id": "BP01-CR10",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 2 Scenes in your Scene Area, untap them.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP01-CR10.webp?v=1794807975109"
+  },
+  {
+    "id": "BP01-CR10-S",
+    "name": "Shining Applejack (SDCC 2026 promo)",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 2 Scenes in your Scene Area, untap them.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP01-CR10-S.webp?v=1794807976675"
+  },
+  {
+    "id": "BP01-GR08",
+    "name": "Fluttershy",
+    "card_type": "Character",
+    "effect_text": "Appear: Reveal the top 3 cards of your Deck, choose 1 「Angel」 from them, add it to Hand, move the rest to Retirement Area.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP01-GR08.webp?v=1794808010710"
+  },
+  {
+    "id": "BP01-GR10",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 1 Scene in your Scene Area, untap it.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP01-GR10.webp?v=1794808013890"
+  },
+  {
+    "id": "BP02-CR03",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "Appear:, (RA isiany,Character.adorned with an, [ter 1 yéur Adventure Area, choose! face=up Scene in Rival's Adventure Area; turn it down. Vig ] — a V-m",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR03.webp?v=1794808214335"
+  },
+  {
+    "id": "BP02-CR03-S",
+    "name": "Shining Pinkie Pie (Wave 2 promo)",
+    "card_type": "Character",
+    "effect_text": "Appear:, (RA isiany,Character.adorned with an, [ter 1 yéur Adventure Area, choose! face=up Scene in Rival's Adventure Area; turn it down. Vig ] — a V-m",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR03-S.webp?v=1794808215755"
+  },
+  {
+    "id": "BP02-CR06",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "If there are 3 or more 「Unicorn」Ifin your Retiieme Bd Area, choose 1 Ch RD 「asafivaion 3 or fer NEY」 Areq, choose aracteriwithlinspifationielomes in Rival's Adventure Area to Retire’ - fn ~N BE iy LCN nd RA Pp WA DART v4",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR06.webp?v=1794808223195"
+  },
+  {
+    "id": "BP02-CR06-S",
+    "name": "Shining Rarity (Wave 2 promo)",
+    "card_type": "Character",
+    "effect_text": "If there are 3 or more 「Unicorn」Ifin your Retiieme Bd Area, choose 1 Ch RD 「asafivaion 3 or fer NEY」 Areq, choose aracteriwithlinspifationielomes in Rival's Adventure Area to Retire’ - fn ~N BE iy LCN nd RA Pp WA DART v4",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR06-S.webp?v=1794808224617"
+  },
+  {
+    "id": "BP02-CR07",
+    "name": "Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "Appear: If therelare4]or more Events,in your Retirémer rea, move thetopicard of your Deck tofStonyzATeaq, ecomes the Plan. y ~ 2 o - TN ® 3Q 7 Po",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR07.webp?v=1794808226123"
+  },
+  {
+    "id": "BP02-CR07-S",
+    "name": "Shining Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "Appear: If therelare4]or more Events,in your Retirémer rea, move thetopicard of your Deck tofStonyzATeaq, ecomes the Plan. y ~ 2 o - TN ® 3Q 7 Po",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR07-S.webp?v=1794808227546"
+  },
+  {
+    "id": "BP02-CR08",
+    "name": "Fluttershy",
+    "card_type": "Character",
+    "effect_text": "the top 3 cards{of, Deck choos 「Pet」 with Cost of Forcelof Harmony. 3 ofless fron 1. Nid A a WN hem, move-.it to Adventu a Areal moyvelthe rest't etirement Area;, 2 8 [ = a XN ~ 5 TT - Cy A OR",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR08.webp?v=1794808228977"
+  },
+  {
+    "id": "BP02-CR08-S",
+    "name": "Shining Fluttershy",
+    "card_type": "Character",
+    "effect_text": "the top 3 cards{of, Deck choos 「Pet」 with Cost of Forcelof Harmony. 3 ofless fron 1. Nid A a WN hem, move-.it to Adventu a Areal moyvelthe rest't etirement Area;, 2 8 [ = a XN ~ 5 TT - Cy A OR",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR08-S.webp?v=1794808230272"
+  },
+  {
+    "id": "BP02-CR09",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "If there is any-Character adorned withtan ter your Adventure Area, choose 2 face—up Scenesfin Rival Scene Area, turn them down. =a < a > Ip d a 1B Pi pc",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR09.webp?v=1794808231877"
+  },
+  {
+    "id": "BP02-CR09-S",
+    "name": "Shining Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "If there is any-Character adorned withtan ter your Adventure Area, choose 2 face—up Scenesfin Rival Scene Area, turn them down. =a < a > Ip d a 1B Pi pc",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR09-S.webp?v=1794808233338"
+  },
+  {
+    "id": "BP02-CR10",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "(C2 BE, 4 > 4 JB A. ar Appear: «Choose 2 face=down*Sceneslin vo rea, tirn them up. : <7 Xo Ns > - A YU =~Y7% p, A",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR10.webp?v=1794808234870"
+  },
+  {
+    "id": "BP02-CR10-S",
+    "name": "Shining Applejack",
+    "card_type": "Character",
+    "effect_text": "(C2 BE, 4 > 4 JB A. ar Appear: «Choose 2 face=down*Sceneslin vo rea, tirn them up. : <7 Xo Ns > - A YU =~Y7% p, A",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR10-S.webp?v=1794808236282"
+  },
+  {
+    "id": "BP02-CR12",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "M 「i」 A. 3 py D Sd : 2° = ANC) > — —-—y Bn 8 vo LEER 8 Chooser] Plan in your Story-Area, Lookiati - pa — a r",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR12.webp?v=1794808240889"
+  },
+  {
+    "id": "BP02-CR12-S",
+    "name": "Shining Rarity",
+    "card_type": "Character",
+    "effect_text": "M 「i」 A. 3 py D Sd : 2° = ANC) > — —-—y Bn 8 vo LEER 8 Chooser] Plan in your Story-Area, Lookiati - pa — a r",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-CR12-S.webp?v=1794808242275"
+  },
+  {
+    "id": "BP02-ER04",
+    "name": "Backyard of Sweet Apple Acres",
+    "card_type": "Scene",
+    "effect_text": "Ll] a AN —_] =N a nspo Boost( Your 「Applejack」 gets +1 Inspiration unt he'end of this Contact. I RNEZY oro",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-ER04.webp?v=1794808252630"
+  },
+  {
+    "id": "BP02-ER04-S",
+    "name": "Shining Backyard of Sweet Apple Acres (Night)",
+    "card_type": "Scene",
+    "effect_text": "Ll] a AN —_] =N a nspo Boost( Your 「Applejack」 gets +1 Inspiration unt he'end of this Contact. I RNEZY oro",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-ER04-S.webp?v=1794808254195"
+  },
+  {
+    "id": "BP02-GR01",
+    "name": "Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "Appear: Too cg req;Zdraw,2-cards?.. Unicorn Twilight park * 2) LE ¥ rT a a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR01.webp?v=1794808266054"
+  },
+  {
+    "id": "BP02-GR01-S",
+    "name": "Shining Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "Appear: Too cg req;Zdraw,2-cards?.. Unicorn Twilight park * 2) LE ¥ rT a a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR01-S.webp?v=1794808267482"
+  },
+  {
+    "id": "BP02-GR03",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "LY. i. y Hr Appear: =U] thiejend of.turn 4yeup next Item gets = J Oe 5A A 1 = \" ox ofborcecll larmony when Rlayed'from Hand. — wl < TN [a yp DSA",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR03.webp?v=1794808271783"
+  },
+  {
+    "id": "BP02-GR03-S",
+    "name": "Shining Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "LY. i. y Hr Appear: =U] thiejend of.turn 4yeup next Item gets = J Oe 5A A 1 = \" ox ofborcecll larmony when Rlayed'from Hand. — wl < TN [a yp DSA",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR03-S.webp?v=1794808273165"
+  },
+  {
+    "id": "BP02-GR04",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "Appear: Bayes Sp zeorss of.youn Deck, choos RonyAlifromithem, itito’Hand, move ‘the res olthelbottomlofithe Deck? —— a NN NI x = = Bld : AN » 2 Annidiack re",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR04.webp?v=1794808274772"
+  },
+  {
+    "id": "BP02-GR04-S",
+    "name": "Shining Applejack",
+    "card_type": "Character",
+    "effect_text": "Appear: Bayes Sp zeorss of.youn Deck, choos RonyAlifromithem, itito’Hand, move ‘the res olthelbottomlofithe Deck? —— a NN NI x = = Bld : AN » 2 Annidiack re",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR04-S.webp?v=1794808276145"
+  },
+  {
+    "id": "BP02-GR05",
+    "name": "Rainbow Dash",
+    "card_type": "Character",
+    "effect_text": "Adventure: JET) Chobselly 「Pegasus」i Ny ouryAdy e nt I > Nao DRS 5 Tan Zr. } reajitigetsgIt Inspirationfuntilitherend-of turn; Move} & ol WIZ olanlemptyiSlogintyouriAdventure’Araa. yas < 「i awry」 A aR rs (Rainb Nach 7 a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR05.webp?v=1794808277765"
+  },
+  {
+    "id": "BP02-GR05-S",
+    "name": "Shining Rainbow Dash",
+    "card_type": "Character",
+    "effect_text": "Adventure: JET) Chobselly 「Pegasus」i Ny ouryAdy e nt I > Nao DRS 5 Tan Zr. } reajitigetsgIt Inspirationfuntilitherend-of turn; Move} & ol WIZ olanlemptyiSlogintyouriAdventure’Araa. yas < 「i awry」 A aR rs (Rainb Nach 7 a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR05-S.webp?v=1794808279264"
+  },
+  {
+    "id": "BP02-GR07",
+    "name": "Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "SN rr y 0 AQ I Appear: § fithere ar 2lor more Eventsjin your Retirement AreawD =. rR ~ 1 rea, chooser! Eventiin your Retirement Area, add Sst oo r 0 Hand!F< > 7 = ~~ p + Br ape A _— = — Unicorn Tia Spark I WV in Wg > ) Zz > S nN ela [) &1 \"412 4 hw",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR07.webp?v=1794808283465"
+  },
+  {
+    "id": "BP02-GR09",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "nl 9 ~ o p—— Vita ANT : aE lfthenelis any tem ingougRetirementyAret hogSe™ Joceris SE each.Scene ASO, tn them[dow: FA Bia",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR09.webp?v=1794808286360"
+  },
+  {
+    "id": "BP02-GR10",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose “face —down tapped!Scenelin YQ! cenelArea; +osit up, untapiit. 3 NS Js > AND 2 CL, [7 a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR10.webp?v=1794808287934"
+  },
+  {
+    "id": "BP02-GR11",
+    "name": "Rainbow Dash",
+    "card_type": "Character",
+    "effect_text": "- =a.. (IA ARad fd If there is any empty Slot in your Adventure Area, choose 1 「Pegasus」in you focver iP, ets +2 Inspiration until'the endof turn: 4 ” ~~ SIE [) rch § ry",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR11.webp?v=1794808289575"
+  },
+  {
+    "id": "BP02-GR12",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "Farewell: Reved] the’ top2 cards otyourDeckYehods pUnicern)” fromjsthem;-addfititoikand movelthelres JR tirennt Area? Ny el a. > A. Unicorn & y LN —. > WL 7 4 Tb QL Rarity ~~ S",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-GR12.webp?v=1794808291008"
+  },
+  {
+    "id": "BP02-SR04",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "CITE there are 5or = in YgUr Seen reg, choose 1 face—down Scene your'Scene Arec urn Up ala — Wg A Earth Pony Applejack oy & Vr > Jo No AnniBinck ~ 7 mm",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-SR04.webp?v=1794808369365"
+  },
+  {
+    "id": "BP02-SR08",
+    "name": "Discord",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 1 Plan in Rival's Story Area ea) Ceri ’ i N A (6n DidRArd ota",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-SR08.webp?v=1794808375280"
+  },
+  {
+    "id": "BP02-SR12",
+    "name": "Daring Do",
+    "card_type": "Character",
+    "effect_text": "Farewell: Reveallthe top:3 cards ofiyour Scene Dec hooseMgSceneifromithem;, add itjto Sem 2) facemls aplitimoveitheliestitolthelbottomiofithe:ScenesBeck. [J -\" — J K » Darina Da ~.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-SR12.webp?v=1794808381378"
+  },
+  {
+    "id": "BP02-SR13",
+    "name": "Philomena",
+    "card_type": "Character",
+    "effect_text": "Farewell: { Crocegll iggoene Jwith Cost of Force of Harmony 5 or less inyyouriRetirement Area, move itt dventure Area.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-SR13.webp?v=1794808382688"
+  },
+  {
+    "id": "BP02-U05",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 1 face-up Scene in Rival's Scene Area, turn it down.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-U05.webp?v=1794808391050"
+  },
+  {
+    "id": "BP02-U17",
+    "name": "Discord",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 1 Rival's Hand randomly, move it t etirement Area.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-U17.webp?v=1794808412611"
+  },
+  {
+    "id": "BP02-U18",
+    "name": "Discord",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 1 Scene in Rival's Scene Area, mov - to the bottom of Rival's Scene Deck, Rival adds 1 Scene Area",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP02-U18.webp?v=1794808414173"
+  },
+  {
+    "id": "BP03-C14",
+    "name": "Spike",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 1 「Nightmare Night」 i our Adventure Area, put 1 Treat on it.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-C14.webp?v=1794808433996"
+  },
+  {
+    "id": "BP03-C16",
+    "name": "Mayor Mare",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose up to 2 「Nightmare Night」 in your Adventure Area, put 1 Treat on ther eparately.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-C16.webp?v=1794808436862"
+  },
+  {
+    "id": "BP03-C29",
+    "name": "Fluttershy and the Firefly Fright – No Nightmare Night!",
+    "card_type": "Story",
+    "effect_text": "AA - oA Whenlpromoted tojthiststage¥choosekiMliiNishtmareliNight in put 1RTreatfonyits E _ su” ie",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-C29.webp?v=1794808455266"
+  },
+  {
+    "id": "BP03-C34",
+    "name": "Pinkie Pie and the Haunted Kitchen – Traces of a Ghost",
+    "card_type": "Story",
+    "effect_text": "Eireationyoudd ' =m promoted to'this stage, put 1 Treat on cash 「Nightmare Night」Sinlyeur and your Rivalis Adventure: Areas. Va ai Ll A aed IZ A ? Pinkie Pie's Haunted Kitchen 9 I, lo ~ Ghostprints RAS 11",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-C34.webp?v=1794808462546"
+  },
+  {
+    "id": "BP03-C37",
+    "name": "Applejack and the Lost Moonlight Map – Granny's Map",
+    "card_type": "Story",
+    "effect_text": "「X Treat for you When promotedito this Noone」 [ NightmarelNightdl fin your Arne <i putilpreat{on]its Apple) S MISSING \"1 nligt L VIE",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-C37.webp?v=1794808466936"
+  },
+  {
+    "id": "BP03-C45",
+    "name": "Rarity and the Carousel Haunted House – Haunted House Adventure",
+    "card_type": "Story",
+    "effect_text": "Vereet forgo When promoted tojthis stage, Ehodte 1 Shngio Nioad in) Nica, put 1 Tigh Bn id Hi WEY Vie. «AM : Rarity’s Carousel Boo-tique ~9 Spooktacular Glam VY 4, 5 I",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-C45.webp?v=1794808478539"
+  },
+  {
+    "id": "BP03-CR03",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "- ) ~ da. = = =f S— ——i LER Remove the Treat on this Character ach ri Nightmare'Night ] in‘your Adventure Areage get 2.Inspiratio n until thelend of turn. > _- > a E Pe\" pe. a VV; vl Pp",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR03.webp?v=1794808489707"
+  },
+  {
+    "id": "BP03-CR03-S",
+    "name": "Shining Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "- ) ~ da. = = =f S— ——i LER Remove the Treat on this Character ach ri Nightmare'Night ] in‘your Adventure Areage get 2.Inspiratio n until thelend of turn. > _- > a E Pe\" pe. a VV; vl Pp",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR03-S.webp?v=1794808491084"
+  },
+  {
+    "id": "BP03-CR04",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "Adventure: J Whilejthis Character has a Treat, a chiCha ract »Rival's Adventure: Aredlgets ~1 +1 Inspiration: oe TT Choose 1 other Nightmare Night Wour Adventure: Arealiput. Treationtit << your: fdventure Area: 1 Treaton 5 COMER A, PE",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR04.webp?v=1794808492637"
+  },
+  {
+    "id": "BP03-CR04-S",
+    "name": "Shining Applejack",
+    "card_type": "Character",
+    "effect_text": "Adventure: J Whilejthis Character has a Treat, a chiCha ract »Rival's Adventure: Aredlgets ~1 +1 Inspiration: oe TT Choose 1 other Nightmare Night Wour Adventure: Arealiput. Treationtit << your: fdventure Area: 1 Treaton 5 COMER A, PE",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR04-S.webp?v=1794808494090"
+  },
+  {
+    "id": "BP03-CR07",
+    "name": "Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "0 <a o L = alll) Each time you discard,arcard, this Characte ERY until LF ndlof turn. A Cae A S a Vw 4",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR07.webp?v=1794808501403"
+  },
+  {
+    "id": "BP03-CR07-S",
+    "name": "Shining Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "0 <a o L = alll) Each time you discard,arcard, this Characte ERY until LF ndlof turn. A Cae A S a Vw 4",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR07-S.webp?v=1794808502792"
+  },
+  {
+    "id": "BP03-CR08",
+    "name": "Fluttershy",
+    "card_type": "Character",
+    "effect_text": "VEC # A Ri ; — ~. i } & Coan ChocseXiiRewith +1 Inspiration 4 or'les youriRetirement itgtSfAdventure Area “ Ek itforchyv",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR08.webp?v=1794808504352"
+  },
+  {
+    "id": "BP03-CR08-S",
+    "name": "Shining Fluttershy",
+    "card_type": "Character",
+    "effect_text": "VEC # A Ri ; — ~. i } & Coan ChocseXiiRewith +1 Inspiration 4 or'les youriRetirement itgtSfAdventure Area “ Ek itforchyv",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR08-S.webp?v=1794808505845"
+  },
+  {
+    "id": "BP03-CR09",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose, face-up Scene in Rival's Scene Area irmitidown, Ifitherelare 5 or;more face—down Scene ) your Ceara] oo 2'face—up Scenes in Rival, Re oy =. cene Arigayturn them down instead. Va y _ * f -— 2) wa Z",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR09.webp?v=1794808507455"
+  },
+  {
+    "id": "BP03-CR09-S",
+    "name": "Shining Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose, face-up Scene in Rival's Scene Area irmitidown, Ifitherelare 5 or;more face—down Scene ) your Ceara] oo 2'face—up Scenes in Rival, Re oy =. cene Arigayturn them down instead. Va y _ * f -— 2) wa Z",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR09-S.webp?v=1794808508936"
+  },
+  {
+    "id": "BP03-CR10",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "LEU Ifithere are 8 or more Scenes-in your Scene Area, this Character gets +3 Inspiration until the end c Cds yg © oN AN, > P",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR10.webp?v=1794808510537"
+  },
+  {
+    "id": "BP03-CR10-S",
+    "name": "Shining Applejack",
+    "card_type": "Character",
+    "effect_text": "LEU Ifithere are 8 or more Scenes-in your Scene Area, this Character gets +3 Inspiration until the end c Cds yg © oN AN, > P",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR10-S.webp?v=1794808512010"
+  },
+  {
+    "id": "BP03-CR12",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "OL — ra ay - ow d 2 5 A IY 33 A. : t 7 “Choose Event andl [Item ingyourgReticemer reaYadd Breqtodland. S Y o i =~ NEE 7",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR12.webp?v=1794808516677"
+  },
+  {
+    "id": "BP03-CR12-S",
+    "name": "Shining Rarity",
+    "card_type": "Character",
+    "effect_text": "OL — ra ay - ow d 2 5 A IY 33 A. : t 7 “Choose Event andl [Item ingyourgReticemer reaYadd Breqtodland. S Y o i =~ NEE 7",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-CR12-S.webp?v=1794808518129"
+  },
+  {
+    "id": "BP03-GR02",
+    "name": "Fluttershy",
+    "card_type": "Character",
+    "effect_text": "Bh “Sy ’ r~ oe “oi LITEEeP ChogsetlNCharacter that has had a Treat] our Adventure: Argajjit gets +3 Inspiration untilithe’en fun. o_o",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-GR02.webp?v=1794808520859"
+  },
+  {
+    "id": "BP03-GR04",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "Bers 2 「BE gh EEN aa aspiration」 bo LEY Whentalilireat is putienithis'Characteitiget 2 lpSpirationfuntil thelendof turn.) aN : SRiahtma; j ck! Jo JUG SEE, _. 4 VW a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-GR04.webp?v=1794808524318"
+  },
+  {
+    "id": "BP03-GR06",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "Appear: £13 thete isfanyA€haracter thatjhas hadja Trec yur ‘AdventiireJArea choose 1 Plan'in Rival's Sto rea, Logkial : N © Nig mare Night Unicorn Rar y NAS Rarity OV",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-GR06.webp?v=1794808527313"
+  },
+  {
+    "id": "BP03-GR09",
+    "name": "Princess Luna",
+    "card_type": "Character",
+    "effect_text": "Ve aren. NC UT gmmge — —r—padnglGa Yr ind te reargetsi+) +1 Inspiration a li Adventure: JETS Choose}l Character injyourdAdventur rea); tap ite {5 > x ES Nr og — —, LAT XP",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-GR09.webp?v=1794808534419"
+  },
+  {
+    "id": "BP03-GR09-S",
+    "name": "Shining Princess Luna",
+    "card_type": "Character",
+    "effect_text": "Ve aren. NC UT gmmge — —r—padnglGa Yr ind te reargetsi+) +1 Inspiration a li Adventure: JETS Choose}l Character injyourdAdventur rea); tap ite {5 > x ES Nr og — —, LAT XP",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-GR09-S.webp?v=1794808535729"
+  },
+  {
+    "id": "BP03-GR10",
+    "name": "Nightmare Moon",
+    "card_type": "Character",
+    "effect_text": "en gator +1 Inspiration a> @ —=— Ay > ht aeU tO) T2p = ChooserZsCharacters in Rival's Adventure AreaTea ddpithem.... WNSEGEEGP” Rika Alico! loon oe == PT) EET <> Dio Nliahfmare Moon 725 PR",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-GR10.webp?v=1794808537331"
+  },
+  {
+    "id": "BP03-GR11",
+    "name": "Shining Armor",
+    "card_type": "Character",
+    "effect_text": "Appear: Draw 1 cdrd. i) Whileithere is ay, liPrincess! Cadance J fino Area, this Character: won't’Retire in Contact =) A ) om g & Qhinins Armor~ 3",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-GR11.webp?v=1794808538817"
+  },
+  {
+    "id": "BP03-GR11-S",
+    "name": "Shining Armor",
+    "card_type": "Character",
+    "effect_text": "Appear: Draw 1 cdrd. i) Whileithere is ay, liPrincess! Cadance J fino Area, this Character: won't’Retire in Contact =) A ) om g & Qhinins Armor~ 3",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-GR11-S.webp?v=1794808540100"
+  },
+  {
+    "id": "BP03-GR12",
+    "name": "Princess Cadence",
+    "card_type": "Character",
+    "effect_text": "While there is any 「Shining Armordlginjy」oLl dventure Area, this Character won't{Retirebyletfec: f Events. JAE — > 4. » Alicorn Princess Cadance eA Brin ace Cadancad, 7 a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-GR12.webp?v=1794808541667"
+  },
+  {
+    "id": "BP03-GR12-S",
+    "name": "Shining Princess Cadence",
+    "card_type": "Character",
+    "effect_text": "While there is any 「Shining Armordlginjy」oLl dventure Area, this Character won't{Retirebyletfec: f Events. JAE — > 4. » Alicorn Princess Cadance eA Brin ace Cadancad, 7 a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-GR12-S.webp?v=1794808543007"
+  },
+  {
+    "id": "BP03-SPR23",
+    "name": "Candy Bowl",
+    "card_type": "Item",
+    "effect_text": "Only adorn 「Nightmare Night」. dorned Character gains * CEI When a Treat is pu n this Character, this Character gets +2 Inspiration unt e end of turn.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-SPR23.webp?v=1794808605113"
+  },
+  {
+    "id": "BP03-SPR23-S",
+    "name": "Shining Candy Bowl",
+    "card_type": "Item",
+    "effect_text": "Only adorn 「Nightmare Night」. dorned Character gains * CEI When a Treat is pu n this Character, this Character gets +2 Inspiration unt e end of turn.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-SPR23-S.webp?v=1794808606465"
+  },
+  {
+    "id": "BP03-SR01",
+    "name": "Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "1 p= — FF AA «AVR A> Adventure 「WT an」EVentithislCharactedget Ij +1 Inspiration untilithelendlofitlinny o P Unico 1 n: rkle L JON i Qarkle Pla",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-SR01.webp?v=1794808625083"
+  },
+  {
+    "id": "BP03-SR02",
+    "name": "Fluttershy",
+    "card_type": "Character",
+    "effect_text": "iff ~ Nap — \" An Se ali his Character gets —1-Cost of Force of HarmenyAwhe layed oy Hand for each 「Pet」 in; ou rAdventure Are",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-SR02.webp?v=1794808626574"
+  },
+  {
+    "id": "BP03-SR03",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "A bh -V_ FSET LITE Look at the topleald of Your Deck putt! e top or; the bottom of your Deck. Baw = NN ‘Earth Por ikie Pie l - 9 _ - I ~ » a FN [7 IY",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-SR03.webp?v=1794808628038"
+  },
+  {
+    "id": "BP03-SR06",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "ALES Drawiificard. RAV 4 J: Choose 1\" 「Unicorn」 in your Adventure Area EN) odd it to Hand. “ = a = 2 ‘2. Unicorn Rarity Sl x7 Rarity ~~ Ppre",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-SR06.webp?v=1794808632289"
+  },
+  {
+    "id": "BP03-SR07",
+    "name": "Spike",
+    "card_type": "Character",
+    "effect_text": "AY NONE A OW Sy bh 3 oo : = : Appear: Ifythereiisiany other I Nightmare Night [ our AdVenturejAreaydraws2icards. a > a y Nig. 7 oll qa 7 [7 no",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-SR07.webp?v=1794808633621"
+  },
+  {
+    "id": "BP03-SR10",
+    "name": "Princess Luna",
+    "card_type": "Character",
+    "effect_text": "Appear: Each Charactenthatihasihadla {reat ingyo dventureyArea gets tl Nightmare Princess Luna BW princoece 11nAa~ pre",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-SR10.webp?v=1794808637775"
+  },
+  {
+    "id": "BP03-SR11",
+    "name": "Nightmare Moon",
+    "card_type": "Character",
+    "effect_text": "Appear: Each Characterdin Rivals Adventure Area get al¥Inspirationiuntilithe end of turn.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-SR11.webp?v=1794808639232"
+  },
+  {
+    "id": "BP03-SR13",
+    "name": "Queen Chrysalis",
+    "card_type": "Character",
+    "effect_text": "Adventure: JET This Character getsgh3 +1 Inspiration unt helend ofitirn®Onlysuse Whentthere isfanylCharacte ith lnspiraticnISTor in RivalisYAdventlireyArea® Changeling Quee ysalis Vil ain ¥ Ng > AN. ~ Oiicen Chrvucalic 7 Er",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-SR13.webp?v=1794808642487"
+  },
+  {
+    "id": "BP03-U05",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 2 face-up Scenes in your and yot ival's Scene Areas separately, turn them down.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-U05.webp?v=1794808650984"
+  },
+  {
+    "id": "BP03-U09",
+    "name": "Rainbow Dash",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 1 「Pegasus」 in your Adventure: Are: - gets +2 Inspiration until the end of turn, Move it to a mpty Slot in your Adventure Area.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-U09.webp?v=1794808656737"
+  },
+  {
+    "id": "BP03-U13",
+    "name": "Spike",
+    "card_type": "Character",
+    "effect_text": "Appear: Discard 1 card, choose 1 Event in your Retiremen LEU) Area, add it to Hand.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-U13.webp?v=1794808663069"
+  },
+  {
+    "id": "BP03-U14",
+    "name": "Philomena",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 1 「Phoenix」 with Cost of Force of Harmony 4 or less in your Retirement Area, move it t dventure Area. V nn 53",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP03-U14.webp?v=1794808664563"
+  },
+  {
+    "id": "BP04-CR01",
+    "name": "Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "a a CES LS lr Gok 4 dventure'Areq, U nwrap it. 「Trigger the Present s effec hen Remove itl」 het. ZA A Appear: @3 PR Twilight Sparkle's Present © = ps CN NER ~~ gh Character Wl 3 iets fost Jf) - vO s. Me NEN 10 8",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-CR01.webp?v=1794808673788"
+  },
+  {
+    "id": "BP04-CR02",
+    "name": "Fluttershy",
+    "card_type": "Character",
+    "effect_text": "Sa wo BE ud Ji NN Aa AANA 0 Dd “ERIE AN a A al ~~ 4 he end[of tur! P NX = ( y W Adventure: Whenja Characténplayed fror our tfand entersiAdventure Area, put: 1 nit! AS +} Ge L ) \" O(=134T.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-CR02.webp?v=1794808675171"
+  },
+  {
+    "id": "BP04-CR04",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "- Lee. Vata ' 00 TT To ATT yjyour effect, this Character gets +1 Inspiration until the end of turn.. a CLV \"Choose 1 Character in your Adventure Area;. put 1 onrit. [ > 2 7 3 > ly, 7A vB Fg a p",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-CR04.webp?v=1794808678317"
+  },
+  {
+    "id": "BP04-CR05",
+    "name": "Rainbow Dash",
+    "card_type": "Character",
+    "effect_text": "the Present on this Characters Unwrdppe hisCharacter'gets +2 +1 Inspiration-untilf a end of tur XID 2p This CharacterSwitches Positions wit ‘other Character in your Adventure: RE 9 7 tL # TAA “0 ° oy",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-CR05.webp?v=1794808679800"
+  },
+  {
+    "id": "BP04-CR06",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "NN NF 2 bo oy dB Gd _n 5 J Move the top 2 cards’of your Deck tolRetiremen rea, choose 1 [ Hearthi®Warming Eve J in yourdRetiremer res cid Shot gy EE) A",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-CR06.webp?v=1794808681263"
+  },
+  {
+    "id": "BP04-CR07",
+    "name": "Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "put!\" @ULE LEED on It ny Se Ui - > Sa ; Choose 1, Character in;your Adventus Areq, it gets +3 Inspiration until the endfof§tuiy put 1 onity¥ MK — WA TN TLE",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-CR07.webp?v=1794808682694"
+  },
+  {
+    "id": "BP04-CR09",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "the'Rresentlonliithis haracter to 1 Characterlin Your AdyventurelArea hoose 1 Character in yourZAdventurelArea, itfgets + spiration until the endjof turn® p> hot",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-CR09.webp?v=1794808685918"
+  },
+  {
+    "id": "BP04-CR10",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 1 Character that has;n resent igRival’s’Adventure: Areq, put 1 n it. Choosedl facezdown tapped Scenelin Scene Area, turn it up, untaplit: Meee ¥ NS. IN Arnloiaclk a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-CR10.webp?v=1794808687342"
+  },
+  {
+    "id": "BP04-CR11",
+    "name": "Rainbow Dash",
+    "card_type": "Character",
+    "effect_text": "DW oF sn om) J. SNE ag, SoNTgtlY spiration untilithe end offturn! choose 1 Presentlontthi haracter Unwiap itd(T rigger the Present's effect, the Ba Nor. h emove it.) Only use when therelis any empty Slot in your Adventure Area. BY = 7 RQ Dh TN € Of t. ~ A AEP 12",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-CR11.webp?v=1794808688779"
+  },
+  {
+    "id": "BP04-CR12",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "this Character gets +1 nspigationjuntilithefend of ‘turn. FF Appean Put 1 on eact ey in AeEnture Ara. B — A = [ AS = @& Ln os BS",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-CR12.webp?v=1794808690311"
+  },
+  {
+    "id": "BP04-GR02",
+    "name": "Fluttershy",
+    "card_type": "Character",
+    "effect_text": "discard card. If the(iscards ardiis” 「Fluttershy」 or 「Pet」, this Charactergets + ispiration until the end of turn. _ ff.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-GR02.webp?v=1794808693051"
+  },
+  {
+    "id": "BP04-GR04",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "Adventure: JEI8 Choose face down Scene_in youran our Rival's Scene Areasiseparately turn themjup A Nal As “ ) Jo Th < STL",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-GR04.webp?v=1794808696299"
+  },
+  {
+    "id": "BP04-GR06",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "AN LE SDiscard Up tor2 cards {draw iicard for eac -< ~~ Unicorn Rarity i : a ae geo = PA Rarity ~~ 7",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-GR06.webp?v=1794808699491"
+  },
+  {
+    "id": "BP04-GR07",
+    "name": "Star Swirl the Bearded",
+    "card_type": "Character",
+    "effect_text": "Appear: Each time you add an Event to Hand fren etirement Area, choose 1 Character in_your, Adventure Area it géts)+2lI+1 Inspiration until the end of turn: — » 4., A Noe Roarnon [7 Es",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-GR07.webp?v=1794808700919"
+  },
+  {
+    "id": "BP04-GR08",
+    "name": "Mistmane",
+    "card_type": "Character",
+    "effect_text": "lem = 4 fo _ pu WE Adventure: JER Other Charactersin yor Adyeriture Are et +2 Inspiration until thefe oh dof tn, this Characte etsr=2\"IRspiration until4he.end of turn. > » Unicorn Mistmane yr — ~~ % a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-GR08.webp?v=1794808702378"
+  },
+  {
+    "id": "BP04-GR11",
+    "name": "Somnambula",
+    "card_type": "Character",
+    "effect_text": "pay Vad VV eed Ment id VUAA UREALLY et Ll Baiada iScardglgcardfthat sharX the same type with that carc yon dese, this)Character getsptd. +1 Inspiration until th \" L BS. £3 7 I > Ee",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-GR11.webp?v=1794808707082"
+  },
+  {
+    "id": "BP04-SR02",
+    "name": "Fluttershy",
+    "card_type": "Character",
+    "effect_text": "Deliver Present ¥'* “Appear: e[oci II Charoesey infyou Ydyenture Areafput 「J Fistershys present」 cise a gb Shc c rr a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-SR02.webp?v=1794808766410"
+  },
+  {
+    "id": "BP04-SR03",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "aN AJ » <a ‘Deliver Present i Farewell: QN Pinkie Pie's Present R =0l6 y o. 7,\" haracter infyGur and your Rival's Adventure: Areas. — bl - fa gq Eve Earth Pol ~— = mace. y= (Gi",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-SR03.webp?v=1794808767827"
+  },
+  {
+    "id": "BP04-SR06",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "Ea ry N. EERE CREME) Discard 1 card J Choose}li€haracts your Adventure Area, put 1 onlit. by Hearth's Warming Eve Unicorn Rari 2 ke > Ss Rarity ~ [7",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-SR06.webp?v=1794808772277"
+  },
+  {
+    "id": "BP04-SR08",
+    "name": "Apple Bloom",
+    "card_type": "Character",
+    "effect_text": "il itd WV oS l ON c Adventure: WhenghelRrssent on your l= Apel Inwrappedichoose 1<Characterfin your Adventure: Are = Salinepiration unl the end GH 4 G > =.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-SR08.webp?v=1794808775056"
+  },
+  {
+    "id": "BP04-SR10",
+    "name": "Sweetie Belle",
+    "card_type": "Character",
+    "effect_text": "When nthe Present nton your [ U noni Trappe hoose 1 Character infyourAdy, entlre Areayit * ispltation until the end ofjturn: > “ Hearth's Warming Eve Unicorn Sweetie Belle",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-SR10.webp?v=1794808778053"
+  },
+  {
+    "id": "BP04-SR13",
+    "name": "Trixie",
+    "card_type": "Character",
+    "effect_text": "Appear: Discard 1 card This Charcter gets +2 Inspiration nti the end of turn. Only’use whenithis Character is Adorne jith an 「Pet」 y * Unicorn Trixie i",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-SR13.webp?v=1794808781202"
+  },
+  {
+    "id": "BP04-U02",
+    "name": "Fluttershy",
+    "card_type": "Character",
+    "effect_text": "Appear: Each 「Pet」 in your Adventure Area gets + spiration in Rival's turn.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/BP04-U02.webp?v=1794808785559"
+  },
+  {
+    "id": "SD01A-SR01",
+    "name": "Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "iis Jill there iS any) Owlowisciotsy” in your Adventure Area, choose 1\"Characterwith-Inspiration fordlesslin Rival's Adventure Area-to Retire; ) 1 Nn HH ela er 41 ~ Ves Jr",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01A-SR01.webp?v=1794808847972"
+  },
+  {
+    "id": "SD01B-SR02",
+    "name": "Angel",
+    "card_type": "Character",
+    "effect_text": "Loge er\" CIID Whilesthere jSlany 「Fluttershy」 infyol dventure Area, this Character: geteglinspiratich turn < p= 4",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01B-SR02.webp?v=1794808887748"
+  },
+  {
+    "id": "SD01C-C08",
+    "name": "Feeling Pinkie Keen – Crisis Averted",
+    "card_type": "Story",
+    "effect_text": "When promoted to this stageffchoose 1 ltem) infyour Retirement Area, itfto]Hand. _ NF Feeling Pir Kie een WV I Crisis Averted A",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01C-C08.webp?v=1794808946914"
+  },
+  {
+    "id": "SD01-CR01",
+    "name": "Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "Adventure: Tap Aas he -— - Ae y - a CMD While thererarcyfor more Events in,yoL Stiementi rea, all Characters ingyourrAdventu re Are 2 4 A _. i -_ 1 Ton A A",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-CR01.webp?v=1794808956751"
+  },
+  {
+    "id": "SD01-CR01-S",
+    "name": "Shining Twilight Sparkle (Japanese promo)",
+    "card_type": "Character",
+    "effect_text": "Adventure: Tap Aas he -— - Ae y - a CMD While thererarcyfor more Events in,yoL Stiementi rea, all Characters ingyourrAdventu re Are 2 4 A _. i -_ 1 Ton A A",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-CR01-S.webp?v=1794808959030"
+  },
+  {
+    "id": "SD01-CR02",
+    "name": "Fluttershy",
+    "card_type": "Character",
+    "effect_text": "v Ne gs 「A aw」 { Appear: Ghoosefl Characterwith Costof Force of larmony 2 or less in your Retirement Area,i move it oYAdVentlire Area. ’ ; 5 : a ~ a 「NF」 25 pe ey Uo",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-CR02.webp?v=1794808962673"
+  },
+  {
+    "id": "SD01-CR02-S",
+    "name": "Shining Fluttershy (Japanese promo)",
+    "card_type": "Character",
+    "effect_text": "v Ne gs 「A aw」 { Appear: Ghoosefl Characterwith Costof Force of larmony 2 or less in your Retirement Area,i move it oYAdVentlire Area. ’ ; 5 : a ~ a 「NF」 25 pe ey Uo",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-CR02-S.webp?v=1794808965011"
+  },
+  {
+    "id": "SD01-CR03",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "od F = - i er F I L - — =~ WIN Whileftherelarey? or more Items, in.you etirementiArea, all Characters in'Rival;spAdventure rea’get =illll+1 Inspiration® O97 % 4 NSS 「Ws」. aN: NZE'Sa- 4 Pinkic a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-CR03.webp?v=1794808968632"
+  },
+  {
+    "id": "SD01-CR03-S",
+    "name": "Shining Pinkie Pie (Japanese promo)",
+    "card_type": "Character",
+    "effect_text": "od F = - i er F I L - — =~ WIN Whileftherelarey? or more Items, in.you etirementiArea, all Characters in'Rival;spAdventure rea’get =illll+1 Inspiration® O97 % 4 NSS 「Ws」. aN: NZE'Sa- 4 Pinkic a",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-CR03-S.webp?v=1794808971060"
+  },
+  {
+    "id": "SD01C-SR01",
+    "name": "Pinkie Pie",
+    "card_type": "Character",
+    "effect_text": "r= _- Vy a o % — 07.. EY While there is any Character adorned’ wit tem in your’ Adventure Area, this Character”gets.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01C-SR01.webp?v=1794809000358"
+  },
+  {
+    "id": "SD01C-SR02",
+    "name": "Gummy",
+    "card_type": "Character",
+    "effect_text": "wv N YY =& (( (CUE Drawilicard, discard 1, card... £1 3 Er dl le Gur my ‘Pe t ] 9» 9 Cirimmyv ~ [7",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01C-SR02.webp?v=1794809002588"
+  },
+  {
+    "id": "SD01D-SR01",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "Le AR A AL ON oN hn, Farewell: IR eveal thejtop’2 cards of the Deck, choos Applsjack Il or 「Apple Bloom」 from them; addi ojkland, move thelrest to Retirement Area. h o 8",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01D-SR01.webp?v=1794809032901"
+  },
+  {
+    "id": "SD01D-U04",
+    "name": "Winona",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 1 Scene in your Scene Area, untap it.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01D-U04.webp?v=1794809040059"
+  },
+  {
+    "id": "SD01E-C06",
+    "name": "The Best Young Flyer – Anxious Rainbow Dash",
+    "card_type": "Story",
+    "effect_text": "Jy Y When promoted to this v draw 1 3 J) ; Pa The Best Young Flyer Ny I. a Anxious Rainbow Dash OY ~.",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01E-C06.webp?v=1794809048790"
+  },
+  {
+    "id": "SD01-ER04",
+    "name": "Sweet Apple Acres",
+    "card_type": "Scene",
+    "effect_text": "v y\" NASI Rr = hes I= Al - Ves 4 oo “>=. ) peel “coo Boos Your [‘Applejack] gets +1 Inspiration unt he end of this Contact. SN ZY ory oy",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-ER04.webp?v=1794809086261"
+  },
+  {
+    "id": "SD01-ER04-S",
+    "name": "Shining Sweet Apple Acres (Night)",
+    "card_type": "Scene",
+    "effect_text": "v y\" NASI Rr = hes I= Al - Ves 4 oo “>=. ) peel “coo Boos Your [‘Applejack] gets +1 Inspiration unt he end of this Contact. SN ZY ory oy",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-ER04-S.webp?v=1794809088728"
+  },
+  {
+    "id": "SD01F-SR01",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "AY EAN -- i =: FChoose 1 Event or ltemin)your(Retiremen rea;.add.it to Hand! pr [ al’ Unicorn Rarity AN Rarity ~, [7",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01F-SR01.webp?v=1794809204831"
+  },
+  {
+    "id": "SD01-GR01",
+    "name": "Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "ray, YT “BAY p I-80 Choose 1 Character with:Cost of Force of il armorED」 3 or less in Rival's AdventurerAfeanto'Retire: (a Unicorn Twilight Sparkle CAL Te Lr Sale AEE",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-GR01.webp?v=1794809215483"
+  },
+  {
+    "id": "SD01-SR01",
+    "name": "Twilight Sparkle",
+    "card_type": "Character",
+    "effect_text": "A REE CNG Tap 4Praw. 1 card, discard 1 card. - will { 3 ela 「 」 = 41 ~ Vy YY",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-SR01.webp?v=1794809330756"
+  },
+  {
+    "id": "SD01-SR04",
+    "name": "Applejack",
+    "card_type": "Character",
+    "effect_text": "had ~ dE C— Ji-8 Choose 1 「 Applejack」 in your Retirement Area add it to Hand. J Earth Pony_Applejackt",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-SR04.webp?v=1794809340756"
+  },
+  {
+    "id": "SD01-SR06",
+    "name": "Rarity",
+    "card_type": "Character",
+    "effect_text": "Appear: Choose 1 Character in your Adventure Area; lan +1 Inspiration until the end of turn. bh 4 $l A =. > » L kg is Unicorn Rarity 4 Rarity Ys",
+    "image_url": "https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-SR06.webp?v=1794809347826"
+  }
+]
