@@ -330,7 +330,7 @@ function AppContent() {
               />
             ) : (
               <>
-                {currentTab === 'hub' && <MainHub onMatchJoined={handleMatchJoined} />}
+                {currentTab === 'hub' && <MainHub onMatchJoined={handleMatchJoined} onNavigateTab={handleTabChange} />}
                 {currentTab === 'stable' && (
                   builderConfig ? (
                     <DeckBuilder 
