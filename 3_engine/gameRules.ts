@@ -7,6 +7,7 @@ import {
   SceneCardInPlay,
   StoryStageSlot,
   PendingTargetSelection,
+  AdventureSlot,
 } from './types.js';
 import {
   sanitizeCardText,
@@ -33,6 +34,19 @@ export function secureShuffle<T>(array: T[]): T[] {
   return shuffled;
 }
 
+function createEmptySlot(): AdventureSlot {
+  return {
+    character: null,
+    items: [],
+    inspoBoost: 0,
+    isExhausted: false,
+    treats: 0,
+    hadTreat: false,
+    presents: [],
+    hadPresent: false,
+  };
+}
+
 function createEmptyPlayer(id: '0' | '1', name: string): PlayerState {
   return {
     id,
@@ -53,9 +67,9 @@ function createEmptyPlayer(id: '0' | '1', name: string): PlayerState {
     })),
     storyProgress: 0,
     adventureArea: {
-      left: { character: null, items: [], inspoBoost: 0, isExhausted: false },
-      center: { character: null, items: [], inspoBoost: 0, isExhausted: false },
-      right: { character: null, items: [], inspoBoost: 0, isExhausted: false },
+      left: createEmptySlot(),
+      center: createEmptySlot(),
+      right: createEmptySlot(),
     },
     mulliganStatus: 'PENDING',
     turnsTaken: 0,
@@ -126,9 +140,9 @@ export function startSeatedMatch(
       storyStages,
       storyProgress: 0,
       adventureArea: {
-        left: { character: null, items: [], inspoBoost: 0, isExhausted: false },
-        center: { character: null, items: [], inspoBoost: 0, isExhausted: false },
-        right: { character: null, items: [], inspoBoost: 0, isExhausted: false },
+        left: createEmptySlot(),
+        center: createEmptySlot(),
+        right: createEmptySlot(),
       },
       mulliganStatus: 'PENDING',
       turnsTaken: 0,
@@ -305,6 +319,59 @@ export function resolveMulligan(
   };
 }
 
+function matchesFilter(card: CardDefinition, filter?: string): boolean {
+  if (!filter) return true;
+  const f = filter.trim().toLowerCase();
+  return (
+    String(card.name || '').toLowerCase().includes(f) ||
+    String(card.traits || '').toLowerCase().includes(f) ||
+    String(card.type || '').toLowerCase().includes(f)
+  );
+}
+
+/**
+ * Triggers Adventure Area listeners when a Present is unwrapped (e.g., BP04-SR08, SR09, SR10).
+ */
+function triggerOnPresentUnwrapped(
+  state: KayouGameState,
+  unwrapperPlayerId: '0' | '1'
+): KayouGameState {
+  const player = state.players[unwrapperPlayerId];
+  let workingState = { ...state };
+
+  for (const lane of ['left', 'center', 'right'] as const) {
+    const slot = workingState.players[unwrapperPlayerId].adventureArea[lane];
+    if (!slot.character) continue;
+    const text = sanitizeCardText(slot.character.effectText);
+    if (/when (?:a|the) present.*is unwrapped/i.test(text)) {
+      const boostMatch = text.match(/\+(\d+)\s*Inspiration/i);
+      if (boostMatch) {
+        const boost = parseInt(boostMatch[1], 10) || 1;
+        const p = workingState.players[unwrapperPlayerId];
+        const targetSlot = p.adventureArea[lane];
+        workingState = {
+          ...workingState,
+          players: {
+            ...workingState.players,
+            [unwrapperPlayerId]: {
+              ...p,
+              adventureArea: {
+                ...p.adventureArea,
+                [lane]: {
+                  ...targetSlot,
+                  inspoBoost: targetSlot.inspoBoost + boost,
+                },
+              },
+            },
+          },
+        };
+      }
+    }
+  }
+
+  return workingState;
+}
+
 function buildPendingTargetFromParsed(
   state: KayouGameState,
   playerId: '0' | '1',
@@ -320,7 +387,11 @@ function buildPendingTargetFromParsed(
 
   if (parsed.kind === 'TARGET_BUFF_POWER' && !parsed.isSelfOnly) {
     const validTargets = allLanes
-      .filter((l) => me.adventureArea[l].character !== null)
+      .filter(
+        (l) =>
+          me.adventureArea[l].character !== null &&
+          matchesFilter(me.adventureArea[l].character!, parsed.requiredNameFilter)
+      )
       .map((l) => ({ owner: 'SELF' as const, lane: l }));
     if (validTargets.length === 0) return null;
     return {
@@ -331,6 +402,136 @@ function buildPendingTargetFromParsed(
       value: parsed.amount,
       promptText: `Select one of your Characters to grant +${parsed.amount} Inspiration:`,
       validTargets,
+    };
+  }
+
+  if (parsed.kind === 'TARGET_DEBUFF_OPPONENT') {
+    const validTargets = allLanes
+      .filter((l) => opp.adventureArea[l].character !== null)
+      .map((l) => ({ owner: 'OPPONENT' as const, lane: l }));
+    if (validTargets.length === 0) return null;
+    return {
+      sourceCard,
+      sourceOrigin,
+      sourceLane,
+      effectAction: 'DEBUFF_OPPONENT',
+      value: parsed.amount,
+      promptText: `Select an opponent's Character to give -${parsed.amount} Inspiration:`,
+      validTargets,
+    };
+  }
+
+  if (parsed.kind === 'TREAT_FOR_YOU' && !parsed.isGlobal) {
+    const targets: { owner: 'SELF' | 'OPPONENT'; lane: LaneKey }[] = [];
+    if (parsed.targetSide !== 'OPPONENT') {
+      for (const l of allLanes) {
+        if (
+          me.adventureArea[l].character &&
+          matchesFilter(me.adventureArea[l].character!, parsed.requiredNameFilter)
+        ) {
+          targets.push({ owner: 'SELF', lane: l });
+        }
+      }
+    }
+    if (parsed.targetSide !== 'SELF') {
+      for (const l of allLanes) {
+        if (
+          opp.adventureArea[l].character &&
+          matchesFilter(opp.adventureArea[l].character!, parsed.requiredNameFilter)
+        ) {
+          targets.push({ owner: 'OPPONENT', lane: l });
+        }
+      }
+    }
+    if (targets.length === 0) return null;
+    return {
+      sourceCard,
+      sourceOrigin,
+      sourceLane,
+      effectAction: 'TREAT_CHARACTER',
+      value: parsed.amount,
+      promptText: `Treat for you! Select a Character to receive ${parsed.amount} Treat:`,
+      validTargets: targets,
+    };
+  }
+
+  if (parsed.kind === 'DELIVER_PRESENT' && !parsed.isGlobal) {
+    const targets: { owner: 'SELF' | 'OPPONENT'; lane: LaneKey }[] = [];
+    if (parsed.targetSide !== 'OPPONENT') {
+      for (const l of allLanes) {
+        if (
+          me.adventureArea[l].character &&
+          matchesFilter(me.adventureArea[l].character!, parsed.requiredNameFilter)
+        ) {
+          targets.push({ owner: 'SELF', lane: l });
+        }
+      }
+    }
+    if (parsed.targetSide !== 'SELF') {
+      for (const l of allLanes) {
+        if (
+          opp.adventureArea[l].character &&
+          matchesFilter(opp.adventureArea[l].character!, parsed.requiredNameFilter)
+        ) {
+          targets.push({ owner: 'OPPONENT', lane: l });
+        }
+      }
+    }
+    if (targets.length === 0) return null;
+    return {
+      sourceCard,
+      sourceOrigin,
+      sourceLane,
+      effectAction: 'DELIVER_PRESENT',
+      value: parsed.amount,
+      promptText: `Deliver Present: Select a Character to receive a Present:`,
+      validTargets: targets,
+    };
+  }
+
+  if (parsed.kind === 'UNWRAP_PRESENT') {
+    const targets: { owner: 'SELF' | 'OPPONENT'; lane: LaneKey }[] = [];
+    if (parsed.targetSide !== 'OPPONENT') {
+      for (const l of allLanes) {
+        if (me.adventureArea[l].character && me.adventureArea[l].presents.length > 0) {
+          targets.push({ owner: 'SELF', lane: l });
+        }
+      }
+    }
+    if (parsed.targetSide !== 'SELF') {
+      for (const l of allLanes) {
+        if (opp.adventureArea[l].character && opp.adventureArea[l].presents.length > 0) {
+          targets.push({ owner: 'OPPONENT', lane: l });
+        }
+      }
+    }
+    if (targets.length === 0) return null;
+    return {
+      sourceCard,
+      sourceOrigin,
+      sourceLane,
+      effectAction: 'UNWRAP_PRESENT',
+      value: 1,
+      promptText: `Unwrap Present: Select a Character with a Present to unwrap:`,
+      validTargets: targets,
+    };
+  }
+
+  if (parsed.kind === 'SWITCH_POSITIONS') {
+    const targetOwner = parsed.targetSide === 'OPPONENT' ? 'OPPONENT' : 'SELF';
+    const targetPlayer = targetOwner === 'OPPONENT' ? opp : me;
+    const occupiedLanes = allLanes
+      .filter((l) => targetPlayer.adventureArea[l].character !== null)
+      .map((l) => ({ owner: targetOwner as 'SELF' | 'OPPONENT', lane: l }));
+    if (occupiedLanes.length < 2) return null;
+    return {
+      sourceCard,
+      sourceOrigin,
+      sourceLane,
+      effectAction: 'SWITCH_POSITIONS',
+      value: 1,
+      promptText: `Switch Positions: Select the first Character to swap:`,
+      validTargets: occupiedLanes,
     };
   }
 
@@ -421,9 +622,13 @@ function executeParsedImmediateEffect(
     };
   }
 
-  if (parsed.kind === 'GLOBAL_BUFF_FRIENDLY') {
-    const boost = parsed.amount;
+  if (parsed.kind === 'TREAT_FOR_YOU' && parsed.isGlobal) {
     const adv = player.adventureArea;
+    const applyTreat = (slot: AdventureSlot): AdventureSlot =>
+      slot.character && matchesFilter(slot.character, parsed.requiredNameFilter)
+        ? { ...slot, treats: slot.treats + parsed.amount, hadTreat: true }
+        : slot;
+
     return {
       ...state,
       players: {
@@ -431,9 +636,62 @@ function executeParsedImmediateEffect(
         [playerId]: {
           ...player,
           adventureArea: {
-            left: adv.left.character ? { ...adv.left, inspoBoost: adv.left.inspoBoost + boost } : adv.left,
-            center: adv.center.character ? { ...adv.center, inspoBoost: adv.center.inspoBoost + boost } : adv.center,
-            right: adv.right.character ? { ...adv.right, inspoBoost: adv.right.inspoBoost + boost } : adv.right,
+            left: applyTreat(adv.left),
+            center: applyTreat(adv.center),
+            right: applyTreat(adv.right),
+          },
+        },
+      },
+    };
+  }
+
+  if (parsed.kind === 'DELIVER_PRESENT' && parsed.isGlobal) {
+    let deck = [...player.mainDeck];
+    const adv = { ...player.adventureArea };
+
+    for (const lane of ['left', 'center', 'right'] as const) {
+      const slot = adv[lane];
+      if (slot.character && matchesFilter(slot.character, parsed.requiredNameFilter) && deck.length > 0) {
+        const presentCard = deck.shift()!;
+        adv[lane] = {
+          ...slot,
+          presents: [...slot.presents, presentCard],
+          hadPresent: true,
+        };
+      }
+    }
+
+    return {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          mainDeck: deck,
+          adventureArea: adv,
+        },
+      },
+    };
+  }
+
+  if (parsed.kind === 'GLOBAL_BUFF_FRIENDLY') {
+    const boost = parsed.amount;
+    const adv = player.adventureArea;
+    const applyBuff = (slot: AdventureSlot): AdventureSlot =>
+      slot.character && matchesFilter(slot.character, parsed.requiredNameFilter)
+        ? { ...slot, inspoBoost: slot.inspoBoost + boost }
+        : slot;
+
+    return {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          adventureArea: {
+            left: applyBuff(adv.left),
+            center: applyBuff(adv.center),
+            right: applyBuff(adv.right),
           },
         },
       },
@@ -464,9 +722,6 @@ function executeParsedImmediateEffect(
   return state;
 }
 
-/**
- * Checks for Appear / Farewell effect triggers in card text and executes them completely.
- */
 function executeAppearOrFarewellEffect(
   state: KayouGameState,
   playerId: '0' | '1',
@@ -516,7 +771,9 @@ function executeAppearOrFarewellEffect(
   } else if (parsed.kind === 'TARGET_BUFF_POWER' && !parsed.isSelfOnly) {
     const me = immediateState.players[playerId];
     const validLane = (['left', 'center', 'right'] as LaneKey[]).find(
-      (l) => me.adventureArea[l].character !== null
+      (l) =>
+        me.adventureArea[l].character !== null &&
+        matchesFilter(me.adventureArea[l].character!, parsed.requiredNameFilter)
     );
     if (validLane) {
       const slot = me.adventureArea[validLane];
@@ -553,6 +810,7 @@ function retireCharacterWithFarewell(
 
   const retiringChar = slot.character;
   const retiringItems = [...slot.items];
+  const retiringPresents = [...slot.presents];
 
   let workingState: KayouGameState = {
     ...state,
@@ -560,10 +818,10 @@ function retireCharacterWithFarewell(
       ...state.players,
       [playerId]: {
         ...player,
-        retirement: [...player.retirement, retiringChar, ...retiringItems],
+        retirement: [...player.retirement, retiringChar, ...retiringItems, ...retiringPresents],
         adventureArea: {
           ...player.adventureArea,
-          [lane]: { character: null, items: [], inspoBoost: 0, isExhausted: false },
+          [lane]: createEmptySlot(),
         },
       },
     },
@@ -622,7 +880,6 @@ export function playCardFromHand(
 
   if (normalizedType.includes('character')) {
     const lane: LaneKey = targetLane || 'left';
-    const baseCharName = String(card.name || '').split(/[-–]/)[0].trim().toLowerCase();
 
     let workingState: KayouGameState = {
       ...state,
@@ -636,26 +893,16 @@ export function playCardFromHand(
       },
     };
 
-    for (const l of ['left', 'center', 'right'] as const) {
-      const existing = workingState.players[playerId].adventureArea[l];
-      if (existing.character) {
-        const existingBaseName = String(existing.character.name || '')
-          .split(/[-–]/)[0]
-          .trim()
-          .toLowerCase();
-        if (l === lane || existingBaseName === baseCharName) {
-          workingState = retireCharacterWithFarewell(workingState, playerId, l);
-        }
-      }
+    // Only retire if the specific target lane slot is already occupied (duplicate character names are allowed across lanes)
+    if (workingState.players[playerId].adventureArea[lane].character) {
+      workingState = retireCharacterWithFarewell(workingState, playerId, lane);
     }
 
     const updatedAdv = {
       ...workingState.players[playerId].adventureArea,
       [lane]: {
+        ...createEmptySlot(),
         character: card,
-        items: [],
-        inspoBoost: 0,
-        isExhausted: false,
       },
     };
 
@@ -720,6 +967,7 @@ export function playCardFromHand(
     if (
       targetLane &&
       pending.effectAction !== 'MOVE_FRIENDLY' &&
+      pending.effectAction !== 'SWITCH_POSITIONS' &&
       pending.validTargets.some((t) => t.lane === targetLane)
     ) {
       return resolveTargetSelection(nextState, playerId, pending.validTargets[0].owner, targetLane);
@@ -743,6 +991,7 @@ export function resolveTargetSelection(
   if (state.turnPlayerId !== playerId || !state.pendingTarget) return state;
   const pending = state.pendingTarget;
   const oppId: '0' | '1' = playerId === '0' ? '1' : '0';
+  const targetPlayerId: '0' | '1' = targetOwner === 'SELF' ? playerId : oppId;
 
   if (pending.effectAction === 'MOVE_FRIENDLY' && !pending.selectedFromLane) {
     if (targetOwner !== 'SELF' || !state.players[playerId].adventureArea[targetLane].character) {
@@ -792,6 +1041,54 @@ export function resolveTargetSelection(
     };
   }
 
+  if (pending.effectAction === 'SWITCH_POSITIONS' && !pending.selectedFromLane) {
+    const targetPlayer = state.players[targetPlayerId];
+    if (!targetPlayer.adventureArea[targetLane].character) return state;
+
+    const secondTargets = (['left', 'center', 'right'] as LaneKey[])
+      .filter((l) => l !== targetLane && targetPlayer.adventureArea[l].character !== null)
+      .map((l) => ({ owner: targetOwner, lane: l }));
+
+    return {
+      ...state,
+      pendingTarget: {
+        ...pending,
+        selectedFromLane: targetLane,
+        promptText: `Select the second Character to switch positions with ${
+          targetPlayer.adventureArea[targetLane].character!.name
+        }:`,
+        validTargets: secondTargets,
+      },
+    };
+  }
+
+  if (pending.effectAction === 'SWITCH_POSITIONS' && pending.selectedFromLane) {
+    const laneA = pending.selectedFromLane;
+    const laneB = targetLane;
+    if (laneA === laneB) return state;
+
+    const targetPlayer = state.players[targetPlayerId];
+    const slotA = targetPlayer.adventureArea[laneA];
+    const slotB = targetPlayer.adventureArea[laneB];
+
+    return {
+      ...state,
+      phase: 'MAIN_PHASE',
+      pendingTarget: null,
+      players: {
+        ...state.players,
+        [targetPlayerId]: {
+          ...targetPlayer,
+          adventureArea: {
+            ...targetPlayer.adventureArea,
+            [laneA]: slotB,
+            [laneB]: slotA,
+          },
+        },
+      },
+    };
+  }
+
   if (pending.effectAction === 'BUFF_POWER' && targetOwner === 'SELF') {
     const me = state.players[playerId];
     const slot = me.adventureArea[targetLane];
@@ -815,6 +1112,137 @@ export function resolveTargetSelection(
         },
       },
     };
+  }
+
+  if (pending.effectAction === 'DEBUFF_OPPONENT' && targetOwner === 'OPPONENT') {
+    const opp = state.players[oppId];
+    const slot = opp.adventureArea[targetLane];
+    if (!slot.character) return state;
+
+    return {
+      ...state,
+      phase: 'MAIN_PHASE',
+      pendingTarget: null,
+      players: {
+        ...state.players,
+        [oppId]: {
+          ...opp,
+          adventureArea: {
+            ...opp.adventureArea,
+            [targetLane]: {
+              ...slot,
+              inspoBoost: slot.inspoBoost - pending.value,
+            },
+          },
+        },
+      },
+    };
+  }
+
+  if (pending.effectAction === 'TREAT_CHARACTER') {
+    const targetPlayer = state.players[targetPlayerId];
+    const slot = targetPlayer.adventureArea[targetLane];
+    if (!slot.character) return state;
+
+    return {
+      ...state,
+      phase: 'MAIN_PHASE',
+      pendingTarget: null,
+      players: {
+        ...state.players,
+        [targetPlayerId]: {
+          ...targetPlayer,
+          adventureArea: {
+            ...targetPlayer.adventureArea,
+            [targetLane]: {
+              ...slot,
+              treats: slot.treats + pending.value,
+              hadTreat: true,
+            },
+          },
+        },
+      },
+    };
+  }
+
+  if (pending.effectAction === 'DELIVER_PRESENT') {
+    const me = state.players[playerId];
+    if (me.mainDeck.length === 0) {
+      return { ...state, phase: 'MAIN_PHASE', pendingTarget: null };
+    }
+    const presentCard = me.mainDeck[0];
+    const restDeck = me.mainDeck.slice(1);
+
+    const stateAfterDeck: KayouGameState = {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...me,
+          mainDeck: restDeck,
+        },
+      },
+    };
+
+    const recipient = stateAfterDeck.players[targetPlayerId];
+    const slot = recipient.adventureArea[targetLane];
+    if (!slot.character) {
+      return { ...stateAfterDeck, phase: 'MAIN_PHASE', pendingTarget: null };
+    }
+
+    return {
+      ...stateAfterDeck,
+      phase: 'MAIN_PHASE',
+      pendingTarget: null,
+      players: {
+        ...stateAfterDeck.players,
+        [targetPlayerId]: {
+          ...recipient,
+          adventureArea: {
+            ...recipient.adventureArea,
+            [targetLane]: {
+              ...slot,
+              presents: [...slot.presents, presentCard],
+              hadPresent: true,
+            },
+          },
+        },
+      },
+    };
+  }
+
+  if (pending.effectAction === 'UNWRAP_PRESENT') {
+    const targetPlayer = state.players[targetPlayerId];
+    const slot = targetPlayer.adventureArea[targetLane];
+    if (!slot.character || slot.presents.length === 0) {
+      return { ...state, phase: 'MAIN_PHASE', pendingTarget: null };
+    }
+
+    const unwrappedCard = slot.presents[0];
+    const remainingPresents = slot.presents.slice(1);
+
+    let updatedState: KayouGameState = {
+      ...state,
+      phase: 'MAIN_PHASE',
+      pendingTarget: null,
+      players: {
+        ...state.players,
+        [targetPlayerId]: {
+          ...targetPlayer,
+          retirement: [...targetPlayer.retirement, unwrappedCard],
+          adventureArea: {
+            ...targetPlayer.adventureArea,
+            [targetLane]: {
+              ...slot,
+              presents: remainingPresents,
+            },
+          },
+        },
+      },
+    };
+
+    updatedState = triggerOnPresentUnwrapped(updatedState, targetPlayerId);
+    return updatedState;
   }
 
   if (pending.effectAction === 'READY_FRIENDLY' && targetOwner === 'SELF') {
@@ -1362,6 +1790,10 @@ function executePrePlanEffectAndReturnToHand(
       const drawRes = drawCardsWithDeckOutCheck(workingState, defenderId, 1);
       workingState = drawRes.state;
       effectSummary = `Pre-Plan Triggered: ${workingState.players[defenderId].displayName} drew 1 card!`;
+    } else if (/draw\s+2/i.test(text)) {
+      const drawRes = drawCardsWithDeckOutCheck(workingState, defenderId, 2);
+      workingState = drawRes.state;
+      effectSummary = `Pre-Plan Triggered: ${workingState.players[defenderId].displayName} drew 2 cards!`;
     } else if (
       /retire|remove/i.test(text) &&
       workingState.players[attackerId].adventureArea[activeLane].character

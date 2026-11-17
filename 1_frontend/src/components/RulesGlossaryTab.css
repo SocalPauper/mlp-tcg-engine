@@ -1,0 +1,473 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Nunito:wght@600;700;800;900&display=swap');
+
+.storybook-stage {
+  min-height: calc(100vh - 76px);
+  padding: 28px 18px 48px;
+  background: radial-gradient(circle at 50% 15%, #3b1d5e 0%, #1d1033 55%, #110820 100%);
+  font-family: 'Nunito', sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* Subtle floating sparkles */
+.storybook-stage::before {
+  content: '✦   ✧   ⋆   ✦   ✧   ⋆   ✦';
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  letter-spacing: 28px;
+  color: rgba(255, 215, 0, 0.25);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+/* Top Ribbon Bookmarks */
+.storybook-ribbons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 1120px;
+  width: 100%;
+  margin-bottom: -6px;
+  z-index: 5;
+  padding: 0 24px;
+  box-sizing: border-box;
+}
+
+.ribbon-bookmark {
+  border: none;
+  border-radius: 14px 14px 0 0;
+  padding: 10px 18px 14px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, filter 0.22s ease;
+  box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.28);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transform: translateY(4px);
+}
+
+.ribbon-bookmark:hover {
+  transform: translateY(0px);
+  filter: brightness(1.08);
+}
+
+.ribbon-bookmark.active {
+  transform: translateY(-2px);
+  box-shadow: 0 -6px 18px rgba(255, 215, 0, 0.35);
+  outline: 2px solid #ffd54f;
+}
+
+.ribbon-magic { background: linear-gradient(135deg, #7c4dff, #512da8); }
+.ribbon-honesty { background: linear-gradient(135deg, #fb8c00, #e65100); }
+.ribbon-kindness { background: linear-gradient(135deg, #ec407a, #ad1457); }
+.ribbon-laughter { background: linear-gradient(135deg, #00acc1, #006064); }
+.ribbon-loyalty { background: linear-gradient(135deg, #1e88e5, #0d47a1); }
+.ribbon-generosity { background: linear-gradient(135deg, #9c27b0, #4a148c); }
+
+/* Leather Tome Cover */
+.storybook-cover {
+  max-width: 1160px;
+  width: 100%;
+  background: linear-gradient(145deg, #4a1942 0%, #2e1038 50%, #43163c 100%);
+  border: 4px solid #d4af37;
+  border-radius: 24px;
+  padding: 18px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.65),
+    inset 0 0 24px rgba(255, 215, 0, 0.22);
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* Gold Corner Flourishes */
+.storybook-cover::before,
+.storybook-cover::after {
+  content: '❧';
+  position: absolute;
+  font-size: 26px;
+  color: #ffd54f;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 6;
+}
+
+.storybook-cover::before {
+  top: 6px;
+  left: 12px;
+}
+
+.storybook-cover::after {
+  top: 6px;
+  right: 12px;
+  transform: scaleX(-1);
+}
+
+/* Open Two-Page Spread */
+.storybook-spread {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #fdf8ee;
+  border-radius: 16px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.45);
+  position: relative;
+  min-height: 610px;
+  overflow: hidden;
+}
+
+/* Center Book Spine Shadow */
+.storybook-spread::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 44px;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    90deg,
+    rgba(92, 64, 51, 0) 0%,
+    rgba(92, 64, 51, 0.14) 38%,
+    rgba(45, 26, 18, 0.32) 50%,
+    rgba(92, 64, 51, 0.14) 62%,
+    rgba(92, 64, 51, 0) 100%
+  );
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* Parchment Pages */
+.storybook-page {
+  padding: 30px 34px 28px;
+  color: #3b2645;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.storybook-page-left {
+  background: linear-gradient(90deg, #f5ead6 0%, #fffdf7 12%, #fdf8ee 92%, #efe2cc 100%);
+  border-right: 1px solid rgba(180, 145, 95, 0.35);
+}
+
+.storybook-page-right {
+  background: linear-gradient(90deg, #efe2cc 0%, #fdf8ee 8%, #fffdf7 88%, #f5ead6 100%);
+}
+
+/* Page Flip Animation */
+.page-animate-in {
+  animation: pageTurnGlow 0.35s ease-out;
+}
+
+@keyframes pageTurnGlow {
+  0% {
+    opacity: 0.35;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Illuminated Chapter Headers */
+.chapter-kicker {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #9c27b0;
+  margin-bottom: 4px;
+}
+
+.chapter-title {
+  font-family: 'Cinzel Decorative', 'Nunito', serif;
+  font-size: 24px;
+  font-weight: 900;
+  color: #4a148c;
+  margin: 0 0 10px;
+  line-height: 1.25;
+  border-bottom: 2px solid rgba(212, 175, 55, 0.55);
+  padding-bottom: 10px;
+}
+
+.drop-cap::first-letter {
+  float: left;
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 42px;
+  line-height: 0.85;
+  padding: 4px 10px 2px 0;
+  color: #d81b60;
+  font-weight: 900;
+}
+
+.storybook-prose {
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: #43304d;
+  margin: 0 0 14px;
+}
+
+/* Arcane Search Bar inside Left Page */
+.arcane-search-box {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.arcane-search-input {
+  width: 100%;
+  padding: 10px 38px 10px 14px;
+  border-radius: 12px;
+  border: 2px solid #d7bde2;
+  background: #ffffff;
+  color: #3b2645;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  box-sizing: border-box;
+  box-shadow: inset 0 2px 5px rgba(156, 39, 176, 0.06);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.arcane-search-input:focus {
+  outline: none;
+  border-color: #9c27b0;
+  box-shadow: 0 0 0 3px rgba(156, 39, 176, 0.16);
+}
+
+.arcane-search-clear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #f3e5f5;
+  border: none;
+  color: #7b1fa2;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  font-weight: 900;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Interactive Index List on Left Page */
+.tome-entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 365px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.tome-entry-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tome-entry-list::-webkit-scrollbar-thumb {
+  background: #ce93d8;
+  border-radius: 6px;
+}
+
+.tome-entry-btn {
+  text-align: left;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid #ead7f5;
+  border-radius: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Nunito', sans-serif;
+}
+
+.tome-entry-btn:hover {
+  border-color: #ba68c8;
+  transform: translateX(3px);
+  background: #ffffff;
+}
+
+.tome-entry-btn.selected {
+  border-color: #8e24aa;
+  background: linear-gradient(135deg, #f8eafc, #fff3e0);
+  box-shadow: 0 4px 12px rgba(142, 36, 170, 0.14);
+}
+
+.tome-entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.tome-entry-term {
+  font-weight: 900;
+  font-size: 14.5px;
+  color: #4a148c;
+}
+
+.tome-entry-badge {
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f3e5f5;
+  color: #7b1fa2;
+  white-space: nowrap;
+}
+
+.tome-entry-preview {
+  font-size: 12.5px;
+  color: #634d70;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Right Page Illuminated Scroll Card */
+.illuminated-scroll-box {
+  background: linear-gradient(180deg, #ffffff 0%, #fcf6ea 100%);
+  border: 2px solid #e0c38c;
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 6px 18px rgba(120, 85, 40, 0.08);
+  margin-bottom: 16px;
+}
+
+.illuminated-scroll-box h3 {
+  margin: 0 0 8px;
+  font-size: 19px;
+  font-weight: 900;
+  color: #6a1b9a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ruling-callout {
+  background: #f3e5f5;
+  border-left: 4px solid #9c27b0;
+  border-radius: 0 10px 10px 0;
+  padding: 11px 14px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #4a148c;
+  line-height: 1.5;
+}
+
+.example-callout {
+  background: #fff8e1;
+  border-left: 4px solid #ffb300;
+  border-radius: 0 10px 10px 0;
+  padding: 11px 14px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: #5d4037;
+  line-height: 1.5;
+}
+
+/* Interactive Turn Stepper */
+.turn-stepper-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.turn-step-card {
+  background: #ffffff;
+  border: 2px solid #e1bee7;
+  border-radius: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.turn-step-card.active {
+  border-color: #ff66a3;
+  background: #fff5f9;
+  box-shadow: 0 4px 12px rgba(255, 102, 163, 0.16);
+}
+
+.turn-step-title {
+  font-weight: 900;
+  font-size: 14px;
+  color: #4a148c;
+  display: flex;
+  justify-content: space-between;
+}
+
+.turn-step-desc {
+  font-size: 13px;
+  color: #5c4668;
+  margin: 5px 0 0;
+  line-height: 1.45;
+}
+
+/* Page Footer & Page Turn Controls */
+.storybook-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  margin-top: 14px;
+  border-top: 1px dashed rgba(180, 145, 95, 0.5);
+  font-size: 12px;
+  font-weight: 800;
+  color: #8d6e63;
+}
+
+.page-turn-btn {
+  background: linear-gradient(135deg, #ff66a3, #9c27b0);
+  color: #ffffff;
+  border: none;
+  border-radius: 14px;
+  padding: 7px 14px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 12.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(156, 39, 176, 0.25);
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.page-turn-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.page-turn-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Responsive Single-Page Stack on Tablets / Mobile */
+@media (max-width: 920px) {
+  .storybook-spread {
+    grid-template-columns: 1fr;
+  }
+  .storybook-spread::after {
+    display: none;
+  }
+  .storybook-page-left {
+    border-right: none;
+    border-bottom: 2px dashed rgba(180, 145, 95, 0.45);
+  }
+  .storybook-page {
+    padding: 22px 20px;
+  }
+}

@@ -9,6 +9,7 @@ import StableHub from './components/StableHub';
 import DeckBuilder from './components/DeckBuilder';
 import CollectionBinder from './components/CollectionBinder';
 import ShopView from './components/ShopView';
+import RulesGlossaryTab from './components/RulesGlossaryTab';
 import AdminPanel from './components/AdminPanel';
 import AuthModal from './components/AuthModal';
 import './index.css';
@@ -351,6 +352,7 @@ function AppContent() {
                 {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
                 {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
                 {currentTab === 'fanPage' && <div className="placeholder-tab"><h2>Fan Art & Lore Page Coming Soon</h2></div>}
+                {currentTab === 'rules' && <RulesGlossaryTab />}
                 {currentTab === 'admin' && <AdminPanel />}
               </>
             )

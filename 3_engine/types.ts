@@ -57,6 +57,10 @@ export interface AdventureSlot {
   items: CardDefinition[];
   inspoBoost: number;
   isExhausted: boolean;
+  treats: number;
+  hadTreat: boolean;
+  presents: CardDefinition[];
+  hadPresent: boolean;
 }
 
 export interface PowerModifierLine {
@@ -71,11 +75,22 @@ export interface LanePowerBreakdown {
   totalPower: number;
 }
 
+export type PendingEffectAction =
+  | 'BUFF_POWER'
+  | 'DEBUFF_OPPONENT'
+  | 'RETIRE_OPPONENT'
+  | 'MOVE_FRIENDLY'
+  | 'SWITCH_POSITIONS'
+  | 'READY_FRIENDLY'
+  | 'TREAT_CHARACTER'
+  | 'DELIVER_PRESENT'
+  | 'UNWRAP_PRESENT';
+
 export interface PendingTargetSelection {
   sourceCard: CardDefinition;
   sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT';
   sourceLane?: LaneKey;
-  effectAction: 'BUFF_POWER' | 'RETIRE_OPPONENT' | 'MOVE_FRIENDLY' | 'READY_FRIENDLY';
+  effectAction: PendingEffectAction;
   value: number;
   maxTargetCostOrPower?: number;
   promptText: string;

@@ -78,6 +78,19 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
           >
             🛡️ Admin
           </button>
+		  
+		  <button 
+          className={`nav-tab-btn tab-loyalty ${currentTab === 'fanPage' ? 'active' : ''}`}
+          onClick={() => setCurrentTab('fanPage')}
+        >
+          Fan Page
+        </button>
+        <button 
+          className={`nav-tab-btn tab-magic ${currentTab === 'rules' ? 'active' : ''}`}
+          onClick={() => setCurrentTab('rules')}
+        >
+          📚 Rules & Glossary
+        </button>
         )}
       </div>
 
