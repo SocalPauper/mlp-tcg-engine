@@ -13,5 +13,9 @@
     "pg": "^8.11.3",
     "resend": "^6.37.0",
     "tsx": "^4.7.0"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.5",
+    "tesseract.js": "^7.0.0"
   }
 }

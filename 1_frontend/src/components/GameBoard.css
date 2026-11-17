@@ -990,6 +990,123 @@
   height: 200px;
 }
 
+/* Viewable Retirement Area Container */
+.retirement-pile-zone {
+  cursor: context-menu;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.retirement-pile-zone:hover {
+  transform: scale(1.04);
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.45);
+}
+
+.retirement-inspect-pill {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(17, 24, 39, 0.88);
+  color: #fde047;
+  font-size: 8px;
+  font-weight: 900;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(253, 224, 71, 0.5);
+  white-space: nowrap;
+}
+
+.retirement-viewer-modal {
+  background: linear-gradient(145deg, #241036 0%, #3b0764 100%);
+  border: 3px solid #f472b6;
+  border-radius: 20px;
+  padding: 20px 24px;
+  width: 780px;
+  max-width: 94vw;
+  max-height: 84dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: #fff;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.85);
+}
+
+.retirement-viewer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.16);
+  padding-bottom: 10px;
+}
+
+.retirement-cards-scroll-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+  gap: 14px;
+  overflow-y: auto;
+  padding: 6px 4px;
+}
+
+.retirement-card-entry {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1.5px solid rgba(244, 114, 182, 0.55);
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.retirement-card-entry:hover {
+  transform: translateY(-4px);
+  border-color: #fde047;
+}
+
+.retirement-order-tag {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  background: rgba(17, 24, 39, 0.88);
+  color: #fde047;
+  font-size: 9px;
+  font-weight: 900;
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.retirement-card-entry img {
+  width: 104px;
+  height: 145px;
+  object-fit: fill;
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+
+.retirement-card-entry.story-entry img {
+  width: 118px;
+  height: 84px;
+}
+
+.retirement-card-name {
+  font-size: 11px;
+  font-weight: 800;
+  color: #fbcfe8;
+  text-align: center;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.retirement-card-sub {
+  font-size: 10px;
+  color: #d8b4fe;
+}
+
 /* Plan & Story Reveal Modals */
 .plan-reveal-modal {
   background: linear-gradient(145deg, #241036 0%, #3b0764 100%);

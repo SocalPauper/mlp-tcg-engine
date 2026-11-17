@@ -104,12 +104,19 @@ function doesPassiveTextApplyToCharacter(
   rawText: string,
   character: CardDefinition,
   lane: LaneKey,
-  isOwnersTurn: boolean
+  isOwnersTurn: boolean,
+  ownerPlayer?: PlayerState,
+  isSelfCard = false
 ): number {
   const text = sanitizeCardText(rawText);
   if (!text) return 0;
 
-  if (/Inspo Boost|Inspiration Boost|Adventure\s*:|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted/i.test(text)) {
+  if (
+    /Inspo Boost|Inspiration Boost|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted/i.test(text)
+  ) {
+    return 0;
+  }
+  if (/Adventure\s*:/i.test(text) && !/Adventure\s*:\s*While\b/i.test(text)) {
     return 0;
   }
 
@@ -119,7 +126,20 @@ function doesPassiveTextApplyToCharacter(
   const bonus = parseInt(powerMatch[1], 10) || 0;
   if (bonus <= 0) return 0;
 
-  if (/during your turn/i.test(text) && !isOwnersTurn) {
+  if (/during your turn|in your turn/i.test(text) && !isOwnersTurn) {
+    return 0;
+  }
+
+  // Conditional Retirement check (e.g., "While there is any Item in your Retirement Area")
+  if (/while there is any item in your retirement/i.test(text) && ownerPlayer) {
+    const hasItemInRetirement = ownerPlayer.retirement.some(
+      (c) => String(c.type || '').toLowerCase() === 'item'
+    );
+    if (!hasItemInRetirement) return 0;
+  }
+
+  // Self-only continuous passive ("this Character gets +X")
+  if (/this\s+character\s+gets/i.test(text) && !isSelfCard) {
     return 0;
   }
 
@@ -168,6 +188,23 @@ export function calculateLanePowerBreakdown(
   const modifiers: PowerModifierLine[] = [];
   const isOwnersTurn = state.turnPlayerId === playerId;
 
+  // Check continuous self-passive printed on the character itself
+  const selfBonus = doesPassiveTextApplyToCharacter(
+    character.effectText || '',
+    character,
+    lane,
+    isOwnersTurn,
+    player,
+    true
+  );
+  if (selfBonus > 0) {
+    modifiers.push({
+      sourceName: `Passive: ${character.name}`,
+      sourceType: 'MANE_PASSIVE',
+      amount: selfBonus,
+    });
+  }
+
   for (const item of slot.items) {
     let itemBonus = Number(item.power) || 1;
     const itemText = sanitizeCardText(item.effectText);
@@ -193,7 +230,9 @@ export function calculateLanePowerBreakdown(
       player.leader.effectText || '',
       character,
       lane,
-      isOwnersTurn
+      isOwnersTurn,
+      player,
+      false
     );
     if (leaderBonus > 0) {
       modifiers.push({
@@ -210,7 +249,9 @@ export function calculateLanePowerBreakdown(
       sc.card.effectText || '',
       character,
       lane,
-      isOwnersTurn
+      isOwnersTurn,
+      player,
+      false
     );
     if (scBonus > 0) {
       modifiers.push({
@@ -227,7 +268,9 @@ export function calculateLanePowerBreakdown(
       st.storyCard.effectText || '',
       character,
       lane,
-      isOwnersTurn
+      isOwnersTurn,
+      player,
+      false
     );
     if (stBonus > 0) {
       modifiers.push({
@@ -238,16 +281,18 @@ export function calculateLanePowerBreakdown(
     }
   }
 
-  if (slot.inspoBoost > 0) {
+  if (slot.inspoBoost !== 0) {
     modifiers.push({
-      sourceName: 'Inspiration / Event Boosts',
+      sourceName: slot.inspoBoost > 0 ? 'Inspiration / Event Boosts' : 'Rival Debuffs',
       sourceType: 'INSPO_BOOST',
       amount: slot.inspoBoost,
     });
   }
 
-  const totalPower =
-    basePower + modifiers.reduce((sum, line) => sum + line.amount, 0);
+  const totalPower = Math.max(
+    0,
+    basePower + modifiers.reduce((sum, line) => sum + line.amount, 0)
+  );
 
   return {
     basePower,
@@ -261,6 +306,7 @@ export interface ParsedActivatedEffect {
     | 'DRAW'
     | 'RECOVER_RETIREMENT'
     | 'TARGET_BUFF_POWER'
+    | 'TARGET_DEBUFF_OPPONENT'
     | 'TARGET_RETIRE_OPPONENT'
     | 'TARGET_MOVE_FRIENDLY'
     | 'TARGET_READY_FRIENDLY'
@@ -268,6 +314,7 @@ export interface ParsedActivatedEffect {
   amount: number;
   maxLimit?: number;
   isSelfOnly?: boolean;
+  requiredNameFilter?: string;
 }
 
 /**
@@ -293,11 +340,24 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   const text = sanitizeCardText(clauseText);
   if (!text) return null;
 
+  // Negative Inspiration debuff on Rival character (e.g., "Choose 1 Character in Rival's Adventure Area, it gets -2 Inspiration")
+  const debuffMatch = text.match(/[–-]\s*(\d+)\s*(?:Inspiration|Power)/i);
+  if (debuffMatch && /rival|opponent/i.test(text)) {
+    return {
+      kind: 'TARGET_DEBUFF_OPPONENT',
+      amount: parseInt(debuffMatch[1], 10) || 1,
+    };
+  }
+
   if (/move\s+(?:1\s+of\s+your\s+|a\s+|an?\s+)?(?:friendly\s+)?character/i.test(text)) {
     return { kind: 'TARGET_MOVE_FRIENDLY', amount: 1 };
   }
 
-  if (/retire\s+(?:1\s+of\s+your\s+opponent|an?\s+opponent)/i.test(text)) {
+  if (
+    /retire\s+(?:1\s+of\s+your\s+opponent|an?\s+opponent)|choose\s+1\s+character.*?(?:rival|opponent).*?to\s+retire/i.test(
+      text
+    )
+  ) {
     const limitMatch = text.match(/(?:cost|power|inspiration)\s*(\d+)\s*or\s*less/i);
     return {
       kind: 'TARGET_RETIRE_OPPONENT',
@@ -306,11 +366,15 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  if (/ready\s+(?:1\s+of\s+your\s+|a\s+|an?\s+)?character/i.test(text)) {
+  if (/ready|untap/i.test(text) && /character/i.test(text)) {
     return { kind: 'TARGET_READY_FRIENDLY', amount: 1 };
   }
 
-  if (/from\s+your\s+retirement\s+(?:area\s+|pile\s+)?to\s+your\s+hand/i.test(text)) {
+  if (
+    /from\s+your\s+retirement\s+(?:area\s+|pile\s+)?to\s+(?:your\s+)?hand|in\s+your\s+retirement\s+area,\s*add\s+(?:it|them)\s+to\s+(?:your\s+)?hand/i.test(
+      text
+    )
+  ) {
     return { kind: 'RECOVER_RETIREMENT', amount: 1 };
   }
 
@@ -321,18 +385,22 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     return { kind: 'DRAW', amount: count };
   }
 
-  const globalMatch = text.match(/all\s+(?:of\s+)?your\s+characters?\s+get[s]?\s*\+(\d+)/i);
+  const globalMatch = text.match(
+    /all\s+(?:of\s+)?(?:your\s+)?characters?\s+(?:in\s+your\s+adventure\s+area\s+)?get[s]?\s*\+(\d+)/i
+  );
   if (globalMatch) {
     return { kind: 'GLOBAL_BUFF_FRIENDLY', amount: parseInt(globalMatch[1], 10) || 1 };
   }
 
   const buffMatch = text.match(/\+(\d+)\s*(?:Inspiration|Power)/i);
   if (buffMatch) {
-    const isTargeted = /choose|target|1\s+of\s+your|another/i.test(text);
+    const nameBracket = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
+    const isTargeted = /choose|target|1\s+of\s+your|another/i.test(text) || Boolean(nameBracket);
     return {
       kind: 'TARGET_BUFF_POWER',
       amount: parseInt(buffMatch[1], 10) || 1,
       isSelfOnly: !isTargeted,
+      requiredNameFilter: nameBracket ? nameBracket[1].trim() : undefined,
     };
   }
 

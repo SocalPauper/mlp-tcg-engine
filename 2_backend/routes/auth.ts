@@ -94,9 +94,12 @@ router.post('/register', async (req, res) => {
 
     const newUser = insertResult.rows[0];
 
-    // Seed starter collection in auth.user_cards (all SD01 starter deck cards & Everyday scenes)
+    // Seed starter collection in auth.user_cards (all C, U, R rarities, SD01 starter deck cards, & Everyday scenes)
     const starterCardsRes = await client.query(
-      `SELECT id FROM game.cards WHERE id LIKE 'SD01%' OR element = 'Everyday' OR rarity = 'C'`
+      `SELECT id FROM game.cards
+       WHERE rarity IN ('C', 'U', 'R')
+          OR id LIKE 'SD01%'
+          OR element = 'Everyday'`
     );
     
     for (const card of starterCardsRes.rows) {

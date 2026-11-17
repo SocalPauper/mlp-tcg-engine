@@ -343,6 +343,10 @@ export default function GameBoard({
 }: GameBoardProps) {
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [inspectedCard, setInspectedCard] = useState<CardDefinition | null>(null);
+  const [viewedRetirement, setViewedRetirement] = useState<{
+    ownerName: string;
+    cards: CardDefinition[];
+  } | null>(null);
   const [powerBreakdown, setPowerBreakdown] = useState<PowerBreakdownDetails | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number>(180);
 
@@ -723,20 +727,33 @@ export default function GameBoard({
           </div>
 
           <div
-            className="side-portrait-zone"
-            onContextMenu={(e) =>
-              handleContextMenu(e, player.retirement[player.retirement.length - 1] || null)
-            }
-            onTouchStart={() =>
-              handleTouchStartInspect(player.retirement[player.retirement.length - 1] || null)
-            }
+            className="side-portrait-zone retirement-pile-zone"
+            title="Right-click or long-press to view all cards in Retirement"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setViewedRetirement({
+                ownerName: player.displayName,
+                cards: [...player.retirement].reverse(),
+              });
+            }}
+            onTouchStart={() => {
+              longPressTimer.current = setTimeout(() => {
+                setViewedRetirement({
+                  ownerName: player.displayName,
+                  cards: [...player.retirement].reverse(),
+                });
+              }, 450);
+            }}
             onTouchEnd={handleTouchEndInspect}
           >
             {player.retirement.length > 0 ? (
-              <img
-                src={player.retirement[player.retirement.length - 1].imageUrl}
-                alt="Retirement Top"
-              />
+              <>
+                <img
+                  src={player.retirement[player.retirement.length - 1].imageUrl}
+                  alt="Retirement Top"
+                />
+                <span className="retirement-inspect-pill">🔍 Hold / R-Click</span>
+              </>
             ) : (
               <span className="slot-empty-label">Empty</span>
             )}
@@ -1294,6 +1311,55 @@ export default function GameBoard({
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Viewable Retirement Area Container Modal */}
+      {viewedRetirement && (
+        <div className="inspector-backdrop" onClick={() => setViewedRetirement(null)}>
+          <div
+            className="retirement-viewer-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="retirement-viewer-header">
+              <div>
+                <h3 style={{ margin: 0, color: '#fde047', fontSize: '19px' }}>
+                  🪦 {viewedRetirement.ownerName}&apos;s Retirement Area ({viewedRetirement.cards.length})
+                </h3>
+                <span style={{ fontSize: '12px', color: '#e9d5ff' }}>
+                  Ordered newest (top of pile) to oldest • Click any card to inspect rules text
+                </span>
+              </div>
+              <button
+                type="button"
+                className="action-bar-btn secondary"
+                onClick={() => setViewedRetirement(null)}
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {viewedRetirement.cards.length === 0 ? (
+              <div style={{ padding: '36px', textAlign: 'center', color: '#d8b4fe', fontSize: '14px' }}>
+                No cards in this Retirement Area yet.
+              </div>
+            ) : (
+              <div className="retirement-cards-scroll-grid">
+                {viewedRetirement.cards.map((card, idx) => (
+                  <div
+                    key={`${card.id}-${idx}`}
+                    className={`retirement-card-entry ${isStoryCard(card) ? 'story-entry' : ''}`}
+                    onClick={() => setInspectedCard(card)}
+                  >
+                    <span className="retirement-order-tag">#{viewedRetirement.cards.length - idx}</span>
+                    <img src={card.imageUrl || CARD_BACK_URL} alt={card.name} />
+                    <div className="retirement-card-name">{card.name}</div>
+                    <div className="retirement-card-sub">{card.type}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

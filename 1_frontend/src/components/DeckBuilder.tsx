@@ -361,20 +361,20 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const isCardLocked = (card: Card) => {
     if (/^SD/i.test(card.id) || /^SD/i.test(card.set_code || '')) return false;
 
+    const rarity = String(card.rarity || 'C').toUpperCase();
+    if (['C', 'U', 'R'].includes(rarity) && !card.id.includes('-S')) return false;
+
     const isEverydayScene =
       card.card_type === 'Scene' &&
       (!card.element ||
         card.element.toLowerCase() === 'everyday' ||
         /everyday/i.test(card.name || '') ||
         /-EV/i.test(card.id));
-    if (isEverydayScene) return false;
+    if (isEverydayScene && !card.id.includes('-S')) return false;
 
     if (unlockedCardIds.includes(card.id)) return false;
 
-    const premiumRarities = ['RR', 'CR', 'GR', 'SPR'];
-    if (premiumRarities.includes(card.rarity) || card.id.includes('-S')) return true;
-
-    return false;
+    return true;
   };
 
   const handleContextMenu = (e: React.MouseEvent, card: Card, group: Card[] = []) => {
@@ -963,9 +963,15 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
               )}
               <select value={selectedRarity} onChange={e => setSelectedRarity(e.target.value)} className="rarity-select input-bubble">
                 <option value="ALL">All Rarities</option>
-                <option value="C">Common</option>
-                <option value="SR">Silver Rare</option>
-                <option value="SSR">Super Secret Rare</option>
+                <option value="C">Common (C)</option>
+                <option value="U">Uncommon (U)</option>
+                <option value="R">Rare (R)</option>
+                <option value="SR">Super Rare (SR)</option>
+                <option value="SSR">Super Secret Rare (SSR)</option>
+                <option value="UR">Ultra Rare (UR)</option>
+                <option value="GR">Gold Rare (GR)</option>
+                <option value="CR">Crystal Rare (CR)</option>
+                <option value="SPR">Special Parallel (SPR)</option>
               </select>
 
               <label className="locked-toggle-pill">
