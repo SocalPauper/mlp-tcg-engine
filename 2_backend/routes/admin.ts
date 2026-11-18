@@ -19,18 +19,18 @@ const requireAdmin = async (req: AuthenticatedRequest, res: express.Response, ne
   }
 };
 
-// 1. Search or list users from auth.users (matching exact DBeaver schema columns)
+// 1. Search or list users from auth.users (bulletproof against null fields & schema mismatches)
 router.get('/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   const search = String(req.query.search || '').trim();
   try {
     let query = `
-      SELECT id, username, display_name, email, reward_points, is_admin, is_verified, is_safe_mode, created_at 
+      SELECT id, username, COALESCE(display_name, username) as display_name, email, COALESCE(reward_points, 0) as reward_points, is_admin, is_verified, is_safe_mode, created_at 
       FROM auth.users
     `;
     let params: any[] = [];
 
     if (search) {
-      query += ` WHERE username ILIKE $1 OR display_name ILIKE $1 OR email ILIKE $1`;
+      query += ` WHERE username ILIKE $1 OR COALESCE(display_name, '') ILIKE $1 OR COALESCE(email, '') ILIKE $1`;
       params.push(`%${search}%`);
     }
     query += ` ORDER BY created_at DESC LIMIT 50`;
@@ -38,8 +38,8 @@ router.get('/users', authenticateToken, requireAdmin, async (req: AuthenticatedR
     const { rows } = await pool.query(query, params);
     res.json({ success: true, users: rows });
   } catch (err: any) {
-    console.error('[ADMIN USERS GET ERROR]', err.message);
-    res.status(500).json({ error: err.message });
+    console.error('[ADMIN USERS GET ERROR]', err.message, err.stack);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -60,6 +60,7 @@ router.post('/users/award-points', authenticateToken, requireAdmin, async (req: 
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ success: true, user: rows[0] });
   } catch (err: any) {
+    console.error('[ADMIN AWARD POINTS ERROR]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -93,6 +94,7 @@ router.post('/users/gift-card', authenticateToken, requireAdmin, async (req: Aut
     res.json({ success: true, message: `Successfully gifted ${cardCheck.rows[0].name} (${cardId})!` });
   } catch (err: any) {
     await client.query('ROLLBACK');
+    console.error('[ADMIN GIFT CARD ERROR]', err.message);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
@@ -118,7 +120,7 @@ router.post('/users/moderate', authenticateToken, requireAdmin, async (req: Auth
         updateQuery = `UPDATE auth.users SET is_safe_mode = TRUE, is_verified = FALSE WHERE id = $1 RETURNING id, username`;
         break;
       case 'BAN':
-        updateQuery = `UPDATE auth.users SET is_safe_mode = TRUE, is_verified = FALSE, email = CONCAT('banned_', email) WHERE id = $1 RETURNING id, username`;
+        updateQuery = `UPDATE auth.users SET is_safe_mode = TRUE, is_verified = FALSE WHERE id = $1 RETURNING id, username`;
         break;
       case 'ACTIVE':
         updateQuery = `UPDATE auth.users SET is_safe_mode = FALSE, is_verified = TRUE WHERE id = $1 RETURNING id, username`;
@@ -131,6 +133,7 @@ router.post('/users/moderate', authenticateToken, requireAdmin, async (req: Auth
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ success: true, message: `User ${rows[0].username} status updated to ${action.toUpperCase()}` });
   } catch (err: any) {
+    console.error('[ADMIN MODERATE ERROR]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
