@@ -849,3 +849,48 @@ input:checked + .slider:before { transform: translateX(24px); }
   .unlock-modal { padding: 20px; }
   .unlocked-card-item img { width: 140px; }
 }
+/* Custom Deck Banner Crop & Art Selector Styles */
+.crop-modal-container {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  width: 500px;
+  max-width: 95vw;
+  background: #11141a;
+  border: 1px solid #333c4a;
+  border-radius: 16px;
+  color: #fff;
+}
+
+.crop-preview-box {
+  width: 100%;
+  height: 140px;
+  border-radius: 16px;
+  background-size: cover;
+  border: 3px solid var(--mlp-gold);
+  margin-bottom: 16px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+}
+
+.crop-art-selector-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+  max-width: 100%;
+}
+
+.crop-art-thumb {
+  width: 50px;
+  height: 70px;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  object-fit: fill;
+  transition: transform 0.2s ease;
+}
+
+.crop-art-thumb:hover {
+  transform: scale(1.05);
+}

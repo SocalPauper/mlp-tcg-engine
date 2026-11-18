@@ -61,13 +61,19 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [unlockedCardIds, setUnlockedCardIds] = useState<string[]>([]);
   const [newlyUnlockedCards, setNewlyUnlockedCards] = useState<Card[]>([]);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
-  const [showLockedCards, setShowLockedCards] = useState(true); // Default to true so wishlist cards are visible for building
+  const [showLockedCards, setShowLockedCards] = useState(true);
 
   // Deck Structure States
   const [maneCharacter, setManeCharacter] = useState<Card | null>(null);
   const [storyDeck, setStoryDeck] = useState<Card[]>([]);
   const [sceneDeck, setSceneDeck] = useState<Card[]>([]);
   const [mainDeck, setMainDeck] = useState<Card[]>([]);
+
+  // Banner Art & Crop Modal States
+  const [deckBannerUrl, setDeckBannerUrl] = useState<string>('');
+  const [bannerCrop, setBannerCrop] = useState<string>('center 20%');
+  const [showCropModal, setShowCropModal] = useState(false);
+  const [cropCandidateUrl, setCropCandidateUrl] = useState<string>('');
   
   const [buildPhase, setBuildPhase] = useState<BuildPhase>('MANE');
   const deckElement = maneCharacter?.element || null;
@@ -242,6 +248,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         setStoryDeck(loadedStory);
         setSceneDeck(loadedScene);
         setMainDeck(loadedMain);
+        setDeckBannerUrl(deckData.deck_banner_url || loadedMane?.image_url || '');
+        setBannerCrop(deckData.banner_crop_position || 'center 20%');
 
         const count = (loadedMane ? 1 : 0) + loadedStory.length + loadedScene.length + loadedMain.length;
         if (readOnlyView || count === 70) setShowDeckContents(true);
@@ -383,11 +391,11 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const addCardToDeck = (card: Card) => {
     if (isStarter) return;
     
-    // Wishlist rule: Allow adding unowned cards as missing/wishlist placeholders
     const baseId = card.id.replace('-S', '');
 
     if (buildPhase === 'MANE') {
       setManeCharacter(card);
+      if (!deckBannerUrl) setDeckBannerUrl(card.image_url);
       setHasUnsavedChanges(true);
       if (storyDeck.length === 0) activatePhase('STORY');
     } 
@@ -492,6 +500,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       name: deckName,
       is_public: isPublic,
       mane_character: maneCharacter?.id,
+      deck_banner_url: deckBannerUrl || maneCharacter?.image_url,
+      banner_crop_position: bannerCrop,
       story_deck: storyDeck.map(c => c.id),
       scene_deck: sceneDeck.map(c => c.id),
       main_deck: mainDeck.map(c => c.id)
@@ -599,7 +609,10 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       }
     }
 
-    if (foundMane) setManeCharacter(foundMane);
+    if (foundMane) {
+      setManeCharacter(foundMane);
+      if (!deckBannerUrl) setDeckBannerUrl(foundMane.image_url);
+    }
     if (foundStories.length > 0) setStoryDeck(foundStories.slice(0, 4));
     if (foundScenes.length > 0) setSceneDeck(foundScenes.slice(0, 15));
     if (foundMains.length > 0) setMainDeck(foundMains.slice(0, 50));
@@ -814,6 +827,62 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button className="phase-btn" onClick={() => setImportModalOpen(false)}>Cancel</button>
               <button className="phase-btn active" onClick={handleImportDeck}>Import</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCropModal && (
+        <div className="inspector-overlay" style={{ pointerEvents: 'auto', zIndex: 11000 }}>
+          <div className="inspector-modal" style={{ flexDirection: 'column', padding: '24px', width: '500px', height: 'auto', textAlign: 'center' }}>
+            <h2 style={{ color: '#fff', marginBottom: '12px' }}>Customize Deck Banner Crop</h2>
+            <p style={{ color: '#aaa', fontSize: '12px', marginBottom: '16px' }}>
+              Preview how your deck card banner will look in the Stable. Select alignment or click cards below to change art.
+            </p>
+
+            <div 
+              style={{ 
+                width: '100%', 
+                height: '140px', 
+                borderRadius: '16px', 
+                backgroundImage: `url(${cropCandidateUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: bannerCrop,
+                border: '3px solid var(--mlp-gold)',
+                marginBottom: '16px',
+                boxShadow: '0 8px 25px rgba(0,0,0,0.5)'
+              }} 
+            />
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '20px' }}>
+              {['top', 'center 20%', 'center', 'bottom'].map(pos => (
+                <button
+                  key={pos}
+                  className={`phase-btn ${bannerCrop === pos ? 'active' : ''}`}
+                  onClick={() => setBannerCrop(pos)}
+                  style={{ fontSize: '11px', textTransform: 'capitalize' }}
+                >
+                  {pos.replace(' 20%', '')}
+                </button>
+              ))}
+            </div>
+
+            <p style={{ color: '#fff', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>Select Artwork from Deck:</p>
+            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '20px', maxWidth: '100%' }}>
+              {maneCharacter && (
+                <img src={maneCharacter.image_url} alt="Mane" style={{ width: '50px', height: '70px', borderRadius: '6px', cursor: 'pointer', border: cropCandidateUrl === maneCharacter.image_url ? '2px solid #ffd700' : '2px solid transparent', flexShrink: 0 }} onClick={() => setCropCandidateUrl(maneCharacter.image_url)} />
+              )}
+              {storyDeck.map((c, idx) => (
+                <img key={idx} src={c.image_url} alt="Story" style={{ width: '50px', height: '70px', borderRadius: '6px', cursor: 'pointer', border: cropCandidateUrl === c.image_url ? '2px solid #ffd700' : '2px solid transparent', flexShrink: 0 }} onClick={() => setCropCandidateUrl(c.image_url)} />
+              ))}
+              {sceneDeck.slice(0, 5).map((c, idx) => (
+                <img key={idx} src={c.image_url} alt="Scene" style={{ width: '50px', height: '70px', borderRadius: '6px', cursor: 'pointer', border: cropCandidateUrl === c.image_url ? '2px solid #ffd700' : '2px solid transparent', flexShrink: 0 }} onClick={() => setCropCandidateUrl(c.image_url)} />
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button className="phase-btn" onClick={() => setShowCropModal(false)}>Cancel</button>
+              <button className="phase-btn active" onClick={() => { setDeckBannerUrl(cropCandidateUrl); setShowCropModal(false); setHasUnsavedChanges(true); }}>Apply Art 💾</button>
             </div>
           </div>
         </div>
@@ -1230,6 +1299,35 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             className="deck-name-input input-bubble"
             disabled={isStarter}
           />
+        </div>
+
+        <div style={{ marginBottom: '16px' }}>
+          <label className="deck-name-label">Deck Banner Art 🖼️</label>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div 
+              style={{ 
+                flex: 1, 
+                height: '45px', 
+                borderRadius: '10px', 
+                backgroundImage: `url(${deckBannerUrl || maneCharacter?.image_url || 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp'})`,
+                backgroundSize: 'cover',
+                backgroundPosition: bannerCrop,
+                border: '2px solid var(--mlp-light-purple)'
+              }} 
+            />
+            {!isStarter && (
+              <button 
+                className="phase-btn" 
+                style={{ padding: '10px 14px' }} 
+                onClick={() => {
+                  setCropCandidateUrl(deckBannerUrl || maneCharacter?.image_url || storyDeck[0]?.image_url || '');
+                  setShowCropModal(true);
+                }}
+              >
+                Crop Art ✨
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="deck-visibility-bar">

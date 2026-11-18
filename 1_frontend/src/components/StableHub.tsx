@@ -9,6 +9,7 @@ export interface DeckSummary {
   element: string;
   mane_character: string | null;
   mane_image_url: string;
+  banner_crop_position: string;
   is_starter: boolean;
   is_public: boolean;
   card_count: number;
@@ -136,9 +137,11 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
           element: d.element || maneCard?.element || 'Unaligned',
           mane_character: d.mane_character || maneCard?.id || null,
           mane_image_url:
+            d.deck_banner_url ||
             d.mane_image_url ||
             maneCard?.image_url ||
             'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp',
+          banner_crop_position: d.banner_crop_position || 'center 20%',
           is_starter: isStarter,
           is_public: d.is_public ?? true,
           card_count: totalCount,
@@ -254,7 +257,10 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
                 <div key={deck.id} className="deck-card">
                   <div
                     className="deck-card-banner"
-                    style={{ backgroundImage: `url(${deck.mane_image_url})` }}
+                    style={{
+                      backgroundImage: `url(${deck.mane_image_url})`,
+                      backgroundPosition: deck.banner_crop_position || 'center 20%',
+                    }}
                   >
                     <div className="deck-card-element">{deck.element}</div>
                   </div>
