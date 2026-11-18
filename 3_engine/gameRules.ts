@@ -7,8 +7,9 @@ import {
   SceneCardInPlay,
   StoryStageSlot,
   PendingTargetSelection,
-  AdventureSlot,
+  PendingHandChoice,
   ActionLogEntry,
+  AdventureSlot,
 } from './types.js';
 import {
   sanitizeCardText,
@@ -35,7 +36,7 @@ export function secureShuffle<T>(array: T[]): T[] {
   return shuffled;
 }
 
-function appendLog(
+function appendActionLog(
   state: KayouGameState,
   actor: string,
   text: string,
@@ -176,7 +177,7 @@ export function startSeatedMatch(
     };
   };
 
-  const firstName = firstPlayerId === '0' ? p0Name : p1Name;
+  const firstPlayerName = firstPlayerId === '0' ? p0Name : p1Name;
 
   return {
     roomId: 'active-match',
@@ -200,16 +201,16 @@ export function startSeatedMatch(
     announcements: [
       {
         type: 'SYSTEM',
-        message: `${firstName} won the toss and goes first!`,
+        message: `${firstPlayerName} won the toss and goes first!`,
         timestamp: Date.now(),
       },
     ],
     actionLog: [
       {
-        id: `init-${Date.now()}`,
+        id: `${Date.now()}-init`,
         turn: 1,
         actor: 'System',
-        text: `Match initialized. ${firstName} goes first.`,
+        text: `Match started! ${firstPlayerName} goes first.`,
         category: 'SYSTEM',
         timestamp: Date.now(),
       },
@@ -229,47 +230,35 @@ function drawCardsWithDeckOutCheck(
     const winnerId: '0' | '1' = playerId === '0' ? '1' : '0';
     return {
       deckedOut: true,
-      state: appendLog(
-        {
-          ...state,
-          phase: 'GAME_OVER',
-          winnerId,
-          winReason: `${player.displayName} ran out of cards in their Main Deck (Deck Out)!`,
-          contactState: null,
-          pendingTarget: null,
-          pendingHandChoice: null,
-          pendingLaneQueueAfterReveal: null,
-        },
-        player.displayName,
-        'Ran out of Main Deck cards (Deck Out)!',
-        'SYSTEM'
-      ),
+      state: {
+        ...state,
+        phase: 'GAME_OVER',
+        winnerId,
+        winReason: `${player.displayName} ran out of cards in their Main Deck (Deck Out)!`,
+        contactState: null,
+        pendingTarget: null,
+        pendingHandChoice: null,
+        pendingLaneQueueAfterReveal: null,
+      },
     };
   }
 
   const drawn = player.mainDeck.slice(0, count);
   const restMain = player.mainDeck.slice(count);
 
-  const next = {
-    ...state,
-    players: {
-      ...state.players,
-      [playerId]: {
-        ...player,
-        mainDeck: restMain,
-        hand: [...player.hand, ...drawn],
-      },
-    },
-  };
-
   return {
     deckedOut: false,
-    state: appendLog(
-      next,
-      player.displayName,
-      `Drew ${count} card${count === 1 ? '' : 's'}.`,
-      'EFFECT'
-    ),
+    state: {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          mainDeck: restMain,
+          hand: [...player.hand, ...drawn],
+        },
+      },
+    },
   };
 }
 
@@ -310,22 +299,26 @@ export function resolveMulligan(
     };
   }
 
-  let nextState: KayouGameState = appendLog(
-    {
-      ...state,
-      players: {
-        ...state.players,
-        [playerId]: updatedPlayer,
-      },
+  let workingState: KayouGameState = {
+    ...state,
+    players: {
+      ...state.players,
+      [playerId]: updatedPlayer,
     },
+  };
+
+  workingState = appendActionLog(
+    workingState,
     player.displayName,
-    doMulligan ? 'Mulliganed opening hand for 5 new cards.' : 'Kept opening hand.',
+    doMulligan ? 'performed a full opening hand Mulligan.' : 'kept their opening hand.',
     'SYSTEM'
   );
 
+  const nextPlayers = workingState.players;
+
   if (
-    nextState.players['0'].mulliganStatus !== 'PENDING' &&
-    nextState.players['1'].mulliganStatus !== 'PENDING'
+    nextPlayers['0'].mulliganStatus !== 'PENDING' &&
+    nextPlayers['1'].mulliganStatus !== 'PENDING'
   ) {
     const dealInitialScenes = (p: PlayerState): PlayerState => {
       const topTwo = p.sceneDeck.slice(0, 2);
@@ -347,36 +340,32 @@ export function resolveMulligan(
       };
     };
 
-    const p0Ready = dealInitialScenes(nextState.players['0']);
-    const p1Ready = dealInitialScenes(nextState.players['1']);
-    const firstName = state.firstPlayerId === '0' ? p0Ready.displayName : p1Ready.displayName;
+    const p0Ready = dealInitialScenes(nextPlayers['0']);
+    const p1Ready = dealInitialScenes(nextPlayers['1']);
 
-    return appendLog(
-      {
-        ...nextState,
-        phase: 'MAIN_PHASE',
-        turnPlayerId: state.firstPlayerId,
-        turnNumber: 1,
-        players: {
-          '0': p0Ready,
-          '1': p1Ready,
-        },
-        announcements: [
-          ...nextState.announcements,
-          {
-            type: 'TURN',
-            message: `Turn 1 begins! ${firstName} (First Turn: no draw, no attack).`,
-            timestamp: Date.now(),
-          },
-        ],
+    return {
+      ...workingState,
+      phase: 'MAIN_PHASE',
+      turnPlayerId: state.firstPlayerId,
+      turnNumber: 1,
+      players: {
+        '0': p0Ready,
+        '1': p1Ready,
       },
-      'System',
-      `Turn 1 begins (${firstName}).`,
-      'SYSTEM'
-    );
+      announcements: [
+        ...workingState.announcements,
+        {
+          type: 'TURN',
+          message: `Turn 1 begins! ${
+            state.firstPlayerId === '0' ? p0Ready.displayName : p1Ready.displayName
+          } (First Turn: no draw, no attack).`,
+          timestamp: Date.now(),
+        },
+      ],
+    };
   }
 
-  return nextState;
+  return workingState;
 }
 
 function matchesFilter(card: CardDefinition, filter?: string): boolean {
@@ -405,23 +394,24 @@ function triggerOnPresentUnwrapped(
         const boost = parseInt(boostMatch[1], 10) || 1;
         const p = workingState.players[unwrapperPlayerId];
         const targetSlot = p.adventureArea[lane];
-        workingState = appendLog(
-          {
-            ...workingState,
-            players: {
-              ...workingState.players,
-              [unwrapperPlayerId]: {
-                ...p,
-                adventureArea: {
-                  ...p.adventureArea,
-                  [lane]: {
-                    ...targetSlot,
-                    inspoBoost: targetSlot.inspoBoost + boost,
-                  },
+        workingState = {
+          ...workingState,
+          players: {
+            ...workingState.players,
+            [unwrapperPlayerId]: {
+              ...p,
+              adventureArea: {
+                ...p.adventureArea,
+                [lane]: {
+                  ...targetSlot,
+                  inspoBoost: targetSlot.inspoBoost + boost,
                 },
               },
             },
           },
+        };
+        workingState = appendActionLog(
+          workingState,
           p.displayName,
           `${slot.character.name} gained +${boost} Inspiration from unwrapping a Present!`,
           'EFFECT',
@@ -440,7 +430,8 @@ function buildPendingTargetFromParsed(
   sourceCard: CardDefinition,
   parsed: ParsedActivatedEffect,
   sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT' | 'STORY_PROMOTION',
-  sourceLane?: LaneKey
+  sourceLane?: LaneKey,
+  resumeAttackQueue?: LaneKey[] | null
 ): PendingTargetSelection | null {
   const oppId: '0' | '1' = playerId === '0' ? '1' : '0';
   const me = state.players[playerId];
@@ -462,8 +453,9 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'BUFF_POWER',
       value: parsed.amount,
-      promptText: `Select one of your Characters in your Adventure Area to gain +${parsed.amount} Inspiration:`,
+      promptText: `Select one of your Characters to grant +${parsed.amount} Inspiration:`,
       validTargets,
+      resumeAttackQueue,
     };
   }
 
@@ -478,8 +470,9 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'DEBUFF_OPPONENT',
       value: parsed.amount,
-      promptText: `Select a Rival Character to give -${parsed.amount} Inspiration:`,
+      promptText: `Select an opponent's Character to give -${parsed.amount} Inspiration:`,
       validTargets,
+      resumeAttackQueue,
     };
   }
 
@@ -514,6 +507,7 @@ function buildPendingTargetFromParsed(
       value: parsed.amount,
       promptText: `Treat for you! Select a Character to receive ${parsed.amount} Treat:`,
       validTargets: targets,
+      resumeAttackQueue,
     };
   }
 
@@ -548,6 +542,7 @@ function buildPendingTargetFromParsed(
       value: parsed.amount,
       promptText: `Deliver Present: Select a Character to receive a Present:`,
       validTargets: targets,
+      resumeAttackQueue,
     };
   }
 
@@ -576,6 +571,7 @@ function buildPendingTargetFromParsed(
       value: 1,
       promptText: `Unwrap Present: Select a Character with a Present to unwrap:`,
       validTargets: targets,
+      resumeAttackQueue,
     };
   }
 
@@ -594,6 +590,7 @@ function buildPendingTargetFromParsed(
       value: 1,
       promptText: `Switch Positions: Select the first Character to swap:`,
       validTargets: occupiedLanes,
+      resumeAttackQueue,
     };
   }
 
@@ -617,8 +614,9 @@ function buildPendingTargetFromParsed(
       effectAction: 'RETIRE_OPPONENT',
       value: 1,
       maxTargetCostOrPower: parsed.maxLimit,
-      promptText: `Select a Rival Character in their Adventure Area to Retire:`,
+      promptText: `Select an opponent's Character to move to their Retirement Area:`,
       validTargets,
+      resumeAttackQueue,
     };
   }
 
@@ -633,8 +631,9 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'READY_FRIENDLY',
       value: 1,
-      promptText: `Select a tapped Character in your Adventure Area to Untap:`,
+      promptText: `Select an exhausted Character to Ready (untap):`,
       validTargets,
+      resumeAttackQueue,
     };
   }
 
@@ -649,8 +648,54 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'MOVE_FRIENDLY',
       value: 1,
-      promptText: `Select one of your Characters to move to an empty slot:`,
+      promptText: `Select one of your Characters to move to another lane:`,
       validTargets,
+      resumeAttackQueue,
+    };
+  }
+
+  return null;
+}
+
+function buildPendingHandChoiceFromParsed(
+  state: KayouGameState,
+  playerId: '0' | '1',
+  sourceCard: CardDefinition,
+  parsed: ParsedActivatedEffect,
+  resumeAttackQueue?: LaneKey[] | null
+): PendingHandChoice | null {
+  const player = state.players[playerId];
+
+  if (parsed.kind === 'DRAW_THEN_DISCARD' || parsed.kind === 'DISCARD_HAND') {
+    const discardCount =
+      parsed.kind === 'DRAW_THEN_DISCARD' ? parsed.secondaryAmount || 1 : parsed.amount;
+    if (player.hand.length === 0) return null;
+    const count = Math.min(discardCount, player.hand.length);
+    return {
+      sourceCard,
+      choiceType: 'DISCARD_FROM_HAND',
+      count,
+      promptText: `${sourceCard.name}: Choose ${count} card${
+        count === 1 ? '' : 's'
+      } from your Hand to discard to your Retirement Area:`,
+      candidateCards: player.hand,
+      resumeAttackQueue,
+    };
+  }
+
+  if (parsed.kind === 'RECOVER_RETIREMENT') {
+    const matching = player.retirement.filter((c) => matchesFilter(c, parsed.requiredNameFilter));
+    if (matching.length === 0) return null;
+    return {
+      sourceCard,
+      choiceType: 'RECOVER_FROM_RETIREMENT',
+      count: 1,
+      promptText: `${sourceCard.name}: Choose 1 ${
+        parsed.requiredNameFilter || 'card'
+      } from your Retirement Area to add to your Hand:`,
+      candidateCards: matching,
+      filterLabel: parsed.requiredNameFilter,
+      resumeAttackQueue,
     };
   }
 
@@ -660,184 +705,22 @@ function buildPendingTargetFromParsed(
 function executeParsedImmediateEffect(
   state: KayouGameState,
   playerId: '0' | '1',
-  parsed: ParsedActivatedEffect,
   sourceCard: CardDefinition,
+  parsed: ParsedActivatedEffect,
   sourceLane?: LaneKey
 ): KayouGameState {
   const player = state.players[playerId];
 
-  if (parsed.kind === 'DRAW') {
-    return drawCardsWithDeckOutCheck(state, playerId, parsed.amount).state;
-  }
-
-  // Draw X, then prompt user to select Y cards in Hand to discard
-  if (parsed.kind === 'DRAW_THEN_DISCARD') {
-    const drawRes = drawCardsWithDeckOutCheck(state, playerId, parsed.amount);
-    if (drawRes.deckedOut) return drawRes.state;
-    const updatedPlayer = drawRes.state.players[playerId];
-    const discardCount = Math.min(parsed.secondaryAmount || 1, updatedPlayer.hand.length);
-    if (discardCount <= 0) return drawRes.state;
-
-    return {
-      ...drawRes.state,
-      phase: 'PENDING_HAND_CHOICE',
-      pendingHandChoice: {
-        sourceCard,
-        playerId,
-        action: 'DISCARD_FROM_HAND',
-        count: discardCount,
-        promptText: `${sourceCard.name}: Select ${discardCount} card${discardCount > 1 ? 's' : ''} from your Hand to discard to your Retirement Area:`,
-        sourceLane,
-      },
-    };
-  }
-
-  // Discard X (optional/required), then draw Y
-  if (parsed.kind === 'DISCARD_THEN_DRAW') {
-    if (player.hand.length === 0) return state;
-    const discardCount = Math.min(parsed.amount, player.hand.length);
-    return {
-      ...state,
-      phase: 'PENDING_HAND_CHOICE',
-      pendingHandChoice: {
-        sourceCard,
-        playerId,
-        action: 'DISCARD_FROM_HAND',
-        count: discardCount,
-        promptText: `${sourceCard.name}: Select ${discardCount} card${discardCount > 1 ? 's' : ''} to discard:`,
-        filterName: parsed.requiredNameFilter,
-        sourceLane,
-      },
-    };
-  }
-
-  // Untap up to X Scenes in Scene Area
-  if (parsed.kind === 'UNTAP_SCENES') {
-    let untapped = 0;
-    const updatedScenes = player.sceneArea.map((s) => {
-      if (s.isExhausted && untapped < parsed.amount) {
-        untapped += 1;
-        return { ...s, isExhausted: false };
-      }
-      return s;
-    });
-
-    if (untapped === 0) return state;
-    return appendLog(
-      {
-        ...state,
-        players: {
-          ...state.players,
-          [playerId]: {
-            ...player,
-            sceneArea: updatedScenes,
-          },
-        },
-      },
+  if (parsed.kind === 'DRAW' || parsed.kind === 'DRAW_THEN_DISCARD') {
+    const res = drawCardsWithDeckOutCheck(state, playerId, parsed.amount);
+    if (res.deckedOut) return res.state;
+    return appendActionLog(
+      res.state,
       player.displayName,
-      `${sourceCard.name} untapped ${untapped} Scene${untapped > 1 ? 's' : ''} in Scene Area!`,
+      `drew ${parsed.amount} card${parsed.amount === 1 ? '' : 's'} via ${sourceCard.name}.`,
       'EFFECT',
       sourceCard.name
     );
-  }
-
-  // Reveal top X cards of Main Deck, add matching card to Hand, move rest to Retirement Area
-  if (parsed.kind === 'REVEAL_TOP_PICK_HAND') {
-    const lookCount = Math.min(parsed.amount, player.mainDeck.length);
-    if (lookCount === 0) return state;
-
-    const revealed = player.mainDeck.slice(0, lookCount);
-    const remainingDeck = player.mainDeck.slice(lookCount);
-
-    const matchIdx = revealed.findIndex((c) => {
-      if (parsed.requiredTypeFilter) {
-        return String(c.type || '').toLowerCase().includes(parsed.requiredTypeFilter.toLowerCase());
-      }
-      if (parsed.requiredNameFilter) {
-        return matchesFilter(c, parsed.requiredNameFilter);
-      }
-      return true;
-    });
-
-    if (matchIdx !== -1) {
-      const picked = revealed[matchIdx];
-      const discardedRest = revealed.filter((_, idx) => idx !== matchIdx);
-      return appendLog(
-        {
-          ...state,
-          players: {
-            ...state.players,
-            [playerId]: {
-              ...player,
-              mainDeck: remainingDeck,
-              hand: [...player.hand, picked],
-              retirement: [...player.retirement, ...discardedRest],
-            },
-          },
-        },
-        player.displayName,
-        `${sourceCard.name} revealed top ${lookCount} cards and added ${picked.name} to Hand!`,
-        'EFFECT',
-        sourceCard.name
-      );
-    }
-
-    return appendLog(
-      {
-        ...state,
-        players: {
-          ...state.players,
-          [playerId]: {
-            ...player,
-            mainDeck: remainingDeck,
-            retirement: [...player.retirement, ...revealed],
-          },
-        },
-      },
-      player.displayName,
-      `${sourceCard.name} revealed top ${lookCount} cards (no matching card found; moved to Retirement Area).`,
-      'EFFECT',
-      sourceCard.name
-    );
-  }
-
-  // Recover matching card from Retirement Area to Hand
-  if (parsed.kind === 'RECOVER_RETIREMENT' && player.retirement.length > 0) {
-    let matchIdx = -1;
-    for (let i = player.retirement.length - 1; i >= 0; i--) {
-      const candidate = player.retirement[i];
-      const typeOk =
-        !parsed.requiredTypeFilter ||
-        String(candidate.type || '').toLowerCase().includes(parsed.requiredTypeFilter.toLowerCase());
-      const nameOk =
-        !parsed.requiredNameFilter || matchesFilter(candidate, parsed.requiredNameFilter);
-      if (typeOk && nameOk) {
-        matchIdx = i;
-        break;
-      }
-    }
-
-    if (matchIdx !== -1) {
-      const recovered = player.retirement[matchIdx];
-      const nextRetirement = player.retirement.filter((_, idx) => idx !== matchIdx);
-      return appendLog(
-        {
-          ...state,
-          players: {
-            ...state.players,
-            [playerId]: {
-              ...player,
-              retirement: nextRetirement,
-              hand: [...player.hand, recovered],
-            },
-          },
-        },
-        player.displayName,
-        `${sourceCard.name} returned ${recovered.name} from Retirement Area to Hand!`,
-        'EFFECT',
-        sourceCard.name
-      );
-    }
   }
 
   if (parsed.kind === 'TREAT_FOR_YOU' && parsed.isGlobal) {
@@ -847,23 +730,24 @@ function executeParsedImmediateEffect(
         ? { ...slot, treats: slot.treats + parsed.amount, hadTreat: true }
         : slot;
 
-    return appendLog(
-      {
-        ...state,
-        players: {
-          ...state.players,
-          [playerId]: {
-            ...player,
-            adventureArea: {
-              left: applyTreat(adv.left),
-              center: applyTreat(adv.center),
-              right: applyTreat(adv.right),
-            },
+    const next = {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          adventureArea: {
+            left: applyTreat(adv.left),
+            center: applyTreat(adv.center),
+            right: applyTreat(adv.right),
           },
         },
       },
+    };
+    return appendActionLog(
+      next,
       player.displayName,
-      `${sourceCard.name} placed ${parsed.amount} Treat on matching Characters!`,
+      `placed ${parsed.amount} Treat on matching Characters via ${sourceCard.name}.`,
       'EFFECT',
       sourceCard.name
     );
@@ -885,20 +769,21 @@ function executeParsedImmediateEffect(
       }
     }
 
-    return appendLog(
-      {
-        ...state,
-        players: {
-          ...state.players,
-          [playerId]: {
-            ...player,
-            mainDeck: deck,
-            adventureArea: adv,
-          },
+    const next = {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          mainDeck: deck,
+          adventureArea: adv,
         },
       },
+    };
+    return appendActionLog(
+      next,
       player.displayName,
-      `${sourceCard.name} delivered Presents to matching Characters!`,
+      `delivered Presents to matching Characters via ${sourceCard.name}.`,
       'EFFECT',
       sourceCard.name
     );
@@ -912,23 +797,24 @@ function executeParsedImmediateEffect(
         ? { ...slot, inspoBoost: slot.inspoBoost + boost }
         : slot;
 
-    return appendLog(
-      {
-        ...state,
-        players: {
-          ...state.players,
-          [playerId]: {
-            ...player,
-            adventureArea: {
-              left: applyBuff(adv.left),
-              center: applyBuff(adv.center),
-              right: applyBuff(adv.right),
-            },
+    const next = {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          adventureArea: {
+            left: applyBuff(adv.left),
+            center: applyBuff(adv.center),
+            right: applyBuff(adv.right),
           },
         },
       },
+    };
+    return appendActionLog(
+      next,
       player.displayName,
-      `${sourceCard.name} granted +${boost} Inspiration to matching Characters!`,
+      `granted +${boost} Inspiration to matching Characters via ${sourceCard.name}.`,
       'EFFECT',
       sourceCard.name
     );
@@ -937,25 +823,26 @@ function executeParsedImmediateEffect(
   if (parsed.kind === 'TARGET_BUFF_POWER' && parsed.isSelfOnly && sourceLane) {
     const slot = player.adventureArea[sourceLane];
     if (!slot.character) return state;
-    return appendLog(
-      {
-        ...state,
-        players: {
-          ...state.players,
-          [playerId]: {
-            ...player,
-            adventureArea: {
-              ...player.adventureArea,
-              [sourceLane]: {
-                ...slot,
-                inspoBoost: slot.inspoBoost + parsed.amount,
-              },
+    const next = {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          adventureArea: {
+            ...player.adventureArea,
+            [sourceLane]: {
+              ...slot,
+              inspoBoost: slot.inspoBoost + parsed.amount,
             },
           },
         },
       },
+    };
+    return appendActionLog(
+      next,
       player.displayName,
-      `${sourceCard.name} gained +${parsed.amount} Inspiration!`,
+      `${slot.character.name} gained +${parsed.amount} Inspiration.`,
       'EFFECT',
       sourceCard.name
     );
@@ -977,17 +864,24 @@ function executeAppearOrFarewellEffect(
   const parsed = parseEffectClause(subText);
   if (!parsed) return state;
 
-  let workingState = appendLog(
+  let workingState = appendActionLog(
     state,
     state.players[playerId].displayName,
-    `${card.name} triggered ${type}: ${subText}`,
+    `${type} ability triggered on ${card.name}: ${subText}`,
     'EFFECT',
     card.name
   );
 
-  workingState = executeParsedImmediateEffect(workingState, playerId, parsed, card, lane);
-  if (workingState.phase === 'PENDING_HAND_CHOICE' || workingState.phase === 'GAME_OVER') {
-    return workingState;
+  workingState = executeParsedImmediateEffect(workingState, playerId, card, parsed, lane);
+  if (workingState.phase === 'GAME_OVER') return workingState;
+
+  const handChoice = buildPendingHandChoiceFromParsed(workingState, playerId, card, parsed);
+  if (handChoice) {
+    return {
+      ...workingState,
+      phase: 'PENDING_HAND_CHOICE',
+      pendingHandChoice: handChoice,
+    };
   }
 
   if (workingState.turnPlayerId === playerId && workingState.phase === 'MAIN_PHASE') {
@@ -1065,23 +959,25 @@ function retireCharacterWithFarewell(
   const retiringItems = [...slot.items];
   const retiringPresents = [...slot.presents];
 
-  let workingState: KayouGameState = appendLog(
-    {
-      ...state,
-      players: {
-        ...state.players,
-        [playerId]: {
-          ...player,
-          retirement: [...player.retirement, retiringChar, ...retiringItems, ...retiringPresents],
-          adventureArea: {
-            ...player.adventureArea,
-            [lane]: createEmptySlot(),
-          },
+  let workingState: KayouGameState = {
+    ...state,
+    players: {
+      ...state.players,
+      [playerId]: {
+        ...player,
+        retirement: [...player.retirement, retiringChar, ...retiringItems, ...retiringPresents],
+        adventureArea: {
+          ...player.adventureArea,
+          [lane]: createEmptySlot(),
         },
       },
     },
+  };
+
+  workingState = appendActionLog(
+    workingState,
     player.displayName,
-    `${retiringChar.name} retired from ${lane.toUpperCase()} lane to Retirement Area.`,
+    `${retiringChar.name} (${lane.toUpperCase()} lane) moved to Retirement Area.`,
     'PLAY',
     retiringChar.name
   );
@@ -1094,7 +990,7 @@ function buildPendingTargetFromEffect(
   state: KayouGameState,
   playerId: '0' | '1',
   sourceCard: CardDefinition,
-  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT' | 'STORY_PROMOTION',
+  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT',
   sourceLane?: LaneKey
 ): PendingTargetSelection | null {
   const parsed = parseActivatedCardEffect(sourceCard);
@@ -1107,7 +1003,7 @@ function executeImmediateActivatedEffect(
   sourceCard: CardDefinition
 ): KayouGameState {
   const parsed = parseActivatedCardEffect(sourceCard);
-  return executeParsedImmediateEffect(state, playerId, parsed, sourceCard);
+  return executeParsedImmediateEffect(state, playerId, sourceCard, parsed);
 }
 
 export function playCardFromHand(
@@ -1140,23 +1036,17 @@ export function playCardFromHand(
   if (normalizedType.includes('character')) {
     const lane: LaneKey = targetLane || 'left';
 
-    let workingState: KayouGameState = appendLog(
-      {
-        ...state,
-        players: {
-          ...state.players,
-          [playerId]: {
-            ...player,
-            hand: newHand,
-            sceneArea: updatedSceneArea,
-          },
+    let workingState: KayouGameState = {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          hand: newHand,
+          sceneArea: updatedSceneArea,
         },
       },
-      player.displayName,
-      `Played ${card.name} to ${lane.toUpperCase()} lane (Cost: ${effectiveCost} Force of Harmony).`,
-      'PLAY',
-      card.name
-    );
+    };
 
     if (workingState.players[playerId].adventureArea[lane].character) {
       workingState = retireCharacterWithFarewell(workingState, playerId, lane);
@@ -1181,6 +1071,14 @@ export function playCardFromHand(
       },
     };
 
+    workingState = appendActionLog(
+      workingState,
+      player.displayName,
+      `played ${card.name} to the ${lane.toUpperCase()} lane (Cost: ${effectiveCost} Force of Harmony).`,
+      'PLAY',
+      card.name
+    );
+
     workingState = executeAppearOrFarewellEffect(workingState, playerId, card, lane, 'Appear');
     return workingState;
   }
@@ -1192,35 +1090,7 @@ export function playCardFromHand(
 
     const replacedItems = currentSlot.items.length > 0 ? [...currentSlot.items] : [];
 
-    return appendLog(
-      {
-        ...state,
-        players: {
-          ...state.players,
-          [playerId]: {
-            ...player,
-            hand: newHand,
-            sceneArea: updatedSceneArea,
-            retirement: [...player.retirement, ...replacedItems],
-            adventureArea: {
-              ...player.adventureArea,
-              [lane]: {
-                ...currentSlot,
-                items: [card],
-              },
-            },
-          },
-        },
-      },
-      player.displayName,
-      `Adorned ${currentSlot.character.name} with Item: ${card.name}.`,
-      'PLAY',
-      card.name
-    );
-  }
-
-  let nextState: KayouGameState = appendLog(
-    {
+    let nextState: KayouGameState = {
       ...state,
       players: {
         ...state.players,
@@ -1228,17 +1098,62 @@ export function playCardFromHand(
           ...player,
           hand: newHand,
           sceneArea: updatedSceneArea,
-          retirement: [...player.retirement, card],
+          retirement: [...player.retirement, ...replacedItems],
+          adventureArea: {
+            ...player.adventureArea,
+            [lane]: {
+              ...currentSlot,
+              items: [card],
+            },
+          },
         },
       },
+    };
+
+    return appendActionLog(
+      nextState,
+      player.displayName,
+      `adorned ${currentSlot.character.name} with Item ${card.name} (Cost: ${effectiveCost}).`,
+      'PLAY',
+      card.name
+    );
+  }
+
+  let nextState: KayouGameState = {
+    ...state,
+    players: {
+      ...state.players,
+      [playerId]: {
+        ...player,
+        hand: newHand,
+        sceneArea: updatedSceneArea,
+        retirement: [...player.retirement, card],
+      },
     },
+  };
+
+  nextState = appendActionLog(
+    nextState,
     player.displayName,
-    `Played Event: ${card.name}.`,
+    `played Event ${card.name} (Cost: ${effectiveCost} Force of Harmony).`,
     'PLAY',
     card.name
   );
 
-  const pending = buildPendingTargetFromEffect(nextState, playerId, card, 'HAND_EVENT');
+  const parsed = parseActivatedCardEffect(card);
+  const immediateState = executeParsedImmediateEffect(nextState, playerId, card, parsed);
+  if (immediateState.phase === 'GAME_OVER') return immediateState;
+
+  const handChoice = buildPendingHandChoiceFromParsed(immediateState, playerId, card, parsed);
+  if (handChoice) {
+    return {
+      ...immediateState,
+      phase: 'PENDING_HAND_CHOICE',
+      pendingHandChoice: handChoice,
+    };
+  }
+
+  const pending = buildPendingTargetFromEffect(immediateState, playerId, card, 'HAND_EVENT');
   if (pending) {
     if (
       targetLane &&
@@ -1246,67 +1161,103 @@ export function playCardFromHand(
       pending.effectAction !== 'SWITCH_POSITIONS' &&
       pending.validTargets.some((t) => t.lane === targetLane)
     ) {
-      return resolveTargetSelection(nextState, playerId, pending.validTargets[0].owner, targetLane);
+      return resolveTargetSelection(immediateState, playerId, pending.validTargets[0].owner, targetLane);
     }
     return {
-      ...nextState,
+      ...immediateState,
       phase: 'PENDING_TARGET',
       pendingTarget: pending,
     };
   }
 
-  return executeImmediateActivatedEffect(nextState, playerId, card);
+  return immediateState;
 }
 
-export function resolveHandCardChoice(
+export function resolveHandChoice(
   state: KayouGameState,
   playerId: '0' | '1',
   selectedIndices: number[]
 ): KayouGameState {
   if (state.phase !== 'PENDING_HAND_CHOICE' || !state.pendingHandChoice) return state;
+  if (state.turnPlayerId !== playerId) return state;
+
   const choice = state.pendingHandChoice;
-  if (choice.playerId !== playerId) return state;
-
   const player = state.players[playerId];
-  const uniqueValidIndices = Array.from(new Set(selectedIndices))
-    .filter((i) => i >= 0 && i < player.hand.length)
-    .slice(0, choice.count);
+  const uniqueIndices = Array.from(new Set(selectedIndices)).filter(
+    (idx) => idx >= 0 && idx < choice.candidateCards.length
+  );
 
-  if (uniqueValidIndices.length < Math.min(choice.count, player.hand.length)) {
-    return state;
-  }
+  if (uniqueIndices.length === 0) return state;
 
-  const discardedCards = uniqueValidIndices.map((i) => player.hand[i]);
-  const remainingHand = player.hand.filter((_, i) => !uniqueValidIndices.includes(i));
-  const discardedNames = discardedCards.map((c) => c.name).join(', ');
+  let workingState = { ...state };
+  const resumeQueue = choice.resumeAttackQueue;
 
-  let nextState: KayouGameState = appendLog(
-    {
-      ...state,
+  if (choice.choiceType === 'DISCARD_FROM_HAND') {
+    const selectedSet = new Set(uniqueIndices);
+    const discardedCards = player.hand.filter((_, idx) => selectedSet.has(idx));
+    const remainingHand = player.hand.filter((_, idx) => !selectedSet.has(idx));
+
+    workingState = {
+      ...workingState,
       phase: 'MAIN_PHASE',
       pendingHandChoice: null,
       players: {
-        ...state.players,
+        ...workingState.players,
         [playerId]: {
           ...player,
           hand: remainingHand,
           retirement: [...player.retirement, ...discardedCards],
         },
       },
-    },
-    player.displayName,
-    `Discarded ${discardedNames} to Retirement Area (${choice.sourceCard.name}).`,
-    'EFFECT',
-    choice.sourceCard.name
-  );
+    };
 
-  // If this was a "Discard X, draw Y" card, draw the cards now
-  const parsed = parseEffectClause(choice.sourceCard.effectText);
-  if (parsed?.kind === 'DISCARD_THEN_DRAW' && parsed.secondaryAmount) {
-    nextState = drawCardsWithDeckOutCheck(nextState, playerId, parsed.secondaryAmount).state;
+    workingState = appendActionLog(
+      workingState,
+      player.displayName,
+      `discarded ${discardedCards.map((c) => c.name).join(', ')} to Retirement Area.`,
+      'EFFECT',
+      choice.sourceCard.name
+    );
+  } else if (choice.choiceType === 'RECOVER_FROM_RETIREMENT') {
+    const chosenCard = choice.candidateCards[uniqueIndices[0]];
+    const retIdx = player.retirement.findIndex((c) => c.id === chosenCard.id);
+    if (retIdx === -1) {
+      return { ...state, phase: 'MAIN_PHASE', pendingHandChoice: null };
+    }
+    const nextRetirement = [...player.retirement];
+    nextRetirement.splice(retIdx, 1);
+
+    workingState = {
+      ...workingState,
+      phase: 'MAIN_PHASE',
+      pendingHandChoice: null,
+      players: {
+        ...workingState.players,
+        [playerId]: {
+          ...player,
+          retirement: nextRetirement,
+          hand: [...player.hand, chosenCard],
+        },
+      },
+    };
+
+    workingState = appendActionLog(
+      workingState,
+      player.displayName,
+      `recovered ${chosenCard.name} from Retirement Area to Hand.`,
+      'EFFECT',
+      choice.sourceCard.name
+    );
   }
 
-  return nextState;
+  if (resumeQueue && resumeQueue.length > 0) {
+    return advanceToNextAttackLane(workingState, playerId, resumeQueue);
+  }
+  if (resumeQueue && resumeQueue.length === 0) {
+    return endTurn(workingState, playerId);
+  }
+
+  return workingState;
 }
 
 export function resolveTargetSelection(
@@ -1319,6 +1270,17 @@ export function resolveTargetSelection(
   const pending = state.pendingTarget;
   const oppId: '0' | '1' = playerId === '0' ? '1' : '0';
   const targetPlayerId: '0' | '1' = targetOwner === 'SELF' ? playerId : oppId;
+  const resumeQueue = pending.resumeAttackQueue;
+
+  const finishAndResume = (nextState: KayouGameState): KayouGameState => {
+    if (resumeQueue && resumeQueue.length > 0) {
+      return advanceToNextAttackLane(nextState, playerId, resumeQueue);
+    }
+    if (resumeQueue && resumeQueue.length === 0) {
+      return endTurn(nextState, playerId);
+    }
+    return nextState;
+  };
 
   if (pending.effectAction === 'MOVE_FRIENDLY' && !pending.selectedFromLane) {
     if (targetOwner !== 'SELF' || !state.players[playerId].adventureArea[targetLane].character) {
@@ -1333,7 +1295,7 @@ export function resolveTargetSelection(
       pendingTarget: {
         ...pending,
         selectedFromLane: targetLane,
-        promptText: `Select destination slot to move ${
+        promptText: `Select destination lane to move ${
           state.players[playerId].adventureArea[targetLane].character!.name
         } to:`,
         validTargets: destinations,
@@ -1350,7 +1312,7 @@ export function resolveTargetSelection(
     const fromSlot = me.adventureArea[fromLane];
     const toSlot = me.adventureArea[toLane];
 
-    return appendLog(
+    const next = appendActionLog(
       {
         ...state,
         phase: 'MAIN_PHASE',
@@ -1368,10 +1330,11 @@ export function resolveTargetSelection(
         },
       },
       me.displayName,
-      `Moved ${fromSlot.character?.name || 'Character'} from ${fromLane.toUpperCase()} to ${toLane.toUpperCase()} lane.`,
+      `moved ${fromSlot.character?.name || 'Character'} from ${fromLane.toUpperCase()} to ${toLane.toUpperCase()} lane.`,
       'EFFECT',
       pending.sourceCard.name
     );
+    return finishAndResume(next);
   }
 
   if (pending.effectAction === 'SWITCH_POSITIONS' && !pending.selectedFromLane) {
@@ -1404,7 +1367,7 @@ export function resolveTargetSelection(
     const slotA = targetPlayer.adventureArea[laneA];
     const slotB = targetPlayer.adventureArea[laneB];
 
-    return appendLog(
+    const next = appendActionLog(
       {
         ...state,
         phase: 'MAIN_PHASE',
@@ -1422,10 +1385,11 @@ export function resolveTargetSelection(
         },
       },
       state.players[playerId].displayName,
-      `Switched positions between ${slotA.character?.name} and ${slotB.character?.name}.`,
+      `switched positions of Characters in ${laneA.toUpperCase()} and ${laneB.toUpperCase()} lanes.`,
       'EFFECT',
       pending.sourceCard.name
     );
+    return finishAndResume(next);
   }
 
   if (pending.effectAction === 'BUFF_POWER' && targetOwner === 'SELF') {
@@ -1433,7 +1397,7 @@ export function resolveTargetSelection(
     const slot = me.adventureArea[targetLane];
     if (!slot.character) return state;
 
-    return appendLog(
+    const next = appendActionLog(
       {
         ...state,
         phase: 'MAIN_PHASE',
@@ -1453,10 +1417,11 @@ export function resolveTargetSelection(
         },
       },
       me.displayName,
-      `Granted +${pending.value} Inspiration to ${slot.character.name} (${pending.sourceCard.name}).`,
+      `granted +${pending.value} Inspiration to ${slot.character.name} (${targetLane.toUpperCase()} lane).`,
       'EFFECT',
       pending.sourceCard.name
     );
+    return finishAndResume(next);
   }
 
   if (pending.effectAction === 'DEBUFF_OPPONENT' && targetOwner === 'OPPONENT') {
@@ -1464,7 +1429,7 @@ export function resolveTargetSelection(
     const slot = opp.adventureArea[targetLane];
     if (!slot.character) return state;
 
-    return appendLog(
+    const next = appendActionLog(
       {
         ...state,
         phase: 'MAIN_PHASE',
@@ -1484,10 +1449,11 @@ export function resolveTargetSelection(
         },
       },
       state.players[playerId].displayName,
-      `Applied -${pending.value} Inspiration to Rival's ${slot.character.name}.`,
+      `applied -${pending.value} Inspiration to rival's ${slot.character.name}.`,
       'EFFECT',
       pending.sourceCard.name
     );
+    return finishAndResume(next);
   }
 
   if (pending.effectAction === 'TREAT_CHARACTER') {
@@ -1495,7 +1461,7 @@ export function resolveTargetSelection(
     const slot = targetPlayer.adventureArea[targetLane];
     if (!slot.character) return state;
 
-    return appendLog(
+    const next = appendActionLog(
       {
         ...state,
         phase: 'MAIN_PHASE',
@@ -1516,16 +1482,17 @@ export function resolveTargetSelection(
         },
       },
       state.players[playerId].displayName,
-      `Placed ${pending.value} Treat on ${slot.character.name}.`,
+      `placed ${pending.value} Treat on ${slot.character.name}.`,
       'EFFECT',
       pending.sourceCard.name
     );
+    return finishAndResume(next);
   }
 
   if (pending.effectAction === 'DELIVER_PRESENT') {
     const me = state.players[playerId];
     if (me.mainDeck.length === 0) {
-      return { ...state, phase: 'MAIN_PHASE', pendingTarget: null };
+      return finishAndResume({ ...state, phase: 'MAIN_PHASE', pendingTarget: null });
     }
     const presentCard = me.mainDeck[0];
     const restDeck = me.mainDeck.slice(1);
@@ -1544,10 +1511,10 @@ export function resolveTargetSelection(
     const recipient = stateAfterDeck.players[targetPlayerId];
     const slot = recipient.adventureArea[targetLane];
     if (!slot.character) {
-      return { ...stateAfterDeck, phase: 'MAIN_PHASE', pendingTarget: null };
+      return finishAndResume({ ...stateAfterDeck, phase: 'MAIN_PHASE', pendingTarget: null });
     }
 
-    return appendLog(
+    const next = appendActionLog(
       {
         ...stateAfterDeck,
         phase: 'MAIN_PHASE',
@@ -1568,50 +1535,45 @@ export function resolveTargetSelection(
         },
       },
       me.displayName,
-      `Delivered a Present to ${slot.character.name}.`,
+      `delivered a Present to ${slot.character.name}.`,
       'EFFECT',
       pending.sourceCard.name
     );
+    return finishAndResume(next);
   }
 
   if (pending.effectAction === 'UNWRAP_PRESENT') {
     const targetPlayer = state.players[targetPlayerId];
     const slot = targetPlayer.adventureArea[targetLane];
     if (!slot.character || slot.presents.length === 0) {
-      return { ...state, phase: 'MAIN_PHASE', pendingTarget: null };
+      return finishAndResume({ ...state, phase: 'MAIN_PHASE', pendingTarget: null });
     }
 
     const unwrappedCard = slot.presents[0];
     const remainingPresents = slot.presents.slice(1);
 
-    let updatedState: KayouGameState = appendLog(
-      {
-        ...state,
-        phase: 'MAIN_PHASE',
-        pendingTarget: null,
-        players: {
-          ...state.players,
-          [targetPlayerId]: {
-            ...targetPlayer,
-            retirement: [...targetPlayer.retirement, unwrappedCard],
-            adventureArea: {
-              ...targetPlayer.adventureArea,
-              [targetLane]: {
-                ...slot,
-                presents: remainingPresents,
-              },
+    let updatedState: KayouGameState = {
+      ...state,
+      phase: 'MAIN_PHASE',
+      pendingTarget: null,
+      players: {
+        ...state.players,
+        [targetPlayerId]: {
+          ...targetPlayer,
+          retirement: [...targetPlayer.retirement, unwrappedCard],
+          adventureArea: {
+            ...targetPlayer.adventureArea,
+            [targetLane]: {
+              ...slot,
+              presents: remainingPresents,
             },
           },
         },
       },
-      state.players[playerId].displayName,
-      `Unwrapped Present on ${slot.character.name}!`,
-      'EFFECT',
-      pending.sourceCard.name
-    );
+    };
 
     updatedState = triggerOnPresentUnwrapped(updatedState, targetPlayerId);
-    return updatedState;
+    return finishAndResume(updatedState);
   }
 
   if (pending.effectAction === 'READY_FRIENDLY' && targetOwner === 'SELF') {
@@ -1619,7 +1581,7 @@ export function resolveTargetSelection(
     const slot = me.adventureArea[targetLane];
     if (!slot.character) return state;
 
-    return appendLog(
+    const next = appendActionLog(
       {
         ...state,
         phase: 'MAIN_PHASE',
@@ -1639,35 +1601,44 @@ export function resolveTargetSelection(
         },
       },
       me.displayName,
-      `Untapped ${slot.character.name} (${pending.sourceCard.name}).`,
+      `readied (untapped) ${slot.character.name}.`,
       'EFFECT',
       pending.sourceCard.name
     );
+    return finishAndResume(next);
   }
 
   if (pending.effectAction === 'RETIRE_OPPONENT' && targetOwner === 'OPPONENT') {
     const workingState = retireCharacterWithFarewell(state, oppId, targetLane);
-    return {
+    return finishAndResume({
       ...workingState,
       phase: 'MAIN_PHASE',
       pendingTarget: null,
-    };
+    });
   }
 
-  return {
+  return finishAndResume({
     ...state,
     phase: 'MAIN_PHASE',
     pendingTarget: null,
-  };
+  });
 }
 
 export function cancelTargetSelection(state: KayouGameState, playerId: '0' | '1'): KayouGameState {
   if (state.phase !== 'PENDING_TARGET' || state.turnPlayerId !== playerId) return state;
-  return {
+  const resumeQueue = state.pendingTarget?.resumeAttackQueue;
+  const cleared: KayouGameState = {
     ...state,
     phase: 'MAIN_PHASE',
     pendingTarget: null,
   };
+  if (resumeQueue && resumeQueue.length > 0) {
+    return advanceToNextAttackLane(cleared, playerId, resumeQueue);
+  }
+  if (resumeQueue && resumeQueue.length === 0) {
+    return endTurn(cleared, playerId);
+  }
+  return cleared;
 }
 
 export function activateCharacterAdventureAbility(
@@ -1684,31 +1655,46 @@ export function activateCharacterAdventureAbility(
   const text = sanitizeCardText(slot.character.effectText);
   if (!/Adventure\s*:/i.test(text)) return state;
 
-  const exhaustedState: KayouGameState = appendLog(
-    {
-      ...state,
-      players: {
-        ...state.players,
-        [playerId]: {
-          ...player,
-          adventureArea: {
-            ...player.adventureArea,
-            [lane]: {
-              ...slot,
-              isExhausted: true,
-            },
+  let workingState: KayouGameState = {
+    ...state,
+    players: {
+      ...state.players,
+      [playerId]: {
+        ...player,
+        adventureArea: {
+          ...player.adventureArea,
+          [lane]: {
+            ...slot,
+            isExhausted: true,
           },
         },
       },
     },
+  };
+
+  workingState = appendActionLog(
+    workingState,
     player.displayName,
-    `Tapped ${slot.character.name} for Adventure ability.`,
+    `activated Adventure ability of ${slot.character.name} (${lane.toUpperCase()} lane).`,
     'EFFECT',
     slot.character.name
   );
 
+  const parsed = parseActivatedCardEffect(slot.character);
+  workingState = executeParsedImmediateEffect(workingState, playerId, slot.character, parsed, lane);
+  if (workingState.phase === 'GAME_OVER') return workingState;
+
+  const handChoice = buildPendingHandChoiceFromParsed(workingState, playerId, slot.character, parsed);
+  if (handChoice) {
+    return {
+      ...workingState,
+      phase: 'PENDING_HAND_CHOICE',
+      pendingHandChoice: handChoice,
+    };
+  }
+
   const pending = buildPendingTargetFromEffect(
-    exhaustedState,
+    workingState,
     playerId,
     slot.character,
     'ADVENTURE_TAP',
@@ -1716,13 +1702,13 @@ export function activateCharacterAdventureAbility(
   );
   if (pending) {
     return {
-      ...exhaustedState,
+      ...workingState,
       phase: 'PENDING_TARGET',
       pendingTarget: pending,
     };
   }
 
-  return executeImmediateActivatedEffect(exhaustedState, playerId, slot.character);
+  return workingState;
 }
 
 export function activateManeLeaderAbility(
@@ -1734,40 +1720,55 @@ export function activateManeLeaderAbility(
   if (!player.leader || player.leaderAbilityUsedThisTurn) return state;
 
   const text = sanitizeCardText(player.leader.effectText);
-  if (!/Mane Ability|Once per turn|Activate\s*:/i.test(text)) return state;
+  if (!/Main Character Ability|Mane Ability|Once per turn|Activate\s*:/i.test(text)) return state;
 
-  const markedState: KayouGameState = appendLog(
-    {
-      ...state,
-      players: {
-        ...state.players,
-        [playerId]: {
-          ...player,
-          leaderAbilityUsedThisTurn: true,
-        },
+  let workingState: KayouGameState = {
+    ...state,
+    players: {
+      ...state.players,
+      [playerId]: {
+        ...player,
+        leaderAbilityUsedThisTurn: true,
       },
     },
+  };
+
+  workingState = appendActionLog(
+    workingState,
     player.displayName,
-    `Activated Main Character ability: ${player.leader.name}.`,
+    `activated Main Character ability of ${player.leader.name}.`,
     'EFFECT',
     player.leader.name
   );
 
+  const parsed = parseActivatedCardEffect(player.leader);
+  workingState = executeParsedImmediateEffect(workingState, playerId, player.leader, parsed);
+  if (workingState.phase === 'GAME_OVER') return workingState;
+
+  const handChoice = buildPendingHandChoiceFromParsed(workingState, playerId, player.leader, parsed);
+  if (handChoice) {
+    return {
+      ...workingState,
+      phase: 'PENDING_HAND_CHOICE',
+      pendingHandChoice: handChoice,
+    };
+  }
+
   const pending = buildPendingTargetFromEffect(
-    markedState,
+    workingState,
     playerId,
     player.leader,
     'MANE_ABILITY'
   );
   if (pending) {
     return {
-      ...markedState,
+      ...workingState,
       phase: 'PENDING_TARGET',
       pendingTarget: pending,
     };
   }
 
-  return executeImmediateActivatedEffect(markedState, playerId, player.leader);
+  return workingState;
 }
 
 export function canSceneInspireCharacter(
@@ -1877,14 +1878,14 @@ export function startContactPhase(state: KayouGameState, playerId: '0' | '1'): K
     return endTurn(state, playerId);
   }
 
-  const logged = appendLog(
+  const loggedState = appendActionLog(
     state,
     attacker.displayName,
-    `Entered Contact Phase (${activeAttackLanes.map((l) => l.toUpperCase()).join(' → ')}).`,
+    `entered Contact Phase across lanes: ${activeAttackLanes.map((l) => l.toUpperCase()).join(' → ')}.`,
     'CLASH'
   );
 
-  return advanceToNextAttackLane(logged, playerId, activeAttackLanes);
+  return advanceToNextAttackLane(loggedState, playerId, activeAttackLanes);
 }
 
 function advanceToNextAttackLane(
@@ -1975,23 +1976,25 @@ export function inspireInContact(
     inspoBoost: currentSlot.inspoBoost + check.boostAmount,
   };
 
-  const updatedState: KayouGameState = appendLog(
-    {
-      ...state,
-      players: {
-        ...state.players,
-        [playerId]: {
-          ...player,
-          sceneArea: updatedSceneArea,
-          adventureArea: {
-            ...player.adventureArea,
-            [lane]: updatedSlot,
-          },
+  let updatedState: KayouGameState = {
+    ...state,
+    players: {
+      ...state.players,
+      [playerId]: {
+        ...player,
+        sceneArea: updatedSceneArea,
+        adventureArea: {
+          ...player.adventureArea,
+          [lane]: updatedSlot,
         },
       },
     },
+  };
+
+  updatedState = appendActionLog(
+    updatedState,
     player.displayName,
-    `Triggered Inspiration Boost (${sceneItem.card.name}): +${check.boostAmount} Inspiration to ${currentSlot.character?.name}!`,
+    `used Inspiration Boost (${sceneItem.card.name}) for +${check.boostAmount} Inspiration in ${lane.toUpperCase()} lane.`,
     'CLASH',
     sceneItem.card.name
   );
@@ -2065,10 +2068,10 @@ export function passInspireInContact(
     acknowledgedBy: [] as ('0' | '1')[],
   };
 
-  let workingState = appendLog(
-    { ...state },
-    'Clash',
-    `${lane.toUpperCase()} Lane Contact: ${atkSlot.character.name} (${atkPower} Insp) vs ${defSlot.character.name} (${defPower} Insp) → ${outcome.replace('_', ' ')}!`,
+  let workingState = appendActionLog(
+    state,
+    atkPlayer.displayName,
+    `${lane.toUpperCase()} Lane Contact: ${atkSlot.character.name} (${atkPower}) vs ${defSlot.character.name} (${defPower}) → ${outcome.replace('_', ' ')}!`,
     'CLASH'
   );
 
@@ -2191,36 +2194,36 @@ function executePrePlanEffectAndReturnToHand(
   let effectSummary: string | null = null;
 
   if (hasPrePlanTrigger) {
-    const parsed = parseEffectClause(text);
-    if (parsed) {
-      workingState = executeParsedImmediateEffect(workingState, defenderId, parsed, revealedCard);
-      effectSummary = `Pre-Plan Triggered (${revealedCard.name}): ${text}`;
+    if (/draw\s+1|draw\s+a\s+card/i.test(text)) {
+      const drawRes = drawCardsWithDeckOutCheck(workingState, defenderId, 1);
+      workingState = drawRes.state;
+      effectSummary = `Pre-Plan Triggered: ${workingState.players[defenderId].displayName} drew 1 card!`;
+    } else if (/draw\s+2/i.test(text)) {
+      const drawRes = drawCardsWithDeckOutCheck(workingState, defenderId, 2);
+      workingState = drawRes.state;
+      effectSummary = `Pre-Plan Triggered: ${workingState.players[defenderId].displayName} drew 2 cards!`;
     } else if (
       /retire|remove/i.test(text) &&
       workingState.players[attackerId].adventureArea[activeLane].character
     ) {
       workingState = retireCharacterWithFarewell(workingState, attackerId, activeLane);
-      effectSummary = `Pre-Plan Triggered: Attacking Character in ${activeLane.toUpperCase()} lane was retired!`;
+      effectSummary = `Pre-Plan Triggered: Attacking character in ${activeLane.toUpperCase()} lane moved to Retirement Area!`;
     } else {
       effectSummary = `Pre-Plan Triggered: ${text}`;
     }
-  }
 
-  workingState = appendLog(
-    workingState,
-    workingState.players[defenderId].displayName,
-    `Plan revealed: ${revealedCard.name}${effectSummary ? ` (${effectSummary})` : ' (added to Hand)'}.`,
-    'STORY',
-    revealedCard.name
-  );
+    workingState = appendActionLog(
+      workingState,
+      workingState.players[defenderId].displayName,
+      effectSummary,
+      'EFFECT',
+      revealedCard.name
+    );
+  }
 
   return { nextState: workingState, hasPrePlanTrigger, effectSummary };
 }
 
-/**
- * Full Story Stage 2 & Stage 3 Promotion Pipeline:
- * Routes the Story card's promotion clause through the complete effectParser + target/immediate execution.
- */
 function executeStoryPromotionEffect(
   state: KayouGameState,
   attackerId: '0' | '1',
@@ -2230,43 +2233,47 @@ function executeStoryPromotionEffect(
 ): {
   nextState: KayouGameState;
   effectSummary: string | null;
+  parsedPromotion: ParsedActivatedEffect | null;
 } {
   const rawText = sanitizeCardText(storyCard.effectText);
   let workingState = { ...state };
   let effectSummary: string | null = null;
 
-  if (!rawText) return { nextState: workingState, effectSummary };
+  if (!rawText) return { nextState: workingState, effectSummary, parsedPromotion: null };
 
-  // Strip "When promoted to this stage," prefix so the action clause parses cleanly
-  const actionClause = rawText
-    .replace(/^.*?(?:When\s+promoted\s+to\s+this\s+stage|When\s+promoted)[,:\s]*/i, '')
+  const promotionClause = rawText
+    .replace(/^when\s+promoted\s+to\s+this\s+stage[,:\s]*/i, '')
     .trim();
 
-  const parsed = parseEffectClause(actionClause) || parseEffectClause(rawText);
+  const parsedPromotion = parseEffectClause(promotionClause);
 
-  if (parsed) {
+  if (parsedPromotion) {
     workingState = executeParsedImmediateEffect(
       workingState,
       attackerId,
-      parsed,
       storyCard,
+      parsedPromotion,
       activeLane
     );
 
-    if (parsed.kind === 'RECOVER_RETIREMENT') {
-      effectSummary = `Story Promotion Effect: Recovered ${parsed.requiredTypeFilter || 'card'} from Retirement Area to Hand!`;
-    } else if (parsed.kind === 'DRAW') {
-      effectSummary = `Story Promotion Effect: Drew ${parsed.amount} card${parsed.amount > 1 ? 's' : ''}!`;
-    } else if (parsed.kind === 'TREAT_FOR_YOU') {
-      effectSummary = `Story Promotion Effect: Placed ${parsed.amount} Treat on matching Character(s)!`;
-    } else if (parsed.kind === 'DELIVER_PRESENT') {
-      effectSummary = `Story Promotion Effect: Delivered Present(s)!`;
-    } else if (parsed.kind === 'GLOBAL_BUFF_FRIENDLY' || parsed.kind === 'TARGET_BUFF_POWER') {
-      effectSummary = `Story Promotion Effect: Granted +${parsed.amount} Inspiration!`;
+    if (parsedPromotion.kind === 'DRAW') {
+      effectSummary = `Story Promotion Effect: ${workingState.players[attackerId].displayName} drew ${parsedPromotion.amount} card${
+        parsedPromotion.amount === 1 ? '' : 's'
+      }!`;
+    } else if (parsedPromotion.kind === 'DRAW_THEN_DISCARD') {
+      effectSummary = `Story Promotion Effect: Drew ${parsedPromotion.amount} card(s) — select ${parsedPromotion.secondaryAmount} card to discard after acknowledging!`;
+    } else if (parsedPromotion.kind === 'RECOVER_RETIREMENT') {
+      effectSummary = `Story Promotion Effect: Recover a ${
+        parsedPromotion.requiredNameFilter || 'card'
+      } from your Retirement Area!`;
+    } else if (parsedPromotion.kind === 'TARGET_RETIRE_OPPONENT') {
+      effectSummary = `Story Promotion Effect: Choose an opponent's Character to move to Retirement Area!`;
+    } else if (parsedPromotion.kind === 'TARGET_BUFF_POWER') {
+      effectSummary = `Story Promotion Effect: Grant +${parsedPromotion.amount} Inspiration!`;
     } else {
-      effectSummary = `Story Promotion Effect: ${actionClause || rawText}`;
+      effectSummary = `Story Promotion Effect: ${promotionClause}`;
     }
-  } else if (/opponent.*discard/i.test(rawText) && workingState.players[defenderId].hand.length > 0) {
+  } else if (/opponent.*discard/i.test(promotionClause) && workingState.players[defenderId].hand.length > 0) {
     const def = workingState.players[defenderId];
     const discarded = def.hand[def.hand.length - 1];
     workingState = {
@@ -2280,20 +2287,20 @@ function executeStoryPromotionEffect(
         },
       },
     };
-    effectSummary = `Story Promotion Effect: ${def.displayName} discarded ${discarded.name}!`;
+    effectSummary = `Story Promotion Effect: ${def.displayName} discarded 1 card!`;
   } else {
-    effectSummary = `Story Promotion Effect: ${actionClause || rawText}`;
+    effectSummary = `Story Promotion Effect: ${promotionClause}`;
   }
 
-  workingState = appendLog(
+  workingState = appendActionLog(
     workingState,
     workingState.players[attackerId].displayName,
-    `Promoted to Story Stage: ${storyCard.name} — ${effectSummary}`,
+    effectSummary,
     'STORY',
     storyCard.name
   );
 
-  return { nextState: workingState, effectSummary };
+  return { nextState: workingState, effectSummary, parsedPromotion };
 }
 
 export function resolveBreakthroughChoice(
@@ -2334,7 +2341,7 @@ export function resolveBreakthroughChoice(
       storyStages: updatedStages,
     };
 
-    const baseStateWithStory: KayouGameState = {
+    let baseStateWithStory: KayouGameState = {
       ...state,
       players: {
         ...state.players,
@@ -2343,29 +2350,31 @@ export function resolveBreakthroughChoice(
       },
     };
 
+    baseStateWithStory = appendActionLog(
+      baseStateWithStory,
+      attacker.displayName,
+      `progressed to Story Stage ${nextProgress}/4 via ${activeLane.toUpperCase()} lane breakthrough!`,
+      'STORY'
+    );
+
     if (nextProgress >= 4) {
-      return appendLog(
-        {
-          ...baseStateWithStory,
-          phase: 'GAME_OVER',
-          winnerId: playerId,
-          winReason: `${attacker.displayName} progressed to Story Stage 4 and won the game!`,
-          contactState: null,
-          pendingLaneQueueAfterReveal: null,
-          lastStoryRevealEvent: null,
-          announcements: [
-            ...state.announcements,
-            {
-              type: 'VICTORY',
-              message: `${attacker.displayName} completed Story Stage 4 and won the match!`,
-              timestamp: Date.now(),
-            },
-          ],
-        },
-        attacker.displayName,
-        'Completed Story Stage 4 and won the match!',
-        'STORY'
-      );
+      return {
+        ...baseStateWithStory,
+        phase: 'GAME_OVER',
+        winnerId: playerId,
+        winReason: `${attacker.displayName} progressed to Story Stage 4 and won the game!`,
+        contactState: null,
+        pendingLaneQueueAfterReveal: null,
+        lastStoryRevealEvent: null,
+        announcements: [
+          ...state.announcements,
+          {
+            type: 'VICTORY',
+            message: `${attacker.displayName} completed Story Stage 4 and won the match!`,
+            timestamp: Date.now(),
+          },
+        ],
+      };
     }
 
     const revealedStoryStage = attacker.storyStages[nextProgress - 1];
@@ -2419,7 +2428,7 @@ export function resolveBreakthroughChoice(
       storyStages: updatedDefStages,
     };
 
-    const baseStateWithPlan: KayouGameState = {
+    let baseStateWithPlan: KayouGameState = {
       ...state,
       players: {
         ...state.players,
@@ -2427,6 +2436,14 @@ export function resolveBreakthroughChoice(
         [defenderId]: defender,
       },
     };
+
+    baseStateWithPlan = appendActionLog(
+      baseStateWithPlan,
+      attacker.displayName,
+      `intervened on ${defender.displayName}'s Story Stage ${targetStage.stage} Plan (${revealedCard.name})!`,
+      'STORY',
+      revealedCard.name
+    );
 
     const { nextState, hasPrePlanTrigger, effectSummary } = executePrePlanEffectAndReturnToHand(
       baseStateWithPlan,
@@ -2541,15 +2558,53 @@ export function acknowledgeStoryReveal(
   }
 
   const queueToResume = state.pendingLaneQueueAfterReveal || [];
-  return advanceToNextAttackLane(
-    {
-      ...state,
-      lastStoryRevealEvent: null,
-      pendingLaneQueueAfterReveal: null,
-    },
-    state.turnPlayerId,
-    queueToResume
-  );
+  const clearedState: KayouGameState = {
+    ...state,
+    lastStoryRevealEvent: null,
+    pendingLaneQueueAfterReveal: null,
+  };
+
+  const rawText = sanitizeCardText(revealEvent.storyCard.effectText);
+  const promotionClause = rawText
+    .replace(/^when\s+promoted\s+to\s+this\s+stage[,:\s]*/i, '')
+    .trim();
+  const parsedPromotion = parseEffectClause(promotionClause);
+
+  if (parsedPromotion) {
+    const handChoice = buildPendingHandChoiceFromParsed(
+      clearedState,
+      revealEvent.attackerId,
+      revealEvent.storyCard,
+      parsedPromotion,
+      queueToResume
+    );
+    if (handChoice) {
+      return {
+        ...clearedState,
+        phase: 'PENDING_HAND_CHOICE',
+        pendingHandChoice: handChoice,
+      };
+    }
+
+    const pendingTarget = buildPendingTargetFromParsed(
+      clearedState,
+      revealEvent.attackerId,
+      revealEvent.storyCard,
+      parsedPromotion,
+      'STORY_PROMOTION',
+      undefined,
+      queueToResume
+    );
+    if (pendingTarget) {
+      return {
+        ...clearedState,
+        phase: 'PENDING_TARGET',
+        pendingTarget,
+      };
+    }
+  }
+
+  return advanceToNextAttackLane(clearedState, state.turnPlayerId, queueToResume);
 }
 
 export function forfeitMatch(
@@ -2559,7 +2614,7 @@ export function forfeitMatch(
 ): KayouGameState {
   if (state.phase === 'GAME_OVER' || state.phase === 'WAITING_FOR_PLAYERS') return state;
   const winnerId: '0' | '1' = forfeitingPlayerId === '0' ? '1' : '0';
-  return appendLog(
+  return appendActionLog(
     {
       ...state,
       phase: 'GAME_OVER',
@@ -2608,21 +2663,16 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
   const newTurnsTaken = startingPlayer.turnsTaken + 1;
 
   if (startingPlayer.mainDeck.length === 0) {
-    return appendLog(
-      {
-        ...state,
-        phase: 'GAME_OVER',
-        winnerId: playerId,
-        winReason: `${startingPlayer.displayName} attempted to draw from an empty Main Deck (Deck Out)!`,
-        contactState: null,
-        pendingTarget: null,
-        pendingHandChoice: null,
-        pendingLaneQueueAfterReveal: null,
-      },
-      startingPlayer.displayName,
-      'Decked out at start of turn!',
-      'SYSTEM'
-    );
+    return {
+      ...state,
+      phase: 'GAME_OVER',
+      winnerId: playerId,
+      winReason: `${startingPlayer.displayName} attempted to draw from an empty Main Deck (Deck Out)!`,
+      contactState: null,
+      pendingTarget: null,
+      pendingHandChoice: null,
+      pendingLaneQueueAfterReveal: null,
+    };
   }
 
   const drawnMain = startingPlayer.mainDeck.slice(0, 1);
@@ -2662,7 +2712,7 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     },
   };
 
-  return appendLog(
+  return appendActionLog(
     {
       ...state,
       phase: 'MAIN_PHASE',
@@ -2677,8 +2727,10 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
         [nextPlayerId]: updatedStartingPlayer,
       } as Record<'0' | '1', PlayerState>,
     },
-    updatedStartingPlayer.displayName,
-    `Turn ${nextTurnNumber} started (Drew 1 card${addedScenes.length > 0 ? ', placed 1 Scene' : ''}).`,
+    startingPlayer.displayName,
+    `started Turn ${nextTurnNumber} (drew 1 card${
+      addedScenes.length > 0 ? ' and flipped 1 Force of Harmony Scene' : ''
+    }).`,
     'SYSTEM'
   );
 }
