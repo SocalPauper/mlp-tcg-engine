@@ -38,8 +38,8 @@ function normalizeDeckRow(row: any) {
     ...row,
     is_starter: Boolean(row.is_starter),
     mane_character: parsedMane || null,
-    deck_banner_url: row.deck_banner_url || parsedCards.deck_banner_url || null,
-    banner_crop_position: row.banner_crop_position || parsedCards.banner_crop_position || 'center 20%',
+    deck_banner_url: parsedCards.deck_banner_url || row.deck_banner_url || null,
+    banner_crop_position: parsedCards.banner_crop_position || row.banner_crop_position || 'center 20%',
     story_deck: row.story_deck || parsedCards.story_deck || parsedCards.stories || [],
     scene_deck: row.scene_deck || parsedCards.scene_deck || parsedCards.scenes || [],
     main_deck: row.main_deck || parsedCards.main_deck || parsedCards.main || [],
@@ -119,14 +119,12 @@ router.post('/decks', async (req, res) => {
 
   try {
     const query = `
-      INSERT INTO auth.decks (id, name, author, is_public, mane_character, deck_banner_url, banner_crop_position, cards)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO auth.decks (id, name, author, is_public, mane_character, cards)
+      VALUES ($1, $2, $3, $4, $5, $6)
       ON CONFLICT (id) DO UPDATE
       SET name = EXCLUDED.name,
           is_public = EXCLUDED.is_public,
           mane_character = EXCLUDED.mane_character,
-          deck_banner_url = EXCLUDED.deck_banner_url,
-          banner_crop_position = EXCLUDED.banner_crop_position,
           cards = EXCLUDED.cards
       RETURNING *;
     `;
@@ -135,9 +133,7 @@ router.post('/decks', async (req, res) => {
       name || 'My Sparkle Deck',
       authorName,
       resolvedPublic,
-      resolvedMane,
-      deck_banner_url || null,
-      banner_crop_position || 'center 20%',
+      resolvedMane ? JSON.stringify({ id: resolvedMane }) : null,
       JSON.stringify({
         story_deck: resolvedStories,
         scene_deck: resolvedScenes,
@@ -196,18 +192,14 @@ router.put('/decks/:id', async (req, res) => {
       SET name = $1,
           is_public = $2,
           mane_character = $3,
-          deck_banner_url = $4,
-          banner_crop_position = $5,
-          cards = $6
-      WHERE id = $7
+          cards = $4
+      WHERE id = $5
       RETURNING *;
     `;
     const result = await pool.query(query, [
       name || 'My Sparkle Deck',
       resolvedPublic,
-      resolvedMane,
-      deck_banner_url || null,
-      banner_crop_position || 'center 20%',
+      resolvedMane ? JSON.stringify({ id: resolvedMane }) : null,
       JSON.stringify({
         story_deck: resolvedStories,
         scene_deck: resolvedScenes,
