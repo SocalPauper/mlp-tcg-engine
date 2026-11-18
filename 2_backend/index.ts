@@ -15,21 +15,21 @@ const app = express();
 app.use(cors({
   origin: ['https://equestria-clash.pages.dev', 'http://localhost:5173', 'http://localhost:3000'],
   credentials: true
-}));[cite: 12]
+}));
 
-app.use(express.json());[cite: 12]
+app.use(express.json());
 
-const PORT = process.env.PORT || 3001;[cite: 12]
+const PORT = process.env.PORT || 3001;
 
 async function startServer() {
   try {
-    await initDatabase();[cite: 12]
+    await initDatabase();
 
     // 1. Ensure schemas exist
     await pool.query(`
       CREATE SCHEMA IF NOT EXISTS auth;
       CREATE SCHEMA IF NOT EXISTS game;
-    `);[cite: 12]
+    `);
 
     // 2. Provision auth.users with UUID primary key
     await pool.query(`
@@ -48,7 +48,7 @@ async function startServer() {
         verification_token VARCHAR(255),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
-    `);[cite: 12]
+    `);
 
     // Safety check: If auth.users was previously created as integer (serial), convert it to UUID safely
     await pool.query(`
@@ -62,7 +62,7 @@ async function startServer() {
           ALTER TABLE auth.users ALTER COLUMN id TYPE UUID USING gen_random_uuid();
         END IF;
       END $$;
-    `);[cite: 12]
+    `);
 
     // 3. Deck structure
     await pool.query(`
@@ -76,7 +76,7 @@ async function startServer() {
         cards JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-    `);[cite: 12]
+    `);
 
     // 4. Game inventory table matching DBeaver schema (auth.user_cards)
     await pool.query(`
@@ -88,7 +88,7 @@ async function startServer() {
         user_alerted BOOLEAN DEFAULT FALSE,
         PRIMARY KEY (user_id, card_id)
       );
-    `);[cite: 12]
+    `);
 
     // 5. Weekly shop deals table for guaranteed weekly rotations
     await pool.query(`
@@ -100,7 +100,7 @@ async function startServer() {
         slot_index INTEGER NOT NULL,
         UNIQUE(week_identifier, slot_index)
       );
-    `);[cite: 12]
+    `);
 
     // 6. Persistent Global Site Settings (Wallpapers, Opacity, Live Announcements)
     await pool.query(`
@@ -128,21 +128,21 @@ async function startServer() {
       ALTER TABLE auth.uploaded_media ADD COLUMN IF NOT EXISTS title VARCHAR(255);
     `);
 
-    console.log('[DATABASE] Initialization and schema hardening complete.');[cite: 12]
+    console.log('[DATABASE] Initialization and schema hardening complete.');
   } catch (err: any) {
-    console.error('[DATABASE INIT ERROR]', err.message);[cite: 12]
+    console.error('[DATABASE INIT ERROR]', err.message);
   }
 
   // Mount Routes
-  app.use('/api/auth', authRouter);[cite: 12]
-  app.use('/api/users', authRouter);[cite: 12]
-  app.use('/api/shop', shopsRouter);[cite: 12]
+  app.use('/api/auth', authRouter);
+  app.use('/api/users', authRouter);
+  app.use('/api/shop', shopsRouter);
   app.use('/api/media', mediaRouter);
-  app.use('/api', cardsRouter);[cite: 12]
-  app.use('/api', decksRouter);[cite: 12]
+  app.use('/api', cardsRouter);
+  app.use('/api', decksRouter);
 
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', engine: 'MLP TCG Engine online' });[cite: 12]
+    res.json({ status: 'ok', engine: 'MLP TCG Engine online' });
   });
 
   app.get('/api/site/announcement', async (_req, res) => {
@@ -152,19 +152,19 @@ async function startServer() {
       );
       res.json({
         success: true,
-        announcement: rows[0]?.setting_value || 'Welcome to Equestria Clash TCG Online!',[cite: 12]
+        announcement: rows[0]?.setting_value || 'Welcome to Equestria Clash TCG Online!',
       });
     } catch {
-      res.json({ success: true, announcement: 'Welcome to Equestria Clash TCG Online!' });[cite: 12]
+      res.json({ success: true, announcement: 'Welcome to Equestria Clash TCG Online!' });
     }
   });
 
-  const server = createServer(app);[cite: 12]
-  const gameManager = new GameManager(server);[cite: 12]
+  const server = createServer(app);
+  const gameManager = new GameManager(server);
 
   server.listen(PORT, () => {
-    console.log(`[SERVER] MLP TCG Backend active on port ${PORT} with WebSocket GameManager enabled.`);[cite: 12]
+    console.log(`[SERVER] MLP TCG Backend active on port ${PORT} with WebSocket GameManager enabled.`);
   });
 }
 
-startServer();[cite: 12]
+startServer();
