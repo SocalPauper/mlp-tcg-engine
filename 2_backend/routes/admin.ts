@@ -19,15 +19,18 @@ const requireAdmin = async (req: AuthenticatedRequest, res: express.Response, ne
   }
 };
 
-// 1. Search or list users from auth.users (robust against missing optional column names)
+// 1. Search or list users from auth.users (matching exact DBeaver schema columns)
 router.get('/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   const search = String(req.query.search || '').trim();
   try {
-    let query = `SELECT id, username, email, reward_points, created_at FROM auth.users`;
+    let query = `
+      SELECT id, username, display_name, email, reward_points, is_admin, is_verified, is_safe_mode, created_at 
+      FROM auth.users
+    `;
     let params: any[] = [];
 
     if (search) {
-      query += ` WHERE username ILIKE $1 OR email ILIKE $1`;
+      query += ` WHERE username ILIKE $1 OR display_name ILIKE $1 OR email ILIKE $1`;
       params.push(`%${search}%`);
     }
     query += ` ORDER BY created_at DESC LIMIT 50`;
@@ -112,13 +115,13 @@ router.post('/users/moderate', authenticateToken, requireAdmin, async (req: Auth
         updateQuery = `UPDATE auth.users SET is_safe_mode = TRUE WHERE id = $1 RETURNING id, username`;
         break;
       case 'SUSPEND':
-        updateQuery = `UPDATE auth.users SET is_safe_mode = TRUE WHERE id = $1 RETURNING id, username`;
+        updateQuery = `UPDATE auth.users SET is_safe_mode = TRUE, is_verified = FALSE WHERE id = $1 RETURNING id, username`;
         break;
       case 'BAN':
-        updateQuery = `UPDATE auth.users SET email = CONCAT('banned_', email) WHERE id = $1 RETURNING id, username`;
+        updateQuery = `UPDATE auth.users SET is_safe_mode = TRUE, is_verified = FALSE, email = CONCAT('banned_', email) WHERE id = $1 RETURNING id, username`;
         break;
       case 'ACTIVE':
-        updateQuery = `UPDATE auth.users SET is_safe_mode = FALSE WHERE id = $1 RETURNING id, username`;
+        updateQuery = `UPDATE auth.users SET is_safe_mode = FALSE, is_verified = TRUE WHERE id = $1 RETURNING id, username`;
         break;
       default:
         return res.status(400).json({ error: 'Invalid moderation action' });
