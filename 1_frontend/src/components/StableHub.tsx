@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import './StableHub.css';
 
 export interface DeckSummary {
@@ -19,22 +20,38 @@ interface StableHubProps {
   onOpenBuilder: (deckId: string | null, mode: 'CREATE' | 'EDIT' | 'VIEW' | 'COPY') => void;
 }
 
-const API_BASE = 'https://mlp-tcg-engine.onrender.com';
-
 export default function StableHub({ currentUserId, onOpenBuilder }: StableHubProps) {
   const [activeTab, setActiveTab] = useState<'MY_DECKS' | 'STARTERS' | 'COMMUNITY'>('MY_DECKS');
   const [allDecks, setAllDecks] = useState<DeckSummary[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Global wallpaper & opacity loaded from auth.site_settings
+  const [customBgUrl, setCustomBgUrl] = useState<string>('');
+  const [bgOpacity, setBgOpacity] = useState<number>(1);
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/media/settings`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && data.settings) {
+          if (data.settings.bg_stable) setCustomBgUrl(data.settings.bg_stable);
+          if (data.settings.bg_stable_opacity !== undefined) {
+            setBgOpacity(parseFloat(data.settings.bg_stable_opacity));
+          }
+        }
+      })
+      .catch((err) => console.error('Error loading global stable theme:', err));
+  }, []);
 
   const fetchDecks = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
       const [decksRes, cardsRes] = await Promise.all([
-        fetch(`${API_BASE}/api/decks`, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        fetch(`${API_BASE_URL}/api/decks`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         }),
-        fetch(`${API_BASE}/api/cards`)
+        fetch(`${API_BASE_URL}/api/cards`),
       ]);
 
       const rawDecks = decksRes.ok ? await decksRes.json() : [];
@@ -48,7 +65,6 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
         const maneId = d.mane_character ? String(d.mane_character).toLowerCase() : '';
         let maneCard = maneId ? cardMap.get(maneId) : null;
 
-        // Fallback lookup by starter pony name if mane_character ID wasn't matched
         if (!maneCard && d.name) {
           const ponyName = String(d.name).split('-')[0].trim().toLowerCase();
           maneCard = cardList.find(
@@ -99,19 +115,19 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
 
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`${API_BASE}/api/decks/${deckId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/decks/${deckId}`, {
         method: 'DELETE',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error('Delete failed');
-      setAllDecks(prev => prev.filter(d => d.id !== deckId));
+      setAllDecks((prev) => prev.filter((d) => d.id !== deckId));
     } catch (err) {
       console.error('Error deleting deck:', err);
       alert('Failed to delete deck.');
     }
   };
 
-  const filteredDecks = allDecks.filter(deck => {
+  const filteredDecks = allDecks.filter((deck) => {
     if (activeTab === 'STARTERS') {
       return deck.is_starter;
     }
@@ -126,116 +142,145 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
   });
 
   return (
-    <div className="stable-hub-container">
-      <div className="stable-header">
-        <div>
-          <h1>The Stable</h1>
-          <span style={{ color: '#888', fontWeight: 600 }}>Your Deck Hub</span>
-        </div>
-        <button className="build-new-btn" onClick={() => onOpenBuilder(null, 'CREATE')}>
-          Build New Deck ✦
-        </button>
-      </div>
-
-      <div className="stable-tabs">
-        <button 
-          className={`stable-tab-btn ${activeTab === 'MY_DECKS' ? 'active' : ''}`}
-          onClick={() => setActiveTab('MY_DECKS')}
-        >
-          My Decks
-        </button>
-        <button 
-          className={`stable-tab-btn ${activeTab === 'STARTERS' ? 'active' : ''}`}
-          onClick={() => setActiveTab('STARTERS')}
-        >
-          Starter Decks (6)
-        </button>
-        <button 
-          className={`stable-tab-btn ${activeTab === 'COMMUNITY' ? 'active' : ''}`}
-          onClick={() => setActiveTab('COMMUNITY')}
-        >
-          Community Decks
-        </button>
-      </div>
-
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '50px', color: 'var(--mlp-purple)' }}>
-          <strong>Loading the Stable... ✨</strong>
-        </div>
-      ) : (
-        <div className="deck-grid">
-          {filteredDecks.map(deck => {
-            const isEditable = !deck.is_starter && (!deck.owner_id || deck.owner_id === currentUserId);
-
-            return (
-              <div key={deck.id} className="deck-card">
-                <div 
-                  className="deck-card-banner" 
-                  style={{ backgroundImage: `url(${deck.mane_image_url})` }}
-                >
-                  <div className="deck-card-element">{deck.element}</div>
-                </div>
-                
-                <div className="deck-card-info">
-                  <h3 className="deck-card-title">{deck.name}</h3>
-                  <div className="deck-card-author">by {deck.author}</div>
-                  
-                  <div className="deck-card-stats">
-                    <span>{deck.card_count} / 70 Cards</span>
-                    {deck.is_starter && <span>★ Starter</span>}
-                  </div>
-
-                  <div className="deck-card-actions">
-                    {isEditable ? (
-                      <>
-                        <button 
-                          className="deck-action-btn btn-primary"
-                          onClick={() => onOpenBuilder(deck.id, 'EDIT')}
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          className="deck-action-btn btn-copy"
-                          onClick={() => onOpenBuilder(deck.id, 'COPY')}
-                        >
-                          Copy
-                        </button>
-                        <button 
-                          className="deck-action-btn btn-danger"
-                          onClick={() => handleDeleteDeck(deck.id, deck.name)}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button 
-                          className="deck-action-btn btn-secondary"
-                          onClick={() => onOpenBuilder(deck.id, 'VIEW')}
-                        >
-                          View List
-                        </button>
-                        <button 
-                          className="deck-action-btn btn-copy"
-                          onClick={() => onOpenBuilder(deck.id, 'COPY')}
-                        >
-                          Copy to Mine
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-
-          {!loading && filteredDecks.length === 0 && (
-            <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#888', padding: '40px' }}>
-              No decks found in this category.
-            </div>
-          )}
-        </div>
+    <div
+      className="stable-hub-container"
+      style={customBgUrl ? { backgroundImage: `url(${customBgUrl})` } : undefined}
+    >
+      {/* Opacity Tint Layer Controlled by Admin Settings */}
+      {customBgUrl && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: '#150624',
+            opacity: 1 - bgOpacity,
+            zIndex: 1,
+            pointerEvents: 'none',
+          }}
+        />
       )}
+
+      <div className="stable-content-wrapper">
+        <div className="stable-header">
+          <div>
+            <h1>🐎 The Stable</h1>
+            <span className="stable-subtitle">Craft, customize, and manage your Equestrian TCG decks</span>
+          </div>
+          <button className="build-new-btn" onClick={() => onOpenBuilder(null, 'CREATE')}>
+            ✨ Build New Deck ✦
+          </button>
+        </div>
+
+        <div className="stable-tabs">
+          <button
+            className={`stable-tab-btn ${activeTab === 'MY_DECKS' ? 'active' : ''}`}
+            onClick={() => setActiveTab('MY_DECKS')}
+          >
+            My Decks
+          </button>
+          <button
+            className={`stable-tab-btn ${activeTab === 'STARTERS' ? 'active' : ''}`}
+            onClick={() => setActiveTab('STARTERS')}
+          >
+            Starter Decks (6)
+          </button>
+          <button
+            className={`stable-tab-btn ${activeTab === 'COMMUNITY' ? 'active' : ''}`}
+            onClick={() => setActiveTab('COMMUNITY')}
+          >
+            Community Decks
+          </button>
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '50px', color: '#ffd700', fontSize: '18px' }}>
+            <strong>Loading the Stable... ✨</strong>
+          </div>
+        ) : (
+          <div className="deck-grid">
+            {filteredDecks.map((deck) => {
+              const isEditable = !deck.is_starter && (!deck.owner_id || deck.owner_id === currentUserId);
+
+              return (
+                <div key={deck.id} className="deck-card">
+                  <div
+                    className="deck-card-banner"
+                    style={{ backgroundImage: `url(${deck.mane_image_url})` }}
+                  >
+                    <div className="deck-card-element">{deck.element}</div>
+                  </div>
+
+                  <div className="deck-card-info">
+                    <h3 className="deck-card-title">{deck.name}</h3>
+                    <div className="deck-card-author">by {deck.author}</div>
+
+                    <div className="deck-card-stats">
+                      <span>{deck.card_count} / 70 Cards</span>
+                      {deck.is_starter && <span style={{ color: '#ffd700' }}>★ Official Starter</span>}
+                    </div>
+
+                    <div className="deck-card-actions">
+                      {isEditable ? (
+                        <>
+                          <button
+                            className="deck-action-btn btn-primary"
+                            onClick={() => onOpenBuilder(deck.id, 'EDIT')}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="deck-action-btn btn-copy"
+                            onClick={() => onOpenBuilder(deck.id, 'COPY')}
+                          >
+                            Copy
+                          </button>
+                          <button
+                            className="deck-action-btn btn-danger"
+                            onClick={() => handleDeleteDeck(deck.id, deck.name)}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="deck-action-btn btn-secondary"
+                            onClick={() => onOpenBuilder(deck.id, 'VIEW')}
+                          >
+                            View List
+                          </button>
+                          <button
+                            className="deck-action-btn btn-copy"
+                            onClick={() => onOpenBuilder(deck.id, 'COPY')}
+                          >
+                            Copy to Mine
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {!loading && filteredDecks.length === 0 && (
+              <div
+                style={{
+                  gridColumn: '1 / -1',
+                  textAlign: 'center',
+                  color: '#fbcfe8',
+                  padding: '40px',
+                  background: 'rgba(36, 12, 56, 0.55)',
+                  borderRadius: '28px',
+                  border: '2px dashed rgba(255, 158, 187, 0.45)',
+                }}
+              >
+                No decks found in this category yet. Click <strong>Build New Deck</strong> to create one!
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
