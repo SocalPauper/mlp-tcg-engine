@@ -1,10 +1,17 @@
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { pool } from '../../4_data/db.js';
-import startermaps from './StartingDecks.json' assert { type: 'json' };
 
 const router = Router();
 
-// Helper to resolve actual card image URLs & elements from game.cards
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const startermaps: any[] = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'StartingDecks.json'), 'utf-8')
+);
+
 async function getCardLookupMap(): Promise> {
   const res = await pool.query(
     `SELECT id, name, card_type, element, image_url FROM game.cards;`
@@ -45,7 +52,7 @@ function findRealManeCard(
 }
 
 async function buildStarterDecks(cardMap: Map<string, any>) {
-  return (startermaps as any[]).map((starter) => {
+  return startermaps.map((starter) => {
     const ponyName = String(starter.name || '').split('-')[0].trim();
     const realMane = findRealManeCard(cardMap, starter.mane_character, ponyName);
 
