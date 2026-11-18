@@ -8,6 +8,7 @@ import cardsRouter from './routes/cards.js';
 import decksRouter from './routes/decks.js';
 import shopsRouter from './routes/shops.js';
 import mediaRouter from './routes/media.js';
+import adminRouter from './routes/admin.js';
 import { GameManager } from './websocket/gameManager.js';
 
 const app = express();
@@ -138,6 +139,7 @@ async function startServer() {
   app.use('/api/users', authRouter);
   app.use('/api/shop', shopsRouter);
   app.use('/api/media', mediaRouter);
+  app.use('/api/admin', adminRouter);
   app.use('/api', cardsRouter);
   app.use('/api', decksRouter);
 

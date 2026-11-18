@@ -4,10 +4,28 @@ import { useAuth } from '../App';
 import BackgroundUploader from './BackgroundUploader';
 import './AdminPanel.css';
 
+interface UserEntity {
+  id: string;
+  username: string;
+  display_name: string;
+  email: string;
+  reward_points: number;
+  is_verified: boolean;
+  is_safe_mode: boolean;
+}
+
+interface CardEntity {
+  id: string;
+  name: string;
+  rarity: string;
+  card_type: string;
+  element: string;
+  image_url: string;
+}
+
 export default function AdminPanel() {
   const { user } = useAuth();
   const [announcement, setAnnouncement] = useState('');
-  const [targetUser, setTargetUser] = useState('');
   const [selectedBgTab, setSelectedBgTab] = useState<string>('hub');
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [opacity, setOpacity] = useState<number>(1.0);
@@ -16,6 +34,20 @@ export default function AdminPanel() {
   // Collection Binder Cover Title state
   const [binderTitle, setBinderTitle] = useState<string>('Equestria Royal Archive');
   const [savingBinderTitle, setSavingBinderTitle] = useState(false);
+
+  // User Management & Moderation States
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [usersList, setUsersList] = useState<UserEntity[]>([]);
+  const [selectedUser, setSelectedUser] = useState<UserEntity | null>(null);
+
+  // Modal Action States
+  const [activeModal, setActiveModal] = useState<'POINTS' | 'CARD' | null>(null);
+  const [awardPointsInput, setAwardPointsInput] = useState('100');
+  
+  // Card Gifting States
+  const [allCards, setAllCards] = useState<CardEntity[]>([]);
+  const [cardSearchQuery, setCardSearchQuery] = useState('');
+  const [selectedCardId, setSelectedCardId] = useState('');
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/media/settings`)
@@ -31,7 +63,39 @@ export default function AdminPanel() {
         }
       })
       .catch((err) => console.error('Failed to load admin settings:', err));
+
+    // Fetch user catalog & card catalog for admin actions
+    fetchUsers('');
+    fetchCards();
   }, []);
+
+  const fetchUsers = async (query: string) => {
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users?search=${encodeURIComponent(query)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUsersList(data.users || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
+    }
+  };
+
+  const fetchCards = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/cards`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setAllCards(data);
+        if (data.length > 0) setSelectedCardId(data[0].id);
+      }
+    } catch (err) {
+      console.error('Failed to load cards catalog:', err);
+    }
+  };
 
   const handleTabChange = (tab: string) => {
     setSelectedBgTab(tab);
@@ -99,10 +163,98 @@ export default function AdminPanel() {
     setAnnouncement('');
   };
 
-  const handleModeration = (action: string) => {
-    alert(`Action "${action}" successfully applied to user: ${targetUser}`);
-    setTargetUser('');
+  // --- Admin Action 1: Award Pony Points ---
+  const handleAwardPointsSubmit = async () => {
+    if (!selectedUser) return;
+    const pts = parseInt(awardPointsInput, 10);
+    if (isNaN(pts)) return alert('Please enter a valid number of points.');
+
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/award-points`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ userId: selectedUser.id, points: pts }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Successfully awarded ${pts} Pony Points to ${selectedUser.username}!`);
+        setActiveModal(null);
+        fetchUsers(userSearchQuery);
+      } else {
+        alert(data.error || 'Failed to award points.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error communicating with server.');
+    }
   };
+
+  // --- Admin Action 2: Gift Card ---
+  const handleGiftCardSubmit = async () => {
+    if (!selectedUser || !selectedCardId) return;
+
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/gift-card`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ userId: selectedUser.id, cardId: selectedCardId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || `Successfully gifted card to ${selectedUser.username}!`);
+        setActiveModal(null);
+      } else {
+        alert(data.error || 'Failed to gift card.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error communicating with server.');
+    }
+  };
+
+  // --- Admin Action 3: Silence, Suspend, Ban, or Active ---
+  const handleModerationAction = async (actionType: 'SILENCE' | 'SUSPEND' | 'BAN' | 'ACTIVE') => {
+    if (!selectedUser) return;
+    if (!window.confirm(`Are you sure you want to apply action [${actionType}] to user ${selectedUser.username}?`)) {
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/moderate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ userId: selectedUser.id, action: actionType }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || `Action ${actionType} applied successfully.`);
+        fetchUsers(userSearchQuery);
+      } else {
+        alert(data.error || 'Failed to apply moderation action.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error communicating with server.');
+    }
+  };
+
+  const filteredCardsCatalog = allCards.filter(
+    (c) =>
+      c.name.toLowerCase().includes(cardSearchQuery.toLowerCase()) ||
+      c.id.toLowerCase().includes(cardSearchQuery.toLowerCase())
+  );
 
   const currentTabBgUrl = settings[`bg_${selectedBgTab}`] || '';
   const currentBinderCoverUrl = settings['bg_binder_cover'] || '';
@@ -115,6 +267,119 @@ export default function AdminPanel() {
       <h1>🛡️ Admin Control Panel</h1>
 
       <div className="admin-grid">
+        {/* User Management & Moderation Hub */}
+        <div className="panel-box" style={{ gridColumn: '1 / -1' }}>
+          <h3>👥 User Management, Points, Gifting &amp; Moderation</h3>
+          <p style={{ fontSize: '13px', margin: 0, color: '#d8b4fe' }}>
+            Search for registered users to award Pony Points, gift specific cards, or silence, suspend, and ban accounts.
+          </p>
+
+          <input
+            type="text"
+            placeholder="Search users by username, display name or email..."
+            value={userSearchQuery}
+            onChange={(e) => {
+              setUserSearchQuery(e.target.value);
+              fetchUsers(e.target.value);
+            }}
+            style={{ maxWidth: '420px', marginTop: '6px' }}
+          />
+
+          <div className="admin-user-table-wrapper">
+            {usersList.length === 0 ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#c084fc' }}>No users found.</div>
+            ) : (
+              usersList.map((u) => (
+                <div
+                  key={u.id}
+                  className="admin-user-row"
+                  style={{
+                    background: selectedUser?.id === u.id ? 'rgba(147, 51, 234, 0.35)' : 'transparent',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => setSelectedUser(u)}
+                >
+                  <div>
+                    <strong>{u.username}</strong> ({u.display_name || 'No Display Name'})
+                    <div style={{ fontSize: '11px', color: '#cbd5e1' }}>{u.email}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ color: '#fde047', fontWeight: 900 }}>🪙 {u.reward_points || 0} Pts</span>
+                    <div style={{ fontSize: '10px', color: u.is_safe_mode ? '#fca5a5' : '#34d399' }}>
+                      {u.is_safe_mode ? 'Restricted / Silenced' : 'Active'}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {selectedUser && (
+            <div style={{ background: 'rgba(24, 8, 38, 0.75)', border: '2px solid #ffd700', borderRadius: '12px', padding: '16px', marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 4px 0', color: '#ffd700' }}>Selected User: {selectedUser.username}</h4>
+                  <span style={{ fontSize: '12px', color: '#fbcfe8' }}>
+                    Email: {selectedUser.email} • Balance: <strong>{selectedUser.reward_points || 0} Pony Points</strong>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedUser(null)}
+                  style={{ background: 'transparent', border: '1px solid #f472b6', color: '#f472b6', padding: '4px 10px', borderRadius: '8px', cursor: 'pointer', fontSize: '11px' }}
+                >
+                  Deselect
+                </button>
+              </div>
+
+              <div className="mod-buttons" style={{ marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal('POINTS')}
+                  style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}
+                >
+                  🪙 Award Pony Points
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal('CARD')}
+                  style={{ background: 'linear-gradient(135deg, #ec4899, #9333ea)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}
+                >
+                  🎁 Gift Specific Card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleModerationAction('SILENCE')}
+                  style={{ background: '#ca8a04', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}
+                >
+                  🔇 Silence
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleModerationAction('SUSPEND')}
+                  style={{ background: '#ea580c', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}
+                >
+                  ⏳ Suspend
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleModerationAction('BAN')}
+                  style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}
+                >
+                  🚫 Ban User
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleModerationAction('ACTIVE')}
+                  style={{ background: '#059669', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '10px', fontWeight: 900, cursor: 'pointer' }}
+                >
+                  ✅ Restore Active
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Global Theme & Tab Background Customizer */}
         <div className="panel-box">
           <h3>🎨 Global Tab Background & Opacity</h3>
@@ -242,22 +507,6 @@ export default function AdminPanel() {
           <button onClick={postAnnouncement} className="mlp-btn">Publish Announcement</button>
         </div>
 
-        {/* User Moderation */}
-        <div className="panel-box">
-          <h3>⚖️ Member Moderation</h3>
-          <input
-            type="text"
-            placeholder="Username or Email..."
-            value={targetUser}
-            onChange={(e) => setTargetUser(e.target.value)}
-          />
-          <div className="mod-buttons">
-            <button onClick={() => handleModeration('Punish')} className="mlp-btn warning">Punish</button>
-            <button onClick={() => handleModeration('Silence')} className="mlp-btn warning">Silence</button>
-            <button onClick={() => handleModeration('Ban')} className="mlp-btn danger">Ban</button>
-          </div>
-        </div>
-
         {/* Content Auditing */}
         <div className="panel-box">
           <h3>🔍 Audit Decks & Content</h3>
@@ -265,6 +514,88 @@ export default function AdminPanel() {
           <button className="mlp-btn">Audit Database Decks</button>
         </div>
       </div>
+
+      {/* MODAL 1: AWARD PONY POINTS */}
+      {activeModal === 'POINTS' && selectedUser && (
+        <div className="admin-modal-backdrop" onClick={() => setActiveModal(null)}>
+          <div className="admin-modal-box" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: 0, color: '#ffd700' }}>🪙 Award Pony Points</h3>
+            <p style={{ fontSize: '13px', margin: 0, color: '#fbcfe8' }}>
+              Grant Pony Points to user <strong>{selectedUser.username}</strong>:
+            </p>
+            <input
+              type="number"
+              placeholder="Enter number of points..."
+              value={awardPointsInput}
+              onChange={(e) => setAwardPointsInput(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setActiveModal(null)}
+                style={{ background: 'transparent', border: '1px solid #c084fc', color: '#c084fc', padding: '8px 16px', borderRadius: '10px', cursor: 'pointer', fontWeight: 800 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAwardPointsSubmit}
+                style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '10px', cursor: 'pointer', fontWeight: 900 }}
+              >
+                Submit &amp; Award
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: GIFT SPECIFIC CARD */}
+      {activeModal === 'CARD' && selectedUser && (
+        <div className="admin-modal-backdrop" onClick={() => setActiveModal(null)}>
+          <div className="admin-modal-box" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: 0, color: '#ffd700' }}>🎁 Gift Specific Card</h3>
+            <p style={{ fontSize: '13px', margin: 0, color: '#fbcfe8' }}>
+              Select a card to gift directly to <strong>{selectedUser.username}</strong>&apos;s collection:
+            </p>
+
+            <input
+              type="text"
+              placeholder="Search cards by name or ID..."
+              value={cardSearchQuery}
+              onChange={(e) => setCardSearchQuery(e.target.value)}
+            />
+
+            <select
+              value={selectedCardId}
+              onChange={(e) => setSelectedCardId(e.target.value)}
+              style={{ maxHeight: '160px' }}
+            >
+              {filteredCardsCatalog.map((c) => (
+                <option key={c.id} value={c.id}>
+                  [{c.id}] {c.name} ({c.rarity} - {c.card_type})
+                </option>
+              ))}
+            </select>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setActiveModal(null)}
+                style={{ background: 'transparent', border: '1px solid #c084fc', color: '#c084fc', padding: '8px 16px', borderRadius: '10px', cursor: 'pointer', fontWeight: 800 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleGiftCardSubmit}
+                style={{ background: 'linear-gradient(135deg, #ec4899, #9333ea)', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '10px', cursor: 'pointer', fontWeight: 900 }}
+              >
+                Gift Card 🎁
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
