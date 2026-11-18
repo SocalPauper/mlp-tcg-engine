@@ -34,6 +34,7 @@ interface AuthContextType {
   login: (credentials: { username: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   register: (formData: any) => Promise<void>;
+  updateUserPoints: (newPoints: number) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,7 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         if (data.user) setUser(data.user);
-      } catch (err) {
+      } catch {
         setUser(null);
       } finally {
         setLoading(false);
@@ -84,8 +85,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateUserPoints = (newPoints: number) => {
+    setUser((prev) => (prev ? { ...prev, reward_points: newPoints } : prev));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, loading, login, logout, register }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, loading, login, logout, register, updateUserPoints }}>
       {children}
     </AuthContext.Provider>
   );
@@ -175,14 +180,16 @@ function AppContent() {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'PING' }));
       }
-    }, 20000);
+    }, 15000);
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'STATE_UPDATE' && data.state) {
-          if (data.roomCode && data.sessionToken && (data.seat === '0' || data.seat === '1')) {
-            sessionStorage.setItem(
+          if (data.state.phase === 'GAME_OVER') {
+            localStorage.removeItem(MATCH_SESSION_KEY);
+          } else if (data.roomCode && data.sessionToken && (data.seat === '0' || data.seat === '1')) {
+            localStorage.setItem(
               MATCH_SESSION_KEY,
               JSON.stringify({
                 roomCode: data.roomCode,
@@ -199,7 +206,7 @@ function AppContent() {
             isReconnecting: false,
           }));
         } else if (data.type === 'RECONNECT_FAILED') {
-          sessionStorage.removeItem(MATCH_SESSION_KEY);
+          localStorage.removeItem(MATCH_SESSION_KEY);
           setActiveMatch(null);
         }
       } catch (err) {
@@ -210,12 +217,12 @@ function AppContent() {
     ws.onclose = () => {
       clearInterval(pingInterval);
       if (intentionalLeaveRef.current) {
-        sessionStorage.removeItem(MATCH_SESSION_KEY);
+        localStorage.removeItem(MATCH_SESSION_KEY);
         setActiveMatch(null);
         return;
       }
 
-      const savedRaw = sessionStorage.getItem(MATCH_SESSION_KEY);
+      const savedRaw = localStorage.getItem(MATCH_SESSION_KEY);
       if (savedRaw) {
         setActiveMatch((prev) => (prev ? { ...prev, isReconnecting: true } : null));
         reconnectTimerRef.current = setTimeout(() => {
@@ -235,10 +242,10 @@ function AppContent() {
             };
             attachMatchSocketHandlers(newSocket, null, saved.seat);
           } catch {
-            sessionStorage.removeItem(MATCH_SESSION_KEY);
+            localStorage.removeItem(MATCH_SESSION_KEY);
             setActiveMatch(null);
           }
-        }, 1500);
+        }, 1200);
       } else {
         setActiveMatch(null);
       }
@@ -249,8 +256,9 @@ function AppContent() {
     }
   };
 
+  // Restore active match even if the browser tab/window was closed and reopened
   useEffect(() => {
-    const savedRaw = sessionStorage.getItem(MATCH_SESSION_KEY);
+    const savedRaw = localStorage.getItem(MATCH_SESSION_KEY);
     if (!savedRaw) return;
     try {
       const saved = JSON.parse(savedRaw);
@@ -270,15 +278,15 @@ function AppContent() {
         attachMatchSocketHandlers(socket, null, saved.seat);
       }
     } catch {
-      sessionStorage.removeItem(MATCH_SESSION_KEY);
+      localStorage.removeItem(MATCH_SESSION_KEY);
     }
   }, []);
 
   const handleMatchJoined = (ws: WebSocket, initialState: LiveGameState, seat: '0' | '1' | 'spectator') => {
     if (initialState.roomId && (seat === '0' || seat === '1')) {
-      const existing = sessionStorage.getItem(MATCH_SESSION_KEY);
+      const existing = localStorage.getItem(MATCH_SESSION_KEY);
       if (!existing) {
-        sessionStorage.setItem(
+        localStorage.setItem(
           MATCH_SESSION_KEY,
           JSON.stringify({ roomCode: initialState.roomId, seat, sessionToken: '' })
         );
@@ -289,7 +297,7 @@ function AppContent() {
 
   const handleLeaveMatch = () => {
     intentionalLeaveRef.current = true;
-    sessionStorage.removeItem(MATCH_SESSION_KEY);
+    localStorage.removeItem(MATCH_SESSION_KEY);
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;

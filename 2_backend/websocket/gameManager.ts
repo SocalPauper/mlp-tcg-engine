@@ -22,6 +22,9 @@ import {
   acknowledgeStoryReveal,
   forfeitMatch,
   endTurn,
+  activateManeLeaderAbility,
+  resolveTargetSelection,
+  cancelTargetSelection,
 } from '../../3_engine/gameRules.js';
 import { pool } from '../../4_data/db.js';
 
@@ -40,12 +43,14 @@ interface QueuedPlayer {
   ws: WebSocket;
   deckId: DeckId;
   username: string;
+  mode: 'Casual' | 'Ranked';
 }
 
 interface Room {
   code: string;
   name: string;
   mode: 'Casual' | 'Ranked';
+  password?: string;
   allowSpectators: boolean;
   state: KayouGameState;
   clients: RoomClient[];
@@ -97,6 +102,11 @@ export class GameManager {
       const now = Date.now();
       for (const [code, room] of this.rooms.entries()) {
         if (room.state.phase === 'GAME_OVER' || room.state.phase === 'WAITING_FOR_PLAYERS') {
+          // Clean up abandoned waiting rooms after 15 minutes
+          if (room.state.phase === 'WAITING_FOR_PLAYERS' && now - room.lastActivityAt >= 15 * 60 * 1000) {
+            this.rooms.delete(code);
+            this.broadcastLobbyRooms();
+          }
           continue;
         }
 
@@ -156,7 +166,7 @@ export class GameManager {
         );
       };
 
-      // Socket drop (network blip or page refresh) -> mark disconnected & start 3-minute grace window
+      // Socket drop (window close, refresh, or network blip) -> keep room alive for 3-minute reconnect window
       const handleSocketDisconnect = () => {
         removeFromQueue();
         if (!userSession) return;
@@ -216,7 +226,7 @@ export class GameManager {
             return;
           }
 
-          // Reconnect after browser refresh or transient network interruption
+          // Reconnect after window close, browser refresh, or transient network interruption
           if (message.type === 'RECONNECT_MATCH') {
             const { roomCode, seat, sessionToken } = message;
             const room = this.rooms.get(String(roomCode || '').trim().toLowerCase());
@@ -241,6 +251,7 @@ export class GameManager {
               room.clients.push(restoredSession);
 
               this.broadcastRoomState(room);
+              this.broadcastLobbyRooms();
               return;
             }
             ws.send(JSON.stringify({ type: 'RECONNECT_FAILED' }));
@@ -258,20 +269,22 @@ export class GameManager {
             removeFromQueue();
 
             const deckId: DeckId = message.deckId || 'starter-sd01';
+            const mode: 'Casual' | 'Ranked' = message.mode === 'Ranked' ? 'Ranked' : 'Casual';
             const username = message.username || `Guest_${Math.floor(100 + Math.random() * 900)}`;
 
             this.quickPlayQueue = this.quickPlayQueue.filter((q) => q.ws.readyState === WebSocket.OPEN);
 
-            if (this.quickPlayQueue.length > 0) {
-              const opponent = this.quickPlayQueue.shift()!;
-              const roomCode = `qp-${Math.floor(10000 + Math.random() * 90000)}`;
+            const matchIdx = this.quickPlayQueue.findIndex((q) => q.mode === mode);
+            if (matchIdx !== -1) {
+              const [opponent] = this.quickPlayQueue.splice(matchIdx, 1);
+              const roomCode = `${mode === 'Ranked' ? 'rk' : 'qp'}-${Math.floor(10000 + Math.random() * 90000)}`;
               const token0 = crypto.randomUUID();
               const token1 = crypto.randomUUID();
 
               const room: Room = {
                 code: roomCode,
                 name: `${opponent.username} vs ${username}`,
-                mode: 'Casual',
+                mode,
                 allowSpectators: true,
                 state: createWaitingMatch(),
                 clients: [],
@@ -310,9 +323,12 @@ export class GameManager {
               this.broadcastRoomState(room);
               this.broadcastLobbyRooms();
             } else {
-              this.quickPlayQueue.push({ ws, deckId, username });
+              this.quickPlayQueue.push({ ws, deckId, username, mode });
               ws.send(
-                JSON.stringify({ type: 'QUEUED', message: 'Waiting for an opponent in Quick Play...' })
+                JSON.stringify({
+                  type: 'QUEUED',
+                  message: `Searching ${mode} queue for a worthy opponent...`,
+                })
               );
             }
             return;
@@ -323,8 +339,9 @@ export class GameManager {
             const roomCode = (message.roomCode || `pony-${Math.floor(1000 + Math.random() * 9000)}`)
               .trim()
               .toLowerCase();
-            const roomName = message.roomName || 'Custom Mane Showdown';
-            const mode = message.mode || 'Casual';
+            const roomName = String(message.roomName || 'Custom Mane Showdown').trim();
+            const mode: 'Casual' | 'Ranked' = message.mode === 'Ranked' ? 'Ranked' : 'Casual';
+            const password = message.password ? String(message.password).trim() : undefined;
             const allowSpectators = message.allowSpectators ?? true;
             const deckId: DeckId = message.deckId || 'starter-sd01';
             const username = message.username || 'Host';
@@ -334,6 +351,7 @@ export class GameManager {
               code: roomCode,
               name: roomName,
               mode,
+              password,
               allowSpectators,
               state: createWaitingMatch(),
               clients: [],
@@ -363,13 +381,25 @@ export class GameManager {
           if (message.type === 'JOIN_ROOM') {
             if (userSession && userSession.roomCode !== message.roomCode) handleExplicitLeave();
             const roomCode = (message.roomCode || '').trim().toLowerCase();
+            const suppliedPassword = message.password ? String(message.password).trim() : '';
             const chosenDeckId: DeckId = message.deckId || 'starter-sd02';
             const username = message.username || 'GuestPlayer';
 
             const room = this.rooms.get(roomCode);
-            if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found.' }));
+            if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Match room not found.' }));
+
+            if (room.password && room.password !== suppliedPassword) {
+              return ws.send(
+                JSON.stringify({ type: 'ERROR', message: 'Incorrect match password.' })
+              );
+            }
 
             room.clients = room.clients.filter((c) => c.ws.readyState === WebSocket.OPEN && c.ws !== ws);
+            const seatedCount = room.clients.filter((c) => c.seat === '0' || c.seat === '1').length;
+            if (seatedCount >= 2) {
+              return ws.send(JSON.stringify({ type: 'ERROR', message: 'This match is already full.' }));
+            }
+
             const assignedSeat = room.clients.some((c) => c.seat === '0') ? '1' : '0';
             const seatToken = crypto.randomUUID();
 
@@ -402,10 +432,19 @@ export class GameManager {
 
           if (message.type === 'SPECTATE_ROOM') {
             const roomCode = (message.roomCode || '').trim().toLowerCase();
+            const suppliedPassword = message.password ? String(message.password).trim() : '';
             const room = this.rooms.get(roomCode);
             if (!room || !room.allowSpectators) {
               return ws.send(
-                JSON.stringify({ type: 'ERROR', message: 'Spectating not allowed or room not found.' })
+                JSON.stringify({
+                  type: 'ERROR',
+                  message: 'Spectating is disabled for this room or room not found.',
+                })
+              );
+            }
+            if (room.password && room.password !== suppliedPassword) {
+              return ws.send(
+                JSON.stringify({ type: 'ERROR', message: 'Incorrect password to spectate this private match.' })
               );
             }
 
@@ -424,6 +463,7 @@ export class GameManager {
                 type: 'STATE_UPDATE',
                 state: this.getPublicStateForSpectator(room.state),
                 seat: 'spectator',
+                roomCode: room.code,
                 clientCount: room.clients.length,
               })
             );
@@ -440,6 +480,9 @@ export class GameManager {
               room.lastActivityAt = Date.now();
               room.state.turnDeadlineMs = room.lastActivityAt + INACTIVITY_TIMEOUT_MS;
               this.broadcastRoomState(room);
+              if (room.state.phase === 'GAME_OVER') {
+                this.broadcastLobbyRooms();
+              }
             }
             return;
           }
@@ -464,19 +507,25 @@ export class GameManager {
   }
 
   private getRoomListPayload() {
-    const roomList = Array.from(this.rooms.values()).map((r) => {
-      const hostClient = r.clients.find((c) => c.seat === '0');
-      const playerCount = r.clients.filter((c) => c.seat === '0' || c.seat === '1').length;
-      return {
-        code: r.code,
-        name: r.name,
-        host: hostClient?.username || 'Player',
-        mode: r.mode,
-        status: playerCount >= 2 ? 'In-Progress' : 'Waiting',
-        allowSpectators: r.allowSpectators,
-        playerCount,
-      };
-    });
+    const roomList = Array.from(this.rooms.values())
+      .filter((r) => r.state.phase !== 'GAME_OVER')
+      .map((r) => {
+        const hostClient = r.clients.find((c) => c.seat === '0');
+        const guestClient = r.clients.find((c) => c.seat === '1');
+        const playerCount =
+          (hostClient || r.disconnectedAt['0'] ? 1 : 0) +
+          (guestClient || r.disconnectedAt['1'] ? 1 : 0);
+        return {
+          code: r.code,
+          name: r.name,
+          host: hostClient?.username || r.state.players['0']?.displayName || 'Player',
+          mode: r.mode,
+          hasPassword: Boolean(r.password),
+          status: r.state.phase === 'WAITING_FOR_PLAYERS' && playerCount < 2 ? 'Waiting' : 'In-Progress',
+          allowSpectators: r.allowSpectators,
+          playerCount,
+        };
+      });
     return JSON.stringify({ type: 'ROOMS_LIST', rooms: roomList });
   }
 
@@ -695,7 +744,7 @@ export class GameManager {
         return acknowledgeStoryReveal(state, playerId);
       case 'END_TURN':
         return endTurn(state, playerId);
-	  case 'ACTIVATE_MANE_ABILITY':
+      case 'ACTIVATE_MANE_ABILITY':
         return activateManeLeaderAbility(state, playerId);
       case 'SELECT_TARGET':
         return resolveTargetSelection(state, playerId, payload.targetOwner, payload.laneIndex);

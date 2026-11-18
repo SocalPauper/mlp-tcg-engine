@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
+import { useAuth } from '../App';
 import CardPreviewModal, { PreviewableCard } from './CardPreviewModal';
 import './ShopView.css';
 
@@ -34,7 +35,8 @@ interface WeeklyDeal {
 const CARD_BACK_URL = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp';
 
 export default function ShopView() {
-  const [points, setPoints] = useState<number>(0);
+  const { user, updateUserPoints } = useAuth();
+  const [points, setPoints] = useState<number>(user?.reward_points ?? 0);
   const [weekId, setWeekId] = useState<string>('');
   const [deals, setDeals] = useState<WeeklyDeal[]>([]);
   const [tiers, setTiers] = useState<Record<string, any>>({});
@@ -46,11 +48,9 @@ export default function ShopView() {
   const [purchasing, setPurchasing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Global wallpaper & opacity loaded from auth.site_settings
   const [customBgUrl, setCustomBgUrl] = useState<string>('');
   const [bgOpacity, setBgOpacity] = useState<number>(1);
 
-  // Interactive Pack Rip & 3D Flip States
   const [activePackTier, setActivePackTier] = useState<{ key: string; name: string } | null>(null);
   const [packStage, setPackStage] = useState<'SEALED' | 'RIPPING' | 'REVEALING'>('SEALED');
   const [pulledCards, setPulledCards] = useState<CardItem[] | null>(null);
@@ -71,13 +71,18 @@ export default function ShopView() {
       .catch((err) => console.error('Error loading global shop theme:', err));
   }, []);
 
+  const syncPoints = (newVal: number) => {
+    setPoints(newVal);
+    updateUserPoints(newVal);
+  };
+
   const fetchShopData = async () => {
     try {
       const token = localStorage.getItem('token');
       const { data } = await axios.get(`${API_BASE_URL}/api/shop/status`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      setPoints(data.reward_points);
+      syncPoints(data.reward_points);
       setWeekId(data.weekId || '');
       setDeals(data.weeklyDeals || []);
       setTiers(data.tiers || {});
@@ -109,7 +114,7 @@ export default function ShopView() {
         { tier: tierKey },
         { headers: token ? { Authorization: `Bearer ${token}` } : {} }
       );
-      setPoints(data.remainingPoints);
+      syncPoints(data.remainingPoints);
       if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
       setPulledCards(data.cards);
       setActivePackTier({ key: tierKey, name: tierName });
@@ -169,7 +174,7 @@ export default function ShopView() {
         { dealId },
         { headers: token ? { Authorization: `Bearer ${token}` } : {} }
       );
-      setPoints(data.remainingPoints);
+      syncPoints(data.remainingPoints);
       if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
       setMessage(`✨ Successfully unlocked featured card: ${data.card.name}!`);
       fetchShopData();
@@ -199,7 +204,7 @@ export default function ShopView() {
         {},
         { headers: token ? { Authorization: `Bearer ${token}` } : {} }
       );
-      setPoints(data.remainingPoints);
+      syncPoints(data.remainingPoints);
       setTradeInSummary(data.tradeInSummary || { extraCardsCount: 0, totalPointsValue: 0 });
       setMessage(
         `♻️ Traded in ${data.tradedCount} extra copy/copies for +${data.pointsEarned} Pony Points!`
@@ -234,7 +239,6 @@ export default function ShopView() {
       className="shop-viewport"
       style={customBgUrl ? { backgroundImage: `url(${customBgUrl})` } : undefined}
     >
-      {/* Opacity Tint Layer Controlled by Global Admin Settings */}
       {customBgUrl && (
         <div
           style={{
@@ -251,7 +255,6 @@ export default function ShopView() {
       <div className="shop-container">
         <CardPreviewModal card={previewCard} onClose={() => setPreviewCard(null)} />
 
-        {/* TOP HEADER BAR */}
         <div className="shop-header">
           <div>
             <h2>✨ The Pony Point Shop ✨</h2>
@@ -297,7 +300,6 @@ export default function ShopView() {
                 <div className="easel-spotlight-beam" aria-hidden="true" />
                 <span className="easel-rarity-pill">{deal.rarity}</span>
 
-                {/* Miniature Easel Stand */}
                 <div className="mini-easel-assembly">
                   <div className="easel-top-finial" />
                   <div
@@ -357,7 +359,6 @@ export default function ShopView() {
           <div className="packs-showcase-grid">
             {Object.entries(tiers).map(([key, tier]) => (
               <div key={key} className="pack-showcase-column">
-                {/* Upright 3D Foil Pack Object */}
                 <div
                   className={`shiny-foil-pack tier-${key.toLowerCase()}`}
                   onClick={() => !purchasing && handleBuyPack(key, tier.cost, tier.name)}
@@ -377,7 +378,6 @@ export default function ShopView() {
                   <div className="foil-pack-crimp bottom" />
                 </div>
 
-                {/* Distribution & Cost Text Box Below Pack */}
                 <div className="pack-distribution-box">
                   <div className="pack-dist-header">
                     <h4>{tier.name}</h4>

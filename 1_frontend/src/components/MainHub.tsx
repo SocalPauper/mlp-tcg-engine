@@ -12,58 +12,146 @@ interface SelectableDeck {
   mane_image_url?: string | null;
 }
 
+interface LobbyRoom {
+  code: string;
+  name: string;
+  host: string;
+  mode: 'Casual' | 'Ranked';
+  hasPassword: boolean;
+  status: 'Waiting' | 'In-Progress';
+  allowSpectators: boolean;
+  playerCount: number;
+}
+
 interface MainHubProps {
   onMatchJoined: (ws: WebSocket, state: LiveGameState, seat: '0' | '1' | 'spectator') => void;
   onNavigateTab?: (tab: string) => void;
 }
 
-const FALLBACK_STARTERS: SelectableDeck[] = [
-  { id: 'starter-sd01', name: 'Twilight Sparkle - Magic Starter', element: 'Magic', is_starter: true },
-  { id: 'starter-sd02', name: 'Rainbow Dash - Loyalty Starter', element: 'Loyalty', is_starter: true },
-  { id: 'starter-sd03', name: 'Applejack - Honesty Starter', element: 'Honesty', is_starter: true },
-  { id: 'starter-sd04', name: 'Rarity - Generosity Starter', element: 'Generosity', is_starter: true },
-  { id: 'starter-sd05', name: 'Fluttershy - Kindness Starter', element: 'Kindness', is_starter: true },
-  { id: 'starter-sd06', name: 'Pinkie Pie - Laughter Starter', element: 'Laughter', is_starter: true },
+const STARTER_DECKS: SelectableDeck[] = [
+  {
+    id: 'starter-sd01',
+    name: 'Twilight Sparkle - Magic Starter',
+    element: 'Magic',
+    is_starter: true,
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp',
+  },
+  {
+    id: 'starter-sd02',
+    name: 'Rainbow Dash - Loyalty Starter',
+    element: 'Loyalty',
+    is_starter: true,
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD02-C01.webp',
+  },
+  {
+    id: 'starter-sd03',
+    name: 'Applejack - Honesty Starter',
+    element: 'Honesty',
+    is_starter: true,
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD03-C01.webp',
+  },
+  {
+    id: 'starter-sd04',
+    name: 'Rarity - Generosity Starter',
+    element: 'Generosity',
+    is_starter: true,
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD04-C01.webp',
+  },
+  {
+    id: 'starter-sd05',
+    name: 'Fluttershy - Kindness Starter',
+    element: 'Kindness',
+    is_starter: true,
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD05-C01.webp',
+  },
+  {
+    id: 'starter-sd06',
+    name: 'Pinkie Pie - Laughter Starter',
+    element: 'Laughter',
+    is_starter: true,
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD06-C01.webp',
+  },
 ];
 
-export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) {
+const KAYOU_MLP_NEWS = [
+  {
+    title: "Kayou × Hasbro U.S. Set 4: Hearth's Warming Eve",
+    date: '2026 Release',
+    snippet:
+      'Featuring 197 holiday-themed cards including Special Parallel Rare (SPR) and Crystal Rare (CR) Mane 6 chases.',
+  },
+  {
+    title: 'Kayou MLP TCG: Nightmare Night Expansion',
+    date: '2026 Release',
+    snippet:
+      '190 spooky cards bringing Princess Luna, Nightmare Moon, and seasonal Story stages to North American play.',
+  },
+  {
+    title: 'KAYOU × BOOM! Studios Exclusive Comic Promo',
+    date: 'Collector News',
+    snippet:
+      'Special commemorative promo cards bundled with My Little Pony comic issues across participating hobby shops.',
+  },
+  {
+    title: 'Moon Edition 2 & Friendship Eternal Wave',
+    date: 'Official Catalog',
+    snippet:
+      'Expanded English-language card pool with gold-foil UR/GR variants—check kayouofficial.com for product checklists.',
+  },
+];
+
+export default function MainHub({ onMatchJoined }: MainHubProps) {
   const { user } = useAuth();
   const isGuest = !user;
 
-  // Age-gated and verified non-safemode conditions
+  // Strict verification & safety gate for Community Chat
   const isSafeMode = user?.isSafeMode ?? true;
-  const canChat = user && !isSafeMode && (user.isVerified || user.role === 'admin');
+  const canChat = Boolean(user && !isSafeMode && (user.isVerified || user.role === 'admin'));
 
   const wsRef = useRef<WebSocket | null>(null);
-  const [availableDecks, setAvailableDecks] = useState<SelectableDeck[]>(FALLBACK_STARTERS);
+  const [availableDecks, setAvailableDecks] = useState<SelectableDeck[]>(STARTER_DECKS);
+  const [liveRooms, setLiveRooms] = useState<LobbyRoom[]>([]);
 
-  // Matchmaking State
+  // Matchmaking & In-Hub Deck Picker State
   const [matchMode, setMatchMode] = useState<'Casual' | 'Ranked'>('Casual');
   const [selectedDeck, setSelectedDeck] = useState<string>(() => {
-    const saved = localStorage.getItem('mlp_last_deck_id');
-    return saved && saved.startsWith('starter-sd') ? saved : 'starter-sd01';
+    return localStorage.getItem('mlp_last_deck_id') || 'starter-sd01';
   });
+  const [showDeckPickerModal, setShowDeckPickerModal] = useState(false);
 
-  // Quick Play Modal / Queue state
-  const [showQuickPlayModal, setShowQuickPlayModal] = useState(false);
+  // Quick Play Starter Prompt & Queue State
+  const [showQuickPlayStarterModal, setShowQuickPlayStarterModal] = useState(false);
+  const [quickPlayStarterId, setQuickPlayStarterId] = useState<string>('starter-sd01');
   const [isSearchingQueue, setIsSearchingQueue] = useState(false);
   const [queueStatusText, setQueueStatusText] = useState('Searching for opponent...');
 
-  // Chat state with customized fallback for restricted/safemode accounts
+  // Create Private Match State
+  const [privateRoomName, setPrivateRoomName] = useState('');
+  const [privatePassword, setPrivatePassword] = useState('');
+  const [allowSpectators, setAllowSpectators] = useState(true);
+
+  // Join Private Room Password Prompt
+  const [passwordPromptRoom, setPasswordPromptRoom] = useState<{
+    room: LobbyRoom;
+    action: 'JOIN' | 'SPECTATE';
+  } | null>(null);
+  const [joinPasswordInput, setJoinPasswordInput] = useState('');
+
+  // Verified-only Community Chat State
   const [chatMessages, setChatMessages] = useState([
     {
-      user: 'System',
-      text: canChat
-        ? 'Welcome to the Equestria Clash chat, verified duelist! Share your latest strategies!'
-        : 'Notice: Out of abundance of safety, only non-guest accounts and those verified to be older than 13 participate here. Please explore our News Feed updates or find a Match!',
+      user: 'Princess Celestia',
+      text: 'Welcome, verified duelists of Equestria! Share your deck tech and good sportsmanship here. ✨',
     },
-    { user: 'Princess Celestia', text: 'Peace and harmony to all our duelists! ✨ Let your card play shine today!' },
   ]);
   const [inputMsg, setInputMsg] = useState('');
 
   // Global theme settings loaded from backend auth.site_settings
   const [customBgUrl, setCustomBgUrl] = useState<string>('');
   const [bgOpacity, setBgOpacity] = useState<number>(1);
+
+  const playerDisplayName =
+    user?.displayName || user?.username || `Pony_${Math.floor(100 + Math.random() * 900)}`;
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/media/settings`)
@@ -74,7 +162,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
           if (data.settings.bg_hub_opacity !== undefined) {
             setBgOpacity(parseFloat(data.settings.bg_hub_opacity));
           }
-          if (data.settings.site_announcement) {
+          if (data.settings.site_announcement && canChat) {
             setChatMessages((prev) => [
               ...prev,
               { user: 'Royal Decree', text: data.settings.site_announcement },
@@ -83,13 +171,13 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         }
       })
       .catch((err) => console.error('Error loading global hub theme:', err));
-  }, []);
+  }, [canChat]);
 
   useEffect(() => {
     localStorage.setItem('mlp_last_deck_id', selectedDeck);
   }, [selectedDeck]);
 
-  // Fetch user decks or default starters
+  // Fetch user's custom decks + starters
   useEffect(() => {
     const token = localStorage.getItem('token');
     fetch(`${API_BASE_URL}/api/decks`, {
@@ -116,20 +204,26 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
       .catch((err) => console.error('Error loading decks:', err));
   }, [isGuest]);
 
-  // WebSocket for matchmaking
+  // WebSocket for Matchmaking & Live Lobby Rooms List
   useEffect(() => {
     const wsUrl = API_BASE_URL.replace(/^http/, 'ws');
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
 
+    socket.onopen = () => {
+      socket.send(JSON.stringify({ type: 'GET_ROOMS' }));
+    };
+
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'QUEUED') {
+        if (data.type === 'ROOMS_LIST' && Array.isArray(data.rooms)) {
+          setLiveRooms(data.rooms);
+        } else if (data.type === 'QUEUED') {
           setQueueStatusText(data.message || 'Waiting for opponent...');
         } else if (data.type === 'STATE_UPDATE' && data.state) {
           setIsSearchingQueue(false);
-          setShowQuickPlayModal(false);
+          setShowQuickPlayStarterModal(false);
           onMatchJoined(socket, data.state, data.seat);
         } else if (data.type === 'ERROR') {
           setIsSearchingQueue(false);
@@ -139,21 +233,31 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         console.error('[WS PARSE ERROR]', err);
       }
     };
+
+    const roomRefreshInterval = setInterval(() => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'GET_ROOMS' }));
+      }
+    }, 8000);
+
+    return () => {
+      clearInterval(roomRefreshInterval);
+    };
   }, []);
 
-  const handleStartMatch = () => {
+  const queueWithDeck = (deckIdToUse: string, modeToUse: 'Casual' | 'Ranked') => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      alert('Connecting to game server... Please try again.');
+      alert('Connecting to game server... Please try again in a second.');
       return;
     }
     setIsSearchingQueue(true);
-    setQueueStatusText(`Joining ${matchMode} queue...`);
+    setQueueStatusText(`Joining ${modeToUse} queue...`);
     wsRef.current.send(
       JSON.stringify({
         type: 'QUICK_PLAY',
-        deckId: selectedDeck,
-        mode: matchMode,
-        username: user?.displayName || user?.username || `Pony_${Math.floor(100 + Math.random() * 900)}`,
+        deckId: deckIdToUse,
+        mode: modeToUse,
+        username: playerDisplayName,
       })
     );
   };
@@ -165,18 +269,70 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
     setIsSearchingQueue(false);
   };
 
-  const handleSendChat = (e: React.FormEvent) => {
+  const handleCreatePrivateMatch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canChat) {
-      alert('Your account must be verified and non-safemode to type here.');
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      alert('Connecting to game server... Please try again.');
       return;
     }
-    if (!inputMsg.trim()) return;
-    setChatMessages([...chatMessages, { user: user?.displayName || user?.username || 'You', text: inputMsg }]);
+    const code = `priv-${Math.floor(1000 + Math.random() * 9000)}`;
+    wsRef.current.send(
+      JSON.stringify({
+        type: 'CREATE_ROOM',
+        roomCode: code,
+        roomName: privateRoomName.trim() || `${playerDisplayName}'s Private Match`,
+        mode: matchMode,
+        password: privatePassword.trim() || undefined,
+        allowSpectators,
+        deckId: selectedDeck,
+        username: playerDisplayName,
+      })
+    );
+  };
+
+  const executeRoomAction = (room: LobbyRoom, action: 'JOIN' | 'SPECTATE', suppliedPass = '') => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (action === 'JOIN') {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'JOIN_ROOM',
+          roomCode: room.code,
+          password: suppliedPass,
+          deckId: selectedDeck,
+          username: playerDisplayName,
+        })
+      );
+    } else {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'SPECTATE_ROOM',
+          roomCode: room.code,
+          password: suppliedPass,
+        })
+      );
+    }
+  };
+
+  const handleRoomButtonClick = (room: LobbyRoom, action: 'JOIN' | 'SPECTATE') => {
+    if (room.hasPassword) {
+      setJoinPasswordInput('');
+      setPasswordPromptRoom({ room, action });
+      return;
+    }
+    executeRoomAction(room, action);
+  };
+
+  const handleSendChat = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canChat || !inputMsg.trim()) return;
+    setChatMessages([
+      ...chatMessages,
+      { user: user?.displayName || user?.username || 'You', text: inputMsg.trim() },
+    ]);
     setInputMsg('');
   };
 
-  const currentDeckObj = availableDecks.find((d) => d.id === selectedDeck);
+  const currentDeckObj = availableDecks.find((d) => d.id === selectedDeck) || availableDecks[0];
 
   return (
     <div
@@ -186,7 +342,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         backgroundBlendMode: customBgUrl ? 'overlay' : undefined,
       }}
     >
-      {/* Background Opacity Overlay Layer controlled by global admin settings */}
       {customBgUrl && (
         <div
           style={{
@@ -200,16 +355,24 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         />
       )}
 
-      <div className="hub-wireframe-layout" style={{ position: 'relative', zIndex: 4 }}>
-        {/* TOP LEFT CLUSTER: Matchmaking UI */}
-        <div className="hub-top-left-cluster">
+      <div className="hub-wireframe-layout">
+        {/* LEFT MAIN STACK */}
+        <div className="hub-left-stack">
+          {/* 1. MATCHMAKING CONTROL CENTER */}
           <div className="cloud-panel">
             <h3>☁️ Matchmaking Control Center</h3>
 
             <div className="matchmaking-grid">
-              {/* Match Type Box (Casual / Ranked) */}
               <div className="match-subbox">
-                <span style={{ fontSize: '13px', fontWeight: 900, color: '#ff9ebb', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <span
+                  style={{
+                    fontSize: '12.5px',
+                    fontWeight: 900,
+                    color: '#ff9ebb',
+                    marginBottom: '10px',
+                    textTransform: 'uppercase',
+                  }}
+                >
                   Match Mode
                 </span>
                 <div className="mode-radio-group">
@@ -234,140 +397,413 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
                 </div>
               </div>
 
-              {/* Selected Deck Box with redirect capabilities to Stable */}
               <div className="match-subbox">
-                <span style={{ fontSize: '13px', fontWeight: 900, color: '#ff9ebb', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Selected Deck
+                <span
+                  style={{
+                    fontSize: '12.5px',
+                    fontWeight: 900,
+                    color: '#ff9ebb',
+                    marginBottom: '10px',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Active Deck
                 </span>
                 <div className="deck-select-inner">
                   <div className="deck-current-name">
-                    {currentDeckObj ? `${currentDeckObj.name}` : 'Default Starter'}
+                    <span>{currentDeckObj ? currentDeckObj.name : 'Default Starter'}</span>
+                    <span style={{ fontSize: '11px', color: '#ffd700' }}>
+                      {currentDeckObj?.element}
+                    </span>
                   </div>
-                  {onNavigateTab && (
-                    <button className="mlp-cloud-btn secondary" onClick={() => onNavigateTab('stable')}>
-                      Deck Select ⚙️
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="mlp-cloud-btn secondary"
+                    onClick={() => setShowDeckPickerModal(true)}
+                  >
+                    🃏 Choose Deck ({availableDecks.length})
+                  </button>
                 </div>
               </div>
             </div>
 
-            {/* START Match Button */}
-            <button className="mlp-cloud-btn" onClick={handleStartMatch}>
+            <button
+              type="button"
+              className="mlp-cloud-btn"
+              onClick={() => queueWithDeck(selectedDeck, matchMode)}
+            >
               ✨ START {matchMode.toUpperCase()} MATCH ✨
             </button>
           </div>
 
-          {/* QUICK PLAY MODULE */}
+          {/* 2. QUICK PLAY (PROMPTS FOR STARTER DECK FIRST) */}
           <div className="cloud-panel quick-play-module">
-            <h3 style={{ marginBottom: '8px', color: '#fffdf7' }}>⚡ Quick Play (Starter Decks Only)</h3>
-            <p style={{ fontSize: '14px', color: '#fce7f3', marginBottom: '18px', maxWidth: '480px' }}>
-              Jump straight into a fast-paced magical duel using any of the official Mane 6 starter decks!
+            <h3 style={{ marginBottom: '6px', color: '#fffdf7' }}>
+              ⚡ Quick Play (Starter Decks Only)
+            </h3>
+            <p style={{ fontSize: '13.5px', color: '#fce7f3', marginBottom: '16px', maxWidth: '520px' }}>
+              Pick one of the six Mane 6 starter decks and jump straight into a balanced casual duel!
             </p>
             <button
+              type="button"
               className="mlp-cloud-btn"
-              style={{ maxWidth: '290px', padding: '12px 28px', fontSize: '15px' }}
-              onClick={() => {
-                setShowQuickPlayModal(true);
-                handleStartMatch();
-              }}
+              style={{ maxWidth: '300px', padding: '12px 26px', fontSize: '15px' }}
+              onClick={() => setShowQuickPlayStarterModal(true)}
             >
-              Quick Play Now 🚀
+              🚀 Quick Play (Pick Starter)
             </button>
+          </div>
+
+          {/* 3. CURRENT GAMES BROWSER & CREATE PRIVATE MATCH */}
+          <div className="lobby-dual-grid">
+            {/* Active / Open Games Module */}
+            <div className="cloud-panel">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ margin: 0 }}>🎮 Live Matches &amp; Lobbies</h3>
+                <button
+                  type="button"
+                  className="mlp-cloud-btn secondary small-pill"
+                  onClick={() => wsRef.current?.send(JSON.stringify({ type: 'GET_ROOMS' }))}
+                >
+                  🔄 Refresh
+                </button>
+              </div>
+
+              {liveRooms.length === 0 ? (
+                <div
+                  style={{
+                    padding: '32px 16px',
+                    textAlign: 'center',
+                    color: '#e9d5ff',
+                    background: 'rgba(18, 5, 29, 0.5)',
+                    borderRadius: '20px',
+                    border: '1.5px dashed rgba(255, 158, 187, 0.4)',
+                    fontSize: '13.5px',
+                  }}
+                >
+                  No open or active games right now. Create a match or start Quick Play!
+                </div>
+              ) : (
+                <div className="live-rooms-list">
+                  {liveRooms.map((room) => (
+                    <div key={room.code} className="live-room-row">
+                      <div className="live-room-meta">
+                        <span className="live-room-title">
+                          {room.hasPassword ? '🔒 ' : '🌐 '}
+                          {room.name}
+                        </span>
+                        <span className="live-room-sub">
+                          Host: {room.host} • {room.mode} • {room.playerCount}/2 Players
+                        </span>
+                      </div>
+
+                      <div>
+                        {room.status === 'Waiting' && room.playerCount < 2 ? (
+                          <button
+                            type="button"
+                            className="mlp-cloud-btn small-pill"
+                            onClick={() => handleRoomButtonClick(room, 'JOIN')}
+                          >
+                            ⚔️ Join
+                          </button>
+                        ) : room.allowSpectators ? (
+                          <button
+                            type="button"
+                            className="mlp-cloud-btn secondary small-pill"
+                            onClick={() => handleRoomButtonClick(room, 'SPECTATE')}
+                          >
+                            👁️ Spectate
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '11.5px', color: '#f472b6', fontWeight: 800 }}>
+                            🚫 Private View
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Create Private Match Module */}
+            <div className="cloud-panel">
+              <h3>🔐 Create Private Match</h3>
+              <form className="private-match-form" onSubmit={handleCreatePrivateMatch}>
+                <input
+                  type="text"
+                  className="hub-input"
+                  placeholder="Room Title (e.g., Friendship Duel)"
+                  value={privateRoomName}
+                  onChange={(e) => setPrivateRoomName(e.target.value)}
+                />
+                <input
+                  type="password"
+                  className="hub-input"
+                  placeholder="Room Password (optional)"
+                  value={privatePassword}
+                  onChange={(e) => setPrivatePassword(e.target.value)}
+                />
+                <label className="spectator-toggle-row">
+                  <span>👁️ Allow Spectators to Watch</span>
+                  <input
+                    type="checkbox"
+                    checked={allowSpectators}
+                    onChange={(e) => setAllowSpectators(e.target.checked)}
+                  />
+                </label>
+                <button type="submit" className="mlp-cloud-btn" style={{ padding: '12px 20px', fontSize: '14.5px' }}>
+                  ✨ Host Private Room
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* 4. BOTTOM ROW: COMING SOON LEADERBOARD & KAYOU MLP TCG NEWS FEED */}
+          <div className="hub-bottom-row">
+            <div className="cloud-panel">
+              <h3>🏆 Ranked Leaderboard</h3>
+              <div className="coming-soon-leaderboard-box">
+                <div style={{ fontSize: '36px' }}>👑✨</div>
+                <strong style={{ color: '#ffd700', fontSize: '17px' }}>
+                  Season 1 Leaderboard Coming Soon!
+                </strong>
+                <p style={{ margin: 0, fontSize: '13px', color: '#fbcfe8', lineHeight: 1.45 }}>
+                  Play Casual &amp; Ranked matches to test your builds while official MMR standings prepare for launch.
+                </p>
+              </div>
+            </div>
+
+            <div className="cloud-panel">
+              <h3>📜 Kayou MLP TCG News Feed</h3>
+              <div className="news-feed-scroll">
+                {KAYOU_MLP_NEWS.map((item, idx) => (
+                  <div key={idx} className="news-item">
+                    <div className="news-header-line">
+                      <span className="news-title">{item.title}</span>
+                      <span className="news-date-tag">{item.date}</span>
+                    </div>
+                    <p className="news-snippet">{item.snippet}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Chatroom gated based on Account and Safety checks */}
+        {/* RIGHT COLUMN: VERIFIED-ONLY COMMUNITY CHAT */}
         <div className="cloud-panel chat-wireframe-panel">
           <div>
             <h3>💬 Equestrian Community Chat</h3>
-            <p style={{ fontSize: '12px', color: '#fbcfe8', lineHeight: '1.45', margin: '8px 0 14px' }}>
+            <p style={{ fontSize: '12.5px', color: '#fbcfe8', lineHeight: '1.45', margin: '6px 0 10px' }}>
               {canChat
-                ? 'Authorized chat is active. Communicate freely with fellow card duelists!'
-                : 'Locked Chat Area. Out of abundance of safety, only non-guest accounts, and accounts verified as over the age of 13 can participate.'}
+                ? 'Verified duelist chat is active. Keep discussions friendly and respectful!'
+                : 'Restricted Area: Only verified accounts over age 13 may read or post in Community Chat.'}
             </p>
           </div>
 
-          <div className="chat-wireframe-messages">
-            {chatMessages.map((msg, i) => (
-              <div key={i} className="chat-wireframe-msg">
-                <span className="chat-wireframe-user">{msg.user}:</span> {msg.text}
-              </div>
-            ))}
-          </div>
-
           {canChat ? (
-            <form onSubmit={handleSendChat} className="chat-wireframe-form">
-              <input
-                type="text"
-                placeholder="Type a message to chat..."
-                value={inputMsg}
-                onChange={(e) => setInputMsg(e.target.value)}
-              />
-              <button type="submit" className="mlp-cloud-btn secondary" style={{ padding: '10px 20px' }}>
-                Send
-              </button>
-            </form>
+            <>
+              <div className="chat-wireframe-messages">
+                {chatMessages.map((msg, i) => (
+                  <div key={i} className="chat-wireframe-msg">
+                    <span className="chat-wireframe-user">{msg.user}:</span> {msg.text}
+                  </div>
+                ))}
+              </div>
+
+              <form onSubmit={handleSendChat} className="chat-wireframe-form">
+                <input
+                  type="text"
+                  placeholder="Type a message to chat..."
+                  value={inputMsg}
+                  onChange={(e) => setInputMsg(e.target.value)}
+                />
+                <button
+                  type="submit"
+                  className="mlp-cloud-btn secondary"
+                  style={{ padding: '10px 20px' }}
+                >
+                  Send
+                </button>
+              </form>
+            </>
           ) : (
-            <div style={{ fontSize: '12px', color: '#ff85a2', fontStyle: 'italic', textAlign: 'center', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '16px' }}>
-              🔒 Chat is locked in Safe Mode / Guest Mode.
+            <div className="chat-locked-shield">
+              <div style={{ fontSize: '42px' }}>🔒🛡️</div>
+              <strong style={{ color: '#ffd700', fontSize: '16px' }}>
+                Verified Duelists Only
+              </strong>
+              <p style={{ fontSize: '13px', color: '#e9d5ff', maxWidth: '300px', lineHeight: 1.5, margin: 0 }}>
+                To protect younger players, Community Chat messages and posting are hidden until your account is verified and out of Safe Mode.
+              </p>
             </div>
           )}
         </div>
+      </div>
 
-        {/* BOTTOM ROW: Leaderboard & News Feed */}
-        <div className="hub-bottom-row">
-          {/* Top 10 Player Leaderboard */}
-          <div className="cloud-panel bottom-module-card">
-            <h3>🏆 Top 10 Player Leaderboard</h3>
-            <div className="leaderboard-list">
-              <div className="leaderboard-row">
-                <span>1. 🌟 TwilightSparkle99</span>
-                <span><strong>2,450 MMR</strong></span>
-              </div>
-              <div className="leaderboard-row">
-                <span>2. ⚡ DashieFast</span>
-                <span><strong>2,380 MMR</strong></span>
-              </div>
-              <div className="leaderboard-row">
-                <span>3. 🍎 AppleBucks</span>
-                <span><strong>2,210 MMR</strong></span>
-              </div>
-              <div className="leaderboard-row">
-                <span>4. 🎨 RarityBoutique</span>
-                <span><strong>2,150 MMR</strong></span>
-              </div>
-              <div className="leaderboard-row">
-                <span>5. 🦋 Flutter Sanctuary</span>
-                <span><strong>2,090 MMR</strong></span>
-              </div>
+      {/* MODAL A: IN-HUB DECK SELECTOR POPUP */}
+      {showDeckPickerModal && (
+        <div className="hub-modal-backdrop" onClick={() => setShowDeckPickerModal(false)}>
+          <div className="hub-picker-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 6px', color: '#ffd700', fontFamily: 'Cinzel Decorative, serif' }}>
+              🃏 Select Your Active Deck
+            </h3>
+            <p style={{ margin: 0, fontSize: '13px', color: '#fbcfe8' }}>
+              Choose any of your built decks or official starter decks for matchmaking and private rooms:
+            </p>
+
+            <div className="hub-picker-grid">
+              {availableDecks.map((deck) => (
+                <div
+                  key={deck.id}
+                  className={`hub-deck-option ${selectedDeck === deck.id ? 'selected' : ''}`}
+                  onClick={() => {
+                    setSelectedDeck(deck.id);
+                    setShowDeckPickerModal(false);
+                  }}
+                >
+                  <img
+                    src={
+                      deck.mane_image_url ||
+                      'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp'
+                    }
+                    alt={deck.name}
+                  />
+                  <strong style={{ fontSize: '13px', color: '#fffdf7' }}>{deck.name}</strong>
+                  <span style={{ fontSize: '11px', color: '#ffd700', fontWeight: 800 }}>
+                    {deck.element} {deck.is_starter ? '• Starter' : '• Custom'}
+                  </span>
+                </div>
+              ))}
             </div>
+
+            <button
+              type="button"
+              className="mlp-cloud-btn secondary"
+              onClick={() => setShowDeckPickerModal(false)}
+            >
+              Close
+            </button>
           </div>
+        </div>
+      )}
 
-          {/* Kayou MLP TCG News Feed */}
-          <div className="cloud-panel bottom-module-card">
-            <h3>📜 Kayou MLP TCG News Feed</h3>
-            <div className="news-item">
-              <div className="news-title">BP04 Hearth’s Warming Expansion Live!</div>
-              <p className="news-snippet">Present unwrapping mechanics and new CMCs are now fully playable in online matches.</p>
+      {/* MODAL B: QUICK PLAY STARTER DECK PICKER */}
+      {showQuickPlayStarterModal && (
+        <div className="hub-modal-backdrop" onClick={() => setShowQuickPlayStarterModal(false)}>
+          <div className="hub-picker-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 6px', color: '#ffd700', fontFamily: 'Cinzel Decorative, serif' }}>
+              ⚡ Quick Play — Choose Your Starter Deck
+            </h3>
+            <p style={{ margin: 0, fontSize: '13px', color: '#fbcfe8' }}>
+              Select which Mane 6 starter deck you want to pilot before entering the queue:
+            </p>
+
+            <div className="hub-picker-grid">
+              {STARTER_DECKS.map((starter) => (
+                <div
+                  key={starter.id}
+                  className={`hub-deck-option ${quickPlayStarterId === starter.id ? 'selected' : ''}`}
+                  onClick={() => setQuickPlayStarterId(starter.id)}
+                >
+                  <img src={starter.mane_image_url!} alt={starter.name} />
+                  <strong style={{ fontSize: '13px', color: '#fffdf7' }}>{starter.name}</strong>
+                  <span style={{ fontSize: '11px', color: '#ffd700', fontWeight: 800 }}>
+                    {starter.element}
+                  </span>
+                </div>
+              ))}
             </div>
-            <div className="news-item">
-              <div className="news-title">SoCal Pauper Championship Announced</div>
-              <p className="news-snippet">Check socalpauper.com for upcoming local tournaments across Southern California!</p>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="mlp-cloud-btn secondary"
+                onClick={() => setShowQuickPlayStarterModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="mlp-cloud-btn"
+                style={{ width: 'auto', padding: '11px 28px', fontSize: '14.5px' }}
+                onClick={() => {
+                  setShowQuickPlayStarterModal(false);
+                  queueWithDeck(quickPlayStarterId, 'Casual');
+                }}
+              >
+                🚀 Launch Quick Play!
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Quick Play Queue Modal */}
-      {showQuickPlayModal && isSearchingQueue && (
-        <div className="auth-modal-overlay" onClick={handleCancelQueue}>
-          <div className="auth-modal" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center', maxWidth: '420px' }}>
-            <div style={{ fontSize: '32px', marginBottom: '12px' }}>✨🦄✨</div>
-            <h3 style={{ color: '#fbcfe8', marginBottom: '8px' }}>Matchmaking in Progress</h3>
-            <p style={{ fontSize: '14px', color: '#e9d5ff', marginBottom: '20px' }}>{queueStatusText}</p>
-            <button className="mlp-cloud-btn secondary" onClick={handleCancelQueue}>
-              Cancel & Return
+      {/* MODAL C: PRIVATE ROOM PASSWORD PROMPT */}
+      {passwordPromptRoom && (
+        <div className="hub-modal-backdrop" onClick={() => setPasswordPromptRoom(null)}>
+          <div
+            className="hub-picker-modal"
+            style={{ maxWidth: '420px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 8px', color: '#ffd700' }}>
+              🔒 Password Required
+            </h3>
+            <p style={{ fontSize: '13px', color: '#fbcfe8', marginBottom: '14px' }}>
+              Enter the password for <strong>{passwordPromptRoom.room.name}</strong>:
+            </p>
+            <input
+              type="password"
+              className="hub-input"
+              placeholder="Room password..."
+              value={joinPasswordInput}
+              onChange={(e) => setJoinPasswordInput(e.target.value)}
+              style={{ marginBottom: '16px' }}
+            />
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="mlp-cloud-btn secondary"
+                onClick={() => setPasswordPromptRoom(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="mlp-cloud-btn"
+                style={{ width: 'auto', padding: '10px 24px', fontSize: '14px' }}
+                onClick={() => {
+                  const target = passwordPromptRoom;
+                  setPasswordPromptRoom(null);
+                  executeRoomAction(target.room, target.action, joinPasswordInput);
+                }}
+              >
+                Enter Match
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL D: MATCHMAKING SEARCHING OVERLAY */}
+      {isSearchingQueue && (
+        <div className="hub-modal-backdrop" onClick={handleCancelQueue}>
+          <div
+            className="hub-picker-modal"
+            style={{ textAlign: 'center', maxWidth: '420px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '36px', marginBottom: '10px' }}>✨🦄✨</div>
+            <h3 style={{ color: '#ffd700', marginBottom: '8px', justifyContent: 'center' }}>
+              Matchmaking in Progress
+            </h3>
+            <p style={{ fontSize: '14px', color: '#e9d5ff', marginBottom: '20px' }}>
+              {queueStatusText}
+            </p>
+            <button type="button" className="mlp-cloud-btn secondary" onClick={handleCancelQueue}>
+              Cancel &amp; Return
             </button>
           </div>
         </div>
