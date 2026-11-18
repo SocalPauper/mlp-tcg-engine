@@ -1,32 +1,51 @@
-.binder-page-container {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 24px 16px 48px;
-  font-family: 'Nunito', sans-serif;
-  color: #4a148c;
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Nunito:wght@600;700;800;900&display=swap');
+
+.binder-viewport {
+  min-height: calc(100vh - 64px);
+  width: 100%;
+  background: radial-gradient(circle at 50% 15%, #3a1c54 0%, #210c2c 55%, #100418 100%);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  padding: 28px 18px 60px;
   box-sizing: border-box;
+  font-family: 'Nunito', sans-serif;
+  color: #fce7f3;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.binder-page-container {
+  max-width: 1460px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 4;
 }
 
 .binder-loading {
   text-align: center;
-  padding: 80px 20px;
-  font-size: 1.25rem;
+  padding: 100px 20px;
+  font-size: 1.35rem;
   font-weight: 900;
-  color: #7e22ce;
+  color: #ffd700;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
 }
 
+/* Frosted Cloud Header matching MainHub & StableHub */
 .binder-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
-  background: linear-gradient(135deg, #fce7f3 0%, #f3e8ff 100%);
-  border: 2px solid #f472b6;
-  border-radius: 18px;
-  padding: 18px 24px;
+  background: radial-gradient(circle at 50% 0%, rgba(93, 44, 128, 0.45) 0%, rgba(45, 16, 70, 0.62) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 3px solid rgba(255, 158, 187, 0.65);
+  border-radius: 34px;
+  padding: 18px 28px;
   margin-bottom: 18px;
-  box-shadow: 0 6px 20px rgba(147, 51, 234, 0.14);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), inset 0 2px 10px rgba(255, 255, 255, 0.2);
 }
 
 .binder-title-group {
@@ -35,34 +54,49 @@
   gap: 16px;
 }
 
-.binder-back-btn {
-  background: #fff;
-  color: #7e22ce;
-  border: 2px solid #c084fc;
-  padding: 8px 14px;
-  border-radius: 12px;
+.binder-back-btn,
+.binder-cover-toggle-btn {
+  background: linear-gradient(135deg, #701a75 0%, #b5179e 100%);
+  color: #fff;
+  border: 2px solid #ffd700;
+  padding: 9px 16px;
+  border-radius: 999px;
+  font-family: 'Nunito', sans-serif;
   font-weight: 900;
+  font-size: 13.5px;
   cursor: pointer;
-  transition: transform 0.15s ease;
+  transition: transform 0.18s ease, filter 0.18s ease;
 }
 
-.binder-back-btn:hover {
+.binder-back-btn:hover,
+.binder-cover-toggle-btn:hover {
   transform: translateY(-2px);
+  filter: brightness(1.12);
 }
 
 .binder-header h2 {
+  font-family: 'Cinzel Decorative', 'Nunito', serif;
   margin: 0 0 4px 0;
   font-size: 1.65rem;
-  color: #581c87;
+  color: #ffd700;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
 }
 
 .binder-subtitle {
   font-size: 0.92rem;
-  color: #6b21a8;
+  color: #fbcfe8;
+  font-weight: 700;
+}
+
+.binder-header-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
 }
 
 .binder-progress-wrapper {
-  min-width: 240px;
+  min-width: 220px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -71,36 +105,37 @@
 .binder-progress-track {
   width: 100%;
   height: 12px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1.5px solid #c084fc;
+  background: rgba(18, 5, 29, 0.75);
+  border: 1.5px solid #ffd700;
   border-radius: 999px;
   overflow: hidden;
 }
 
 .binder-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #ec4899, #9333ea, #f59e0b);
+  background: linear-gradient(90deg, #ec4899, #a855f7, #f59e0b);
   transition: width 0.35s ease;
 }
 
 .binder-progress-label {
   font-size: 0.82rem;
   font-weight: 900;
-  color: #6b21a8;
+  color: #ffd700;
   text-align: right;
 }
 
-/* Controls & Set Tabs */
+/* Filter Bar */
 .binder-controls-bar {
-  background: #fff;
-  border: 2px solid #e9d5ff;
-  border-radius: 16px;
-  padding: 14px 18px;
-  margin-bottom: 20px;
+  background: radial-gradient(circle at 50% 0%, rgba(93, 44, 128, 0.42) 0%, rgba(36, 12, 56, 0.62) 100%);
+  backdrop-filter: blur(10px);
+  border: 2.5px solid rgba(255, 158, 187, 0.55);
+  border-radius: 26px;
+  padding: 14px 20px;
+  margin-bottom: 22px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  box-shadow: 0 4px 14px rgba(107, 33, 168, 0.08);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
 }
 
 .binder-set-pills {
@@ -110,27 +145,28 @@
 }
 
 .set-pill {
-  padding: 6px 14px;
+  padding: 6px 15px;
   border-radius: 999px;
-  border: 2px solid #e9d5ff;
-  background: #faf5ff;
-  color: #6b21a8;
+  border: 1.5px solid rgba(255, 158, 187, 0.45);
+  background: rgba(24, 8, 38, 0.65);
+  color: #fbcfe8;
   font-family: 'Nunito', sans-serif;
   font-weight: 900;
-  font-size: 0.85rem;
+  font-size: 0.84rem;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
 }
 
 .set-pill:hover {
-  border-color: #ec4899;
+  border-color: #ffd700;
+  transform: translateY(-1px);
 }
 
 .set-pill.active {
   background: linear-gradient(135deg, #ec4899, #9333ea);
   color: #fff;
-  border-color: transparent;
-  box-shadow: 0 3px 10px rgba(236, 72, 153, 0.3);
+  border-color: #ffd700;
+  box-shadow: 0 3px 12px rgba(236, 72, 153, 0.4);
 }
 
 .binder-filter-inputs {
@@ -142,14 +178,18 @@
 .binder-input,
 .binder-select {
   padding: 9px 14px;
-  border-radius: 12px;
-  border: 2px solid #e9d5ff;
+  border-radius: 14px;
+  border: 2px solid rgba(192, 132, 252, 0.5);
   font-family: 'Nunito', sans-serif;
   font-weight: 700;
   font-size: 0.9rem;
-  color: #4a148c;
-  background: #fff;
+  color: #fdf2f8;
+  background: rgba(18, 5, 29, 0.78);
   outline: none;
+}
+
+.binder-input::placeholder {
+  color: #c084fc;
 }
 
 .binder-input {
@@ -163,87 +203,314 @@
   cursor: pointer;
 }
 
-/* 4 x 4 Virtual Binder Sheet */
-.virtual-binder-wrapper {
-  position: relative;
-  box-sizing: border-box;
-  width: 100%;
-  background: linear-gradient(145deg, #2e1065 0%, #1e1b4b 100%);
-  border: 4px solid #a855f7;
-  border-radius: 24px;
-  padding: 24px 24px 24px 44px;
-  box-shadow: 0 20px 50px rgba(30, 27, 75, 0.38), inset 0 0 30px rgba(168, 85, 247, 0.25);
-  overflow: hidden;
+/* ============================================================
+   CLOSED LEATHER BINDER COVER (FLIPS OPEN ON CLICK)
+   ============================================================ */
+.binder-closed-stage {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 0 40px;
+  perspective: 1800px;
 }
 
-.binder-spine-rings {
-  position: absolute;
-  left: 12px;
-  top: 12%;
-  bottom: 12%;
+.binder-closed-cover {
+  width: 100%;
+  max-width: 560px;
+  min-height: 620px;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(168, 85, 247, 0.35), transparent 60%),
+    linear-gradient(145deg, #3b0764 0%, #2e1065 48%, #1e1b4b 100%);
+  border: 5px solid #ffd700;
+  border-left: 26px solid #1a0633;
+  border-radius: 16px 34px 34px 16px;
+  box-shadow:
+    -10px 0 0 #4c1d95,
+    0 28px 65px rgba(0, 0, 0, 0.75),
+    inset 0 0 40px rgba(255, 215, 0, 0.16);
+  padding: 42px 36px;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: space-between;
+  text-align: center;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.45s ease;
+}
+
+.binder-closed-cover:hover {
+  transform: rotateY(-8deg) translateY(-6px);
+  box-shadow:
+    -14px 4px 0 #4c1d95,
+    18px 34px 75px rgba(0, 0, 0, 0.8),
+    0 0 35px rgba(255, 215, 0, 0.35);
+}
+
+/* Stitched Leather Border */
+.binder-closed-cover::before {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border: 2px dashed rgba(255, 215, 0, 0.55);
+  border-radius: 10px 24px 24px 10px;
   pointer-events: none;
 }
 
-.binder-ring {
-  width: 22px;
-  height: 14px;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #f8fafc 0%, #94a3b8 55%, #475569 100%);
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.6);
+.binder-cover-emblem {
+  font-size: 64px;
+  filter: drop-shadow(0 6px 16px rgba(255, 215, 0, 0.5));
+  margin-top: 16px;
 }
 
-.binder-sheet-4x4 {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+.binder-cover-title {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 2.1rem;
+  font-weight: 900;
+  color: #ffd700;
+  text-shadow: 0 3px 12px rgba(0, 0, 0, 0.85);
+  margin: 12px 0 8px;
+}
+
+.binder-cover-desc {
+  color: #fbcfe8;
+  font-size: 1rem;
+  max-width: 380px;
+  line-height: 1.5;
+}
+
+.binder-cover-stats-pill {
+  background: rgba(15, 5, 28, 0.72);
+  border: 2px solid #f472b6;
+  padding: 10px 22px;
+  border-radius: 999px;
+  font-weight: 900;
+  color: #fde047;
+  font-size: 0.95rem;
+}
+
+.binder-open-cta {
+  background: linear-gradient(135deg, #ff4d94 0%, #a21caf 50%, #f59e0b 100%);
+  color: #fff;
+  border: 3px solid #ffd700;
+  border-radius: 999px;
+  padding: 14px 34px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 900;
+  box-shadow: 0 10px 28px rgba(236, 72, 153, 0.5);
+  margin-bottom: 12px;
+}
+
+/* ============================================================
+   OPEN 2-PAGE 3-RING COLLECTOR'S BINDER
+   ============================================================ */
+.open-binder-case {
+  position: relative;
   width: 100%;
-  box-sizing: border-box;
+  background: linear-gradient(145deg, #3b0764 0%, #240942 50%, #190730 100%);
+  border: 5px solid #c084fc;
+  border-radius: 28px;
+  padding: 18px;
+  box-shadow:
+    0 26px 65px rgba(0, 0, 0, 0.65),
+    inset 0 0 30px rgba(255, 215, 0, 0.14);
+  perspective: 2200px;
+  animation: binderUnfold 0.55s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+@keyframes binderUnfold {
+  0% {
+    opacity: 0;
+    transform: perspective(1800px) rotateY(-18deg) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(1800px) rotateY(0deg) scale(1);
+  }
+}
+
+/* Stitched Leather Inner Trim */
+.open-binder-case::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 2px dashed rgba(255, 215, 0, 0.4);
+  border-radius: 22px;
+  pointer-events: none;
+}
+
+.open-binder-spread {
+  display: grid;
+  grid-template-columns: 1fr 56px 1fr;
+  align-items: stretch;
+  position: relative;
+  min-height: 760px;
+}
+
+/* Left & Right Plastic Sleeve Pages */
+.binder-leaf {
+  background: linear-gradient(160deg, rgba(245, 243, 255, 0.14) 0%, rgba(30, 16, 53, 0.62) 100%);
+  backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.24);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease;
+}
+
+.binder-leaf.left-leaf {
+  border-radius: 18px 6px 6px 18px;
+  box-shadow: inset -14px 0 24px rgba(0, 0, 0, 0.35), -4px 4px 12px rgba(0, 0, 0, 0.3);
+  transform-origin: right center;
+}
+
+.binder-leaf.right-leaf {
+  border-radius: 6px 18px 18px 6px;
+  box-shadow: inset 14px 0 24px rgba(0, 0, 0, 0.35), 4px 4px 12px rgba(0, 0, 0, 0.3);
+  transform-origin: left center;
+}
+
+/* Page Flip Animation Classes */
+.binder-leaf.flip-next-out {
+  transform: rotateY(-28deg);
+  opacity: 0.45;
+}
+
+.binder-leaf.flip-prev-out {
+  transform: rotateY(28deg);
+  opacity: 0.45;
+}
+
+.leaf-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 0 4px;
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: #e9d5ff;
+  letter-spacing: 0.4px;
+}
+
+/* 3x3 Pocket Grid per Binder Page (9 pockets per side = 18 per spread) */
+.binder-sheet-3x3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  flex: 1;
+}
+
+/* Center Metallic Spine & 3 Steel D-Rings */
+.binder-center-spine {
+  background: linear-gradient(90deg, #16062b 0%, #2e1065 30%, #120424 50%, #2e1065 70%, #16062b 100%);
+  border-left: 1.5px solid rgba(255, 215, 0, 0.35);
+  border-right: 1.5px solid rgba(255, 215, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  align-items: center;
+  padding: 48px 0;
+  position: relative;
+  z-index: 6;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.85);
+}
+
+.metal-d-ring {
+  width: 68px;
+  height: 22px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Binder Punched Holes on Left & Right Pages */
+.metal-d-ring::before,
+.metal-d-ring::after {
+  content: '';
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #0d031a;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.9);
+}
+
+/* Chrome Ring Arch */
+.ring-arch {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 15px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 35%, #64748b 70%, #e2e8f0 100%);
+  box-shadow:
+    0 5px 10px rgba(0, 0, 0, 0.75),
+    inset 0 2px 2px rgba(255, 255, 255, 0.9);
+  border: 1px solid #475569;
+}
+
+/* Individual Clear Plastic Card Pocket */
 .binder-pocket {
   min-width: 0;
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.06);
-  border: 2px solid rgba(255, 255, 255, 0.16);
-  border-radius: 14px;
-  padding: 10px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-radius: 12px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Subtle Plastic Sleeve Diagonal Glare */
+.binder-pocket::after {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: -60%;
+  width: 140%;
+  height: 60%;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.16), transparent);
+  transform: rotate(-28deg);
+  pointer-events: none;
 }
 
 .binder-pocket.collected:hover {
-  transform: translateY(-4px);
-  border-color: #fde047;
-  box-shadow: 0 10px 24px rgba(253, 224, 71, 0.25);
+  transform: translateY(-4px) scale(1.02);
+  border-color: #ffd700;
+  box-shadow: 0 10px 24px rgba(253, 224, 71, 0.3);
 }
 
 .binder-pocket.uncollected {
-  background: rgba(15, 23, 42, 0.55);
-  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(15, 10, 30, 0.55);
+  border-color: rgba(148, 163, 184, 0.2);
 }
 
 .binder-pocket.uncollected:hover {
-  border-color: rgba(244, 114, 182, 0.45);
+  border-color: rgba(244, 114, 182, 0.5);
 }
 
 .binder-pocket.empty-pocket {
-  min-height: 260px;
+  min-height: 220px;
   justify-content: center;
   cursor: default;
   border-style: dashed;
-  opacity: 0.35;
+  opacity: 0.32;
 }
 
 .empty-pocket-label {
   color: #cbd5e1;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 800;
 }
 
@@ -252,24 +519,24 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
-  gap: 6px;
+  margin-bottom: 5px;
+  gap: 4px;
 }
 
 .pocket-id {
   font-family: monospace;
-  font-size: 0.74rem;
-  color: #e9d5ff;
-  font-weight: 700;
+  font-size: 0.72rem;
+  color: #f3e8ff;
+  font-weight: 800;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .pocket-rarity {
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 900;
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 6px;
   background: #6b21a8;
   color: #fff;
@@ -287,12 +554,12 @@
 .binder-card-sleeve {
   position: relative;
   width: 100%;
-  max-width: 165px;
+  max-width: 148px;
   aspect-ratio: 5 / 7;
-  border-radius: 10px;
+  border-radius: 9px;
   overflow: hidden;
   background: #0f172a;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -308,12 +575,10 @@
   height: 100%;
   object-fit: fill;
   display: block;
-  transition: filter 0.2s ease;
 }
 
-/* Grayed-out uncollected binder slots */
 .binder-pocket.uncollected .binder-card-sleeve img {
-  filter: grayscale(100%) brightness(0.38) contrast(0.9);
+  filter: grayscale(100%) brightness(0.36) contrast(0.9);
 }
 
 .uncollected-overlay {
@@ -323,41 +588,41 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   pointer-events: none;
 }
 
 .uncollected-lock {
-  font-size: 1.6rem;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.8));
+  font-size: 1.4rem;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.85));
 }
 
 .uncollected-text {
-  background: rgba(15, 23, 42, 0.85);
+  background: rgba(15, 23, 42, 0.88);
   border: 1px solid rgba(148, 163, 184, 0.4);
   color: #cbd5e1;
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   font-weight: 800;
-  padding: 2px 8px;
+  padding: 2px 7px;
   border-radius: 8px;
 }
 
 .owned-count-badge {
   position: absolute;
-  bottom: 6px;
-  right: 6px;
-  background: rgba(17, 24, 39, 0.9);
+  bottom: 5px;
+  right: 5px;
+  background: rgba(17, 24, 39, 0.92);
   border: 1.5px solid #fde047;
   color: #fde047;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 900;
-  padding: 1px 7px;
+  padding: 1px 6px;
   border-radius: 8px;
 }
 
 .binder-pocket-footer {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 6px;
   text-align: center;
   min-width: 0;
 }
@@ -365,9 +630,10 @@
 .pocket-name {
   display: block;
   width: 100%;
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   font-weight: 800;
-  color: #f3e8ff;
+  color: #fffdf7;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -377,32 +643,34 @@
   color: #94a3b8;
 }
 
-/* Pagination Bar */
+/* Bottom Page-Turn Bar */
 .binder-pagination-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-top: 20px;
-  background: #fff;
-  border: 2px solid #e9d5ff;
-  border-radius: 16px;
-  padding: 12px 20px;
+  background: radial-gradient(circle at 50% 0%, rgba(93, 44, 128, 0.45) 0%, rgba(36, 12, 56, 0.65) 100%);
+  backdrop-filter: blur(10px);
+  border: 2.5px solid rgba(255, 158, 187, 0.55);
+  border-radius: 26px;
+  padding: 14px 24px;
 }
 
 .binder-page-btn {
   background: linear-gradient(135deg, #ec4899, #9333ea);
   color: #fff;
-  border: none;
-  border-radius: 12px;
-  padding: 10px 20px;
+  border: 2px solid #ffd700;
+  border-radius: 999px;
+  padding: 10px 22px;
   font-family: 'Nunito', sans-serif;
   font-weight: 900;
+  font-size: 0.92rem;
   cursor: pointer;
   transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
 .binder-page-btn:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
@@ -413,21 +681,46 @@
 .binder-page-indicator {
   text-align: center;
   font-size: 1rem;
-  color: #4a148c;
+  color: #ffd700;
 }
 
 .binder-page-sub {
   display: block;
-  font-size: 0.78rem;
-  color: #6b7280;
+  font-size: 0.8rem;
+  color: #fbcfe8;
 }
 
-@media (max-width: 900px) {
-  .binder-sheet-4x4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+/* Responsive: Stack Left & Right Pages on Smaller Screens */
+@media (max-width: 1120px) {
+  .open-binder-spread {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
-  .virtual-binder-wrapper {
-    padding: 16px 16px 16px 32px;
+  .binder-center-spine {
+    flex-direction: row;
+    padding: 12px 24px;
+    border-radius: 14px;
+  }
+  .metal-d-ring {
+    width: 24px;
+    height: 44px;
+    flex-direction: column;
+  }
+  .ring-arch {
+    top: 4px;
+    bottom: 4px;
+    left: 4px;
+    right: 4px;
+    height: auto;
+  }
+  .binder-leaf.left-leaf,
+  .binder-leaf.right-leaf {
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 600px) {
+  .binder-sheet-3x3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
