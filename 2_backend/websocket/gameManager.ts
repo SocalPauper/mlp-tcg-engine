@@ -1,5 +1,6 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import crypto from 'crypto';
+import startermaps from '../StartingDecks.json' assert { type: 'json' };
 import {
   KayouGameState,
   DeckId,
