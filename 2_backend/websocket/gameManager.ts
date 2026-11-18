@@ -28,6 +28,7 @@ import {
   resolveHandChoice,
 } from '../../3_engine/gameRules.js';
 import { pool } from '../../4_data/db.js';
+import startermaps from '../routes/StartingDecks.json' assert { type: 'json' };
 
 const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 
@@ -60,15 +61,6 @@ interface Room {
   disconnectedAt: Partial<Record<'0' | '1', number>>;
   lastActivityAt: number;
 }
-
-const STARTER_META: Record<string, { subCode: string; element: string; pony: string }> = {
-  'starter-sd01': { subCode: 'SD01A', element: 'Magic', pony: 'Twilight Sparkle' },
-  'starter-sd02': { subCode: 'SD01E', element: 'Loyalty', pony: 'Rainbow Dash' },
-  'starter-sd03': { subCode: 'SD01D', element: 'Honesty', pony: 'Applejack' },
-  'starter-sd04': { subCode: 'SD01F', element: 'Generosity', pony: 'Rarity' },
-  'starter-sd05': { subCode: 'SD01B', element: 'Kindness', pony: 'Fluttershy' },
-  'starter-sd06': { subCode: 'SD01C', element: 'Laughter', pony: 'Pinkie Pie' },
-};
 
 function mapDbRowToCardDef(row: any): CardDefinition {
   return {
@@ -579,151 +571,54 @@ export class GameManager {
       allRows.map((r: any) => [String(r.id).toLowerCase(), mapDbRowToCardDef(r)])
     );
 
-    if (!deckId.startsWith('starter-')) {
-      const deckRes = await pool.query('SELECT * FROM auth.decks WHERE id = $1;', [deckId]);
-      if (deckRes.rows.length > 0) {
-        const row = deckRes.rows[0];
-        const parsed = typeof row.cards === 'string' ? JSON.parse(row.cards) : row.cards || {};
-        const maneId =
-          typeof row.mane_character === 'object' && row.mane_character !== null
-            ? row.mane_character.id || row.mane_character.card_id
-            : row.mane_character;
+    if (deckId.startsWith('starter-')) {
+      const found = (startermaps as any[]).find((s) => s.id === deckId) || (startermaps as any[])[0];
+      const hydrateIds = (ids: string[]): CardDefinition[] =>
+        ids.map((id) => cardMap.get(String(id).toLowerCase())).filter(Boolean) as CardDefinition[];
 
-        const hydrateIds = (ids: string[]): CardDefinition[] =>
-          (Array.isArray(ids) ? ids : [])
-            .map((id) => cardMap.get(String(id).toLowerCase()))
-            .filter(Boolean) as CardDefinition[];
-
-        const leader =
-          (maneId && cardMap.get(String(maneId).toLowerCase())) ||
-          Array.from(cardMap.values()).find((c) => c.type === 'Mane Character')!;
-
-        return {
-          leader,
-          storyDeck: hydrateIds(parsed.story_deck || parsed.stories || []),
-          sceneDeck: hydrateIds(parsed.scene_deck || parsed.scenes || []),
-          mainDeck: hydrateIds(parsed.main_deck || parsed.main || []),
-        };
-      }
+      return {
+        leader: cardMap.get(String(found.mane_character).toLowerCase()) || Array.from(cardMap.values())[0],
+        storyDeck: hydrateIds(found.story_deck),
+        sceneDeck: hydrateIds(found.scene_deck),
+        mainDeck: hydrateIds(found.main_deck),
+      };
     }
 
-    const normalizedStarter = deckId.toLowerCase();
-    const meta = STARTER_META[normalizedStarter] || STARTER_META['starter-sd01'];
-    const subRegex = new RegExp(`^${meta.subCode}-`, 'i');
+    const deckRes = await pool.query('SELECT * FROM auth.decks WHERE id = $1;', [deckId]);
+    if (deckRes.rows.length > 0) {
+      const row = deckRes.rows[0];
+      const parsed = typeof row.cards === 'string' ? JSON.parse(row.cards) : row.cards || {};
+      const maneId =
+        typeof row.mane_character === 'object' && row.mane_character !== null
+          ? row.mane_character.id || row.mane_character.card_id
+          : row.mane_character;
 
-    const isTrueMane = (r: any) => {
-      const t = String(r.card_type || '').trim().toLowerCase();
-      return (
-        (t === 'mane character' || t === 'maincharacter') &&
-        !String(r.name || '').includes(' - ') &&
-        !String(r.name || '').includes(' – ') &&
-        !String(r.id || '').includes('-S') &&
-        Number(r.cost || 0) === 0
-      );
-    };
+      const hydrateIds = (ids: string[]): CardDefinition[] =>
+        (Array.isArray(ids) ? ids : [])
+          .map((id) => cardMap.get(String(id).toLowerCase()))
+          .filter(Boolean) as CardDefinition[];
 
-    const maneRow =
-      allRows.find((r: any) => isTrueMane(r) && subRegex.test(r.id)) ||
-      allRows.find(
-        (r: any) =>
-          isTrueMane(r) &&
-          String(r.name || '').toLowerCase().includes(meta.pony.toLowerCase()) &&
-          /^SD/i.test(r.id)
-      ) ||
-      allRows.find(
-        (r: any) =>
-          isTrueMane(r) && String(r.name || '').toLowerCase().includes(meta.pony.toLowerCase())
-      ) ||
-      allRows.find((r: any) => isTrueMane(r)) ||
-      allRows[0];
+      const leader =
+        (maneId && cardMap.get(String(maneId).toLowerCase())) ||
+        Array.from(cardMap.values()).find((c) => c.type === 'Mane Character')!;
 
-    // Include all non-alt (-S) cards from this retail starter box (SD01A..SD01F), shared SD01-SPR*, and matching element cards
-    // NOTE: Do NOT exclude 'SPR' because all SD01 Events & Items have '-SPR' in their card IDs!
-    const legalPool = allRows
-      .filter((r: any) => {
-        const idStr = String(r.id || '');
-        if (idStr.includes('-S')) return false;
-        if (subRegex.test(idStr)) return true;
-        if (/^SD01-SPR/i.test(idStr)) return true;
-        const el = String(r.element || '').trim().toLowerCase();
-        return el === meta.element.toLowerCase() || el === 'everyday' || !el;
-      })
-      .sort((a: any, b: any) => {
-        const aSub = subRegex.test(a.id) ? 0 : /^SD01-/i.test(a.id) ? 1 : 2;
-        const bSub = subRegex.test(b.id) ? 0 : /^SD01-/i.test(b.id) ? 1 : 2;
-        if (aSub !== bSub) return aSub - bSub;
-        return String(a.id).localeCompare(String(b.id));
-      });
-
-    const storyRows = legalPool.filter((r: any) => {
-      const t = String(r.card_type || '').trim().toLowerCase();
-      return t === 'story' || String(r.name || '').includes(' - ') || String(r.name || '').includes(' – ');
-    });
-    const storyDeck: CardDefinition[] = [];
-    let arcPrefix = '';
-    for (const sr of storyRows) {
-      const prefix = String(sr.name || '').split(/[-–]/)[0].trim().toLowerCase();
-      if (!arcPrefix) arcPrefix = prefix;
-      if (prefix === arcPrefix && storyDeck.length < 4) {
-        storyDeck.push(mapDbRowToCardDef(sr));
-      }
-      if (storyDeck.length === 4) break;
+      return {
+        leader,
+        storyDeck: hydrateIds(parsed.story_deck || parsed.stories || []),
+        sceneDeck: hydrateIds(parsed.scene_deck || parsed.scenes || []),
+        mainDeck: hydrateIds(parsed.main_deck || parsed.main || []),
+      };
     }
 
-    const sceneRows = legalPool.filter(
-      (r: any) => String(r.card_type || '').trim().toLowerCase() === 'scene'
-    );
-    const sceneDeck: CardDefinition[] = [];
-    for (const scr of sceneRows) {
-      for (let i = 0; i < 3 && sceneDeck.length < 15; i++) {
-        sceneDeck.push(mapDbRowToCardDef(scr));
-      }
-      if (sceneDeck.length >= 15) break;
-    }
-
-    const charRows = legalPool.filter((r: any) => {
-      const t = String(r.card_type || '').trim().toLowerCase();
-      return (
-        (t === 'character' || t === 'friend character') &&
-        !String(r.name || '').includes(' - ') &&
-        !String(r.name || '').includes(' – ') &&
-        !isTrueMane(r)
-      );
-    });
-    const eventRows = legalPool.filter(
-      (r: any) => String(r.card_type || '').trim().toLowerCase() === 'event'
-    );
-    const itemRows = legalPool.filter(
-      (r: any) => String(r.card_type || '').trim().toLowerCase() === 'item'
-    );
-
-    const mainDeck: CardDefinition[] = [];
-    const counts: Record<string, number> = {};
-    const fillQuota = (rows: any[], target: number) => {
-      for (const row of rows) {
-        if (mainDeck.length >= target) break;
-        const baseId = String(row.id).replace(/-S$/i, '');
-        const curr = counts[baseId] || 0;
-        const add = Math.min(3 - curr, target - mainDeck.length);
-        for (let i = 0; i < add; i++) {
-          mainDeck.push(mapDbRowToCardDef(row));
-        }
-        counts[baseId] = curr + add;
-      }
-    };
-
-    fillQuota(charRows, 34);
-    fillQuota(eventRows, 46);
-    fillQuota(itemRows, 50);
-    if (mainDeck.length < 50) {
-      fillQuota([...eventRows, ...itemRows, ...charRows], 50);
-    }
+    const fallbackFound = (startermaps as any[])[0];
+    const hydrateIds = (ids: string[]): CardDefinition[] =>
+      ids.map((id) => cardMap.get(String(id).toLowerCase())).filter(Boolean) as CardDefinition[];
 
     return {
-      leader: mapDbRowToCardDef(maneRow),
-      storyDeck,
-      sceneDeck,
-      mainDeck: mainDeck.slice(0, 50),
+      leader: cardMap.get(String(fallbackFound.mane_character).toLowerCase()) || Array.from(cardMap.values())[0],
+      storyDeck: hydrateIds(fallbackFound.story_deck),
+      sceneDeck: hydrateIds(fallbackFound.scene_deck),
+      mainDeck: hydrateIds(fallbackFound.main_deck),
     };
   }
 
