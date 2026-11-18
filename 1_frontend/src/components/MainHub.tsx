@@ -30,7 +30,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   const { user } = useAuth();
   const isGuest = !user;
 
-  // Safemode check
+  // Age gated and verified non-safemode conditions
   const isSafeMode = user?.isSafeMode ?? true;
   const canChat = user && !isSafeMode && (user.isVerified || user.role === 'admin');
 
@@ -49,19 +49,19 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   const [isSearchingQueue, setIsSearchingQueue] = useState(false);
   const [queueStatusText, setQueueStatusText] = useState('Searching for opponent...');
 
-  // Chat state
+  // Chat state with customized fallback for restricted/safemode accounts
   const [chatMessages, setChatMessages] = useState([
     {
       user: 'System',
       text: canChat
-        ? 'Welcome to the Equestria Clash Authorized Chatroom!'
-        : 'Safe Mode / Guest Notice: Chat is restricted to verified accounts older than 13. Enjoy pre-generated announcements and news below!',
+        ? 'Welcome to the Equestria Clash chat, verified duelist! Share your latest strategies!'
+        : 'Notice: Out of abundance of safety, only non-guest accounts and those verified to be older than 13 participate here. Please explore of our News Feed updates or find a Match!',
     },
-    { user: 'Princess Celestia', text: 'May the harmony of the cards guide your battles today! ✨' },
+    { user: 'Princess Celestia', text: 'Peace and harmony to all our duelists! ✨ Let your card play shine today!' },
   ]);
   const [inputMsg, setInputMsg] = useState('');
 
-  // Background and Opacity settings from localStorage (managed by Admin)
+  // Live admin theme and overlay properties
   const customBgUrl = localStorage.getItem('bg_hub') || '';
   const bgOpacity = Number(localStorage.getItem('bg_hub_opacity') || '1');
 
@@ -69,7 +69,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
     localStorage.setItem('mlp_last_deck_id', selectedDeck);
   }, [selectedDeck]);
 
-  // Fetch decks
+  // Fetch user decks or default starters
   useEffect(() => {
     const token = localStorage.getItem('token');
     fetch(`${API_BASE_URL}/api/decks`, {
@@ -148,7 +148,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canChat) {
-      alert('Chat is restricted to verified non-safemode accounts older than 13.');
+      alert('Your account must be verified and non-safemode to type here.');
       return;
     }
     if (!inputMsg.trim()) return;
@@ -166,13 +166,13 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         backgroundBlendMode: customBgUrl ? 'overlay' : undefined,
       }}
     >
-      {/* Background Opacity Overlay Layer */}
+      {/* Background Opacity Overlay Layer controlled by admin config */}
       {customBgUrl && (
         <div
           style={{
             position: 'absolute',
             inset: 0,
-            background: '#170826',
+            background: '#150624',
             opacity: 1 - bgOpacity,
             zIndex: 1,
             pointerEvents: 'none',
@@ -180,7 +180,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         />
       )}
 
-      <div className="hub-wireframe-layout" style={{ position: 'relative', zIndex: 2 }}>
+      <div className="hub-wireframe-layout" style={{ position: 'relative', zIndex: 4 }}>
         
         {/* TOP LEFT CLUSTER: Matchmaking UI */}
         <div className="hub-top-left-cluster">
@@ -190,11 +190,11 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
             <div className="matchmaking-grid">
               {/* Match Type Box (Casual / Ranked) */}
               <div className="match-subbox">
-                <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#fbcfe8', marginBottom: '10px', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: '13px', fontWeight: 900, color: '#ff9ebb', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Match Mode
                 </span>
                 <div className="mode-radio-group">
-                  <label className="mode-radio-label">
+                  <label className={`mode-radio-label ${matchMode === 'Casual' ? 'active' : ''}`}>
                     <input
                       type="radio"
                       name="matchMode"
@@ -203,7 +203,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
                     />
                     Casual
                   </label>
-                  <label className="mode-radio-label">
+                  <label className={`mode-radio-label ${matchMode === 'Ranked' ? 'active' : ''}`}>
                     <input
                       type="radio"
                       name="matchMode"
@@ -215,9 +215,9 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
                 </div>
               </div>
 
-              {/* Selected Deck Box */}
+              {/* Selected Deck Box with redirect capabilities to Stable */}
               <div className="match-subbox">
-                <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#fbcfe8', marginBottom: '10px', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: '13px', fontWeight: 900, color: '#ff9ebb', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Selected Deck
                 </span>
                 <div className="deck-select-inner">
@@ -241,13 +241,13 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
 
           {/* QUICK PLAY MODULE */}
           <div className="cloud-panel quick-play-module">
-            <h3 style={{ marginBottom: '6px', color: '#fffdf7' }}>⚡ Quick Play (Starter Decks Only)</h3>
-            <p style={{ fontSize: '13.5px', color: '#fce7f3', marginBottom: '16px', maxWidth: '440px' }}>
+            <h3 style={{ marginBottom: '8px', color: '#fffdf7' }}>⚡ Quick Play (Starter Decks Only)</h3>
+            <p style={{ fontSize: '14px', color: '#fce7f3', marginBottom: '18px', maxWidth: '480px' }}>
               Jump straight into a fast-paced magical duel using any of the official Mane 6 starter decks!
             </p>
             <button
               className="mlp-cloud-btn"
-              style={{ maxWidth: '280px', padding: '12px 24px', fontSize: '15px' }}
+              style={{ maxWidth: '290px', padding: '12px 28px', fontSize: '15px' }}
               onClick={() => {
                 setShowQuickPlayModal(true);
                 handleStartMatch();
@@ -258,14 +258,14 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Chatroom */}
+        {/* RIGHT COLUMN: Chatroom gated based on Account and Safety checks */}
         <div className="cloud-panel chat-wireframe-panel">
           <div>
             <h3>💬 Equestrian Community Chat</h3>
-            <p style={{ fontSize: '12px', color: '#fbcfe8', lineHeight: '1.45', margin: '6px 0 12px' }}>
+            <p style={{ fontSize: '12px', color: '#fbcfe8', lineHeight: '1.45', margin: '8px 0 14px' }}>
               {canChat
-                ? 'Authorized chat active. Chat freely with fellow card duelists!'
-                : 'Chat (only verified accounts that are non safemode accounts [i.e. older than 13] can see and participate in chat here. safemode users will be greeted by pre generated text and announcements.'}
+                ? 'Authorized chat is active. Communicate freely with fellow card duelists!'
+                : 'Locked Chat Area. Out of abundance of safety, only non-guest accounts, and accounts verified as over the age of 13 can participate.'}
             </p>
           </div>
 
@@ -290,8 +290,8 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
               </button>
             </form>
           ) : (
-            <div style={{ fontSize: '12px', color: '#f472b6', fontStyle: 'italic', textAlign: 'center', padding: '8px' }}>
-              🔒 Chat locked in Safe Mode / Guest Mode.
+            <div style={{ fontSize: '12px', color: '#ff85a2', fontStyle: 'italic', textAlign: 'center', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '16px' }}>
+              🔒 Chat is locked in Safe Mode / Guest Mode.
             </div>
           )}
         </div>

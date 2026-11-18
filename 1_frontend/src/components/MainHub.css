@@ -1,265 +1,318 @@
 @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Nunito:wght@600;700;800;900&display=swap');
 
 .hub-container {
-  padding: 30px 24px 60px;
+  padding: 35px 24px 65px;
   min-height: calc(100vh - 64px);
-  background: radial-gradient(circle at 50% 15%, #4a2375 0%, #291242 50%, #170826 100%);
+  background: radial-gradient(circle at 50% 12%, #3a1c54 0%, #210c2c 55%, #100418 100%);
   background-size: cover;
   background-position: center;
   position: relative;
   font-family: 'Nunito', sans-serif;
   color: #fce7f3;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
-/* Magical Sparkle Header Dust */
+/* Sparking, Floating Glitter Overlay */
 .hub-container::before {
-  content: '✨  ★  ✦  ✧  🦄  ✨  ✦  ✧  ⋆  ✨';
+  content: '✨  ★  ✦  ✧  🦄  ✦  ✧  ⋆  💖  ✧  ✦  ★';
   position: absolute;
-  top: 12px;
+  top: 14px;
   left: 0;
   right: 0;
   text-align: center;
-  letter-spacing: 28px;
-  color: rgba(255, 215, 0, 0.35);
-  font-size: 14px;
+  letter-spacing: 34px;
+  color: rgba(255, 215, 0, 0.4);
+  font-size: 15px;
   pointer-events: none;
+  z-index: 3;
 }
 
-/* Main Whimsical Layout Grid */
+/* Whimsical Multi-Layered Overlaps */
 .hub-wireframe-layout {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  grid-template-rows: auto auto;
-  gap: 24px;
+  grid-template-columns: 1.9fr 1.1fr;
+  gap: 28px;
   max-width: 1440px;
   margin: 0 auto;
+  position: relative;
+  z-index: 5;
 }
 
 .hub-top-left-cluster {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 28px;
 }
 
-/* Cloud-Themed Whimsical Modules */
+/* Fluffy, Curved Clouds with Glittering Gold Trim */
 .cloud-panel {
-  background: rgba(76, 37, 107, 0.78);
-  backdrop-filter: blur(16px);
-  border: 3px solid rgba(251, 207, 232, 0.55);
-  border-radius: 36px;
-  padding: 26px 30px;
+  background: radial-gradient(circle at 50% 0%, rgba(93, 44, 128, 0.76) 0%, rgba(60, 25, 87, 0.88) 100%);
+  backdrop-filter: blur(20px);
+  border: 3.5px solid #ff9ebb; /* soft pink cloud highlight */
+  border-radius: 45px;
+  padding: 28px 32px;
   box-shadow: 
-    0 16px 45px rgba(0, 0, 0, 0.45),
-    inset 0 3px 10px rgba(255, 255, 255, 0.22),
-    0 0 25px rgba(236, 72, 153, 0.22);
+    0 18px 48px rgba(0, 0, 0, 0.5),
+    inset 0 4px 14px rgba(255, 255, 255, 0.28),
+    inset 0 -6px 20px rgba(236, 72, 153, 0.15),
+    0 0 35px rgba(236, 72, 153, 0.25);
   position: relative;
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1), box-shadow 0.3s ease;
+}
+
+/* Fluffy cloud bulb flourishes on top edge */
+.cloud-panel::after {
+  content: '';
+  position: absolute;
+  top: -15px;
+  left: 50px;
+  width: 40px;
+  height: 20px;
+  background: #ff9ebb;
+  border-radius: 20px 20px 0 0;
+  opacity: 0.15;
+  filter: blur(4px);
+}
+
+.cloud-panel:hover {
+  transform: translateY(-4px);
+  box-shadow: 
+    0 24px 55px rgba(0, 0, 0, 0.55),
+    inset 0 4px 14px rgba(255, 255, 255, 0.32),
+    0 0 40px rgba(236, 72, 153, 0.35);
 }
 
 .cloud-panel h3 {
-  margin: 0 0 16px;
+  margin: 0 0 18px;
   font-family: 'Cinzel Decorative', 'Nunito', serif;
-  font-size: 18px;
-  font-weight: 900;
+  font-size: 20px;
+  font-weight: 950;
   color: #ffd700;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  letter-spacing: 0.5px;
+  text-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.6),
+    0 0 12px rgba(255, 215, 0, 0.4);
+  letter-spacing: 0.8px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
-/* Matchmaking Control Center Grid */
+/* Matchmaking Grid */
 .matchmaking-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 18px;
-  margin-bottom: 18px;
+  gap: 22px;
+  margin-bottom: 22px;
 }
 
 .match-subbox {
-  background: rgba(43, 17, 68, 0.85);
-  border: 2px solid rgba(244, 114, 182, 0.4);
-  border-radius: 24px;
-  padding: 18px;
+  background: linear-gradient(145deg, rgba(46, 17, 72, 0.9) 0%, rgba(31, 10, 50, 0.95) 100%);
+  border: 2.5px solid rgba(244, 114, 182, 0.55);
+  border-radius: 30px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
+  box-shadow: 
+    inset 0 3px 8px rgba(0, 0, 0, 0.4),
+    0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* Mode Select Radios */
+/* Mode Select Custom Interactive Ribbons */
 .mode-radio-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .mode-radio-label {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-weight: 800;
-  font-size: 15px;
-  color: #fbcfe8;
+  gap: 14px;
+  font-weight: 900;
+  font-size: 16px;
+  color: #fdf2f8;
   cursor: pointer;
   background: rgba(255, 255, 255, 0.05);
-  padding: 10px 14px;
-  border-radius: 16px;
-  border: 1.5px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.25s ease;
+  padding: 12px 16px;
+  border-radius: 22px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.05);
+  transition: all 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.2);
 }
 
 .mode-radio-label:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: #f472b6;
-  transform: translateX(3px);
+  background: rgba(255, 255, 255, 0.14);
+  border-color: #ff9ebb;
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(255, 102, 163, 0.2);
+}
+
+.mode-radio-label.active {
+  border-color: #ffd700;
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.3) 0%, rgba(147, 51, 234, 0.3) 100%);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
 }
 
 .mode-radio-label input[type="radio"] {
-  accent-color: #ec4899;
-  width: 20px;
-  height: 20px;
+  accent-color: #ff4d94;
+  width: 22px;
+  height: 22px;
   cursor: pointer;
 }
 
-/* Deck Select Box */
+/* Custom Deck Selector container */
 .deck-select-inner {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .deck-current-name {
   font-size: 14px;
   font-weight: 800;
-  color: #fdf2f8;
-  background: rgba(20, 7, 33, 0.75);
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1.5px solid rgba(192, 132, 252, 0.4);
-  min-height: 46px;
+  color: #fffdf7;
+  background: rgba(18, 5, 29, 0.82);
+  padding: 14px 16px;
+  border-radius: 20px;
+  border: 2px solid rgba(192, 132, 252, 0.5);
+  min-height: 52px;
   display: flex;
   align-items: center;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
-/* Magical Sparkly Gold/Pink Cloud Buttons */
+/* Whimsical Gold, Sparkly Bubble-Pill Buttons */
 .mlp-cloud-btn {
-  background: linear-gradient(135deg, #ec4899 0%, #9333ea 50%, #f59e0b 100%);
+  background: linear-gradient(135deg, #ff4d94 0%, #a21caf 50%, #f59e0b 100%);
   color: #ffffff;
-  border: 2.5px solid #ffd700;
+  border: 3.5px solid #ffd700;
   border-radius: 999px;
-  padding: 14px 28px;
+  padding: 16px 32px;
   font-family: 'Nunito', sans-serif;
   font-weight: 900;
-  font-size: 16px;
+  font-size: 17px;
   cursor: pointer;
-  box-shadow: 0 8px 25px rgba(236, 72, 153, 0.4), inset 0 2px 6px rgba(255, 255, 255, 0.5);
-  transition: transform 0.22s ease, filter 0.22s ease, box-shadow 0.22s ease;
+  box-shadow: 
+    0 10px 28px rgba(236, 72, 153, 0.45), 
+    inset 0 3px 6px rgba(255, 255, 255, 0.5),
+    0 0 14px rgba(255, 215, 0, 0.2);
+  transition: transform 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.2), box-shadow 0.22s ease, filter 0.22s ease;
   text-align: center;
   width: 100%;
 }
 
 .mlp-cloud-btn:hover {
-  transform: translateY(-3px);
-  filter: brightness(1.12);
-  box-shadow: 0 12px 32px rgba(245, 158, 11, 0.55);
+  transform: translateY(-4px) scale(1.01);
+  filter: brightness(1.15);
+  box-shadow: 
+    0 14px 35px rgba(245, 158, 11, 0.6),
+    0 0 20px rgba(255, 215, 0, 0.4);
 }
 
 .mlp-cloud-btn.secondary {
-  background: linear-gradient(135deg, #6b21a8 0%, #a21caf 100%);
-  border-color: #f472b6;
-  font-size: 14px;
-  padding: 9px 18px;
+  background: linear-gradient(135deg, #701a75 0%, #b5179e 100%);
+  border-color: #ff9ebb;
+  font-size: 14.5px;
+  padding: 10px 22px;
   width: auto;
-  box-shadow: 0 4px 15px rgba(162, 28, 175, 0.3);
+  box-shadow: 0 5px 18px rgba(162, 28, 175, 0.35);
 }
 
-/* Quick Play Area */
+/* Quick Play Area as a Large Floating Golden Cloud */
 .quick-play-module {
-  background: linear-gradient(135deg, rgba(107, 33, 168, 0.88) 0%, rgba(190, 24, 93, 0.88) 100%);
-  border: 3px solid #ffd700;
+  background: linear-gradient(135deg, rgba(88, 28, 135, 0.9) 0%, rgba(180, 14, 80, 0.9) 100%);
+  border: 3.5px solid #ff9ebb;
   text-align: center;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  min-height: 180px;
+  min-height: 200px;
 }
 
-/* Right Chat Column */
+/* Right Chat Column Gated specifically for approved/verified and non-safemode aged users */
 .chat-wireframe-panel {
   grid-row: span 2;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  background: rgba(61, 27, 92, 0.88);
-  border: 3px solid #f472b6;
-  border-radius: 36px;
-  padding: 26px;
-  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.45), inset 0 3px 10px rgba(255, 255, 255, 0.15);
+  background: radial-gradient(circle at 50% 0%, rgba(81, 35, 122, 0.82) 0%, rgba(45, 18, 68, 0.94) 100%);
+  border: 3.5px solid #ff9ebb;
+  border-radius: 45px;
+  padding: 30px;
+  box-shadow: 
+    0 18px 48px rgba(0, 0, 0, 0.5), 
+    inset 0 4px 14px rgba(255, 255, 255, 0.22),
+    0 0 35px rgba(236, 72, 153, 0.2);
 }
 
 .chat-wireframe-messages {
-  height: 520px;
+  height: 570px;
   overflow-y: auto;
-  background: rgba(24, 9, 41, 0.9);
-  border: 2px solid rgba(236, 72, 153, 0.4);
-  border-radius: 20px;
-  padding: 16px;
-  margin: 12px 0;
+  background: rgba(16, 5, 26, 0.92);
+  border: 2px solid rgba(236, 72, 153, 0.45);
+  border-radius: 28px;
+  padding: 18px;
+  margin: 14px 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.6);
 }
 
 .chat-wireframe-msg {
   font-size: 14px;
-  color: #fdf2f8;
-  line-height: 1.5;
+  color: #fff0f7;
+  line-height: 1.55;
   background: rgba(255, 255, 255, 0.05);
-  padding: 10px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px 16px;
+  border-radius: 18px;
+  border: 1.5px solid rgba(255, 255, 255, 0.07);
 }
 
 .chat-wireframe-user {
-  color: #f472b6;
-  font-weight: 900;
+  color: #ff85a2;
+  font-weight: 950;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .chat-wireframe-form {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
 .chat-wireframe-form input {
   flex: 1;
-  padding: 12px 18px;
-  background: rgba(24, 9, 41, 0.95);
-  border: 2px solid #c084fc;
+  padding: 14px 20px;
+  background: rgba(16, 5, 26, 0.95);
+  border: 2.5px solid #c084fc;
   border-radius: 999px;
   color: #fbcfe8;
   font-family: 'Nunito', sans-serif;
   font-size: 14px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .chat-wireframe-form input:focus {
   outline: none;
-  border-color: #f472b6;
-  box-shadow: 0 0 12px rgba(244, 114, 182, 0.4);
+  border-color: #ff9ebb;
+  box-shadow: 
+    0 0 16px rgba(255, 158, 187, 0.5),
+    inset 0 2px 4px rgba(0,0,0,0.3);
 }
 
-/* Bottom Row Modules (Leaderboard & News) */
+/* Bottom Row Columns (Leaderboard & News) */
 .hub-bottom-row {
   grid-column: 1 / span 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 28px;
 }
 
 .bottom-module-card {
-  min-height: 240px;
+  min-height: 260px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -268,53 +321,68 @@
 .leaderboard-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 6px;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .leaderboard-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(33, 13, 51, 0.7);
-  padding: 8px 14px;
-  border-radius: 12px;
-  font-size: 13.5px;
-  border: 1.5px solid rgba(255, 215, 0, 0.2);
+  background: rgba(22, 6, 36, 0.7);
+  padding: 10px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  border: 2px solid rgba(255, 215, 0, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.leaderboard-row:hover {
+  transform: translateX(3px);
+  border-color: #ffd700;
 }
 
 .news-item {
-  background: rgba(33, 13, 51, 0.7);
-  padding: 12px 16px;
-  border-radius: 14px;
-  border-left: 4px solid #ffd700;
-  margin-bottom: 10px;
-  border: 1.5px solid rgba(255, 215, 0, 0.15);
+  background: rgba(22, 6, 36, 0.7);
+  padding: 14px 18px;
+  border-radius: 20px;
+  border-left: 5px solid #ffd700;
+  margin-bottom: 12px;
+  border-top: 1.5px solid rgba(255, 215, 0, 0.15);
+  border-right: 1.5px solid rgba(255, 215, 0, 0.15);
+  border-bottom: 1.5px solid rgba(255, 215, 0, 0.15);
+  transition: transform 0.2s ease;
+}
+
+.news-item:hover {
+  transform: translateX(3px);
 }
 
 .news-title {
-  font-weight: 900;
-  font-size: 14px;
+  font-weight: 950;
+  font-size: 14.5px;
   color: #fbcfe8;
-  margin-bottom: 3px;
+  margin-bottom: 4px;
 }
 
 .news-snippet {
-  font-size: 12.5px;
+  font-size: 13px;
   color: #e9d5ff;
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
-/* Responsive breakpoint */
+/* Mobile Adjustments */
 @media (max-width: 1024px) {
   .hub-wireframe-layout {
     grid-template-columns: 1fr;
+    gap: 20px;
   }
   .chat-wireframe-panel {
     grid-row: auto;
   }
   .hub-bottom-row {
     grid-template-columns: 1fr;
+    gap: 20px;
   }
 }
