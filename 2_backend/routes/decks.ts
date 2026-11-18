@@ -14,7 +14,8 @@ const STARTER_DEFINITIONS = [
 ];
 
 function isTrueManeCharacter(c: any): boolean {
-  if (c.card_type !== 'Mane Character') return false;
+  const cardType = String(c.card_type || '').trim().toLowerCase();
+  if (cardType !== 'mane character' && cardType !== 'maincharacter') return false;
   const name = String(c.name || '');
   const id = String(c.id || '');
   const effect = String(c.effect_text || '');
@@ -63,32 +64,32 @@ async function buildStarterDecks() {
       trueManes.find((c) => c.name.toLowerCase().includes(def.pony.toLowerCase())) ||
       null;
 
-    // Sort candidate pool so cards from this retail starter box (e.g., SD01A-*) come first, followed by shared SD01-* & matching element
+    // 2. Include all non-alt cards from this retail starter box (SD01A..SD01F) plus matching element cards
     const legalPool = allCards
-      .filter(
-        (c) =>
-          !c.id.includes('-S') &&
-          !c.id.includes('SPR') &&
-          (subPrefixRegex.test(c.id) ||
-            c.element?.toLowerCase() === def.element.toLowerCase() ||
-            c.element?.toLowerCase() === 'everyday' ||
-            !c.element)
-      )
+      .filter((c) => {
+        const idStr = String(c.id || '');
+        if (idStr.includes('-S')) return false;
+        if (subPrefixRegex.test(idStr)) return true;
+        if (idStr.includes('SPR')) return false;
+        const el = String(c.element || '').trim().toLowerCase();
+        return el === def.element.toLowerCase() || el === 'everyday' || !el;
+      })
       .sort((a, b) => {
         const aExact = subPrefixRegex.test(a.id) ? 0 : /^SD01-/i.test(a.id) ? 1 : 2;
         const bExact = subPrefixRegex.test(b.id) ? 0 : /^SD01-/i.test(b.id) ? 1 : 2;
         if (aExact !== bExact) return aExact - bExact;
-        return a.id.localeCompare(b.id);
+        return String(a.id).localeCompare(String(b.id));
       });
 
-    // 2. Story Deck: 4-stage retail Story arc
-    const storyCandidates = legalPool.filter(
-      (c) => c.card_type === 'Story' || c.name.includes(' - ') || c.name.includes(' – ')
-    );
+    // 3. Story Deck: 4-stage retail Story arc
+    const storyCandidates = legalPool.filter((c) => {
+      const t = String(c.card_type || '').trim().toLowerCase();
+      return t === 'story' || String(c.name || '').includes(' - ') || String(c.name || '').includes(' – ');
+    });
     const storyDeck: string[] = [];
     let arcPrefix = '';
     for (const sc of storyCandidates) {
-      const arcName = sc.name.split(/[-–]/)[0].trim().toLowerCase();
+      const arcName = String(sc.name || '').split(/[-–]/)[0].trim().toLowerCase();
       if (!arcPrefix) arcPrefix = arcName;
       if (arcName === arcPrefix && storyDeck.length < 4) {
         storyDeck.push(sc.id);
@@ -96,20 +97,28 @@ async function buildStarterDecks() {
       if (storyDeck.length === 4) break;
     }
 
-    // 3. Scene Deck: 15 Scenes
-    const sceneCandidates = legalPool.filter((c) => c.card_type === 'Scene');
+    // 4. Scene Deck: 15 Scenes
+    const sceneCandidates = legalPool.filter(
+      (c) => String(c.card_type || '').trim().toLowerCase() === 'scene'
+    );
     const sceneDeck = fillBucketWithCap(sceneCandidates, 15, 3);
 
-    // 4. Main Deck: Retail starter ratio = 34 Characters/Friends + 12 Events + 4 Items = 50 Cards
-    const charCandidates = legalPool.filter(
-      (c) =>
-        ['Character', 'Friend Character'].includes(c.card_type) &&
-        !c.name.includes(' - ') &&
-        !c.name.includes(' – ') &&
+    // 5. Main Deck: Retail starter ratio = 34 Characters/Friends + 12 Events + 4 Items = 50 Cards
+    const charCandidates = legalPool.filter((c) => {
+      const t = String(c.card_type || '').trim().toLowerCase();
+      return (
+        (t === 'character' || t === 'friend character') &&
+        !String(c.name || '').includes(' - ') &&
+        !String(c.name || '').includes(' – ') &&
         !isTrueManeCharacter(c)
+      );
+    });
+    const eventCandidates = legalPool.filter(
+      (c) => String(c.card_type || '').trim().toLowerCase() === 'event'
     );
-    const eventCandidates = legalPool.filter((c) => c.card_type === 'Event');
-    const itemCandidates = legalPool.filter((c) => c.card_type === 'Item');
+    const itemCandidates = legalPool.filter(
+      (c) => String(c.card_type || '').trim().toLowerCase() === 'item'
+    );
 
     const pickedChars = fillBucketWithCap(charCandidates, 34, 3);
     const pickedEvents = fillBucketWithCap(eventCandidates, 12, 3);
