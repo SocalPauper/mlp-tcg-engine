@@ -20,7 +20,7 @@ function isTrueManeCharacter(c: any): boolean {
   const id = String(c.id || '');
   const effect = String(c.effect_text || '');
   if (name.includes(' - ') || name.includes(' – ') || name.includes('Stage')) return false;
-  if (id.includes('SPR') || id.includes('ER')) return false;
+  if (id.includes('-S') || id.includes('ER')) return false;
   if (/Experience Report|Inspo Boost|Choose 1 Character|Adventure Area/i.test(effect)) return false;
   if (Number(c.cost) > 0) return false;
   return true;
@@ -57,20 +57,21 @@ async function buildStarterDecks() {
   return STARTER_DEFINITIONS.map((def) => {
     const subPrefixRegex = new RegExp(`^${def.prefix}-`, 'i');
 
-    // 1. Main Character (prefer exact retail sub-deck card, then shared SD01)
+    // 1. Main Character (SD01-RR01..RR06 or exact sub-deck Main Character)
     const maneCard =
       trueManes.find((c) => subPrefixRegex.test(c.id) && c.name.toLowerCase().includes(def.pony.toLowerCase())) ||
       trueManes.find((c) => c.name.toLowerCase().includes(def.pony.toLowerCase()) && /^SD/i.test(c.id)) ||
       trueManes.find((c) => c.name.toLowerCase().includes(def.pony.toLowerCase())) ||
       null;
 
-    // 2. Include all non-alt cards from this retail starter box (SD01A..SD01F) plus matching element cards
+    // 2. Include all non-alt (-S) cards from this retail starter box (SD01A..SD01F), shared SD01-*, and matching element cards
+    // NOTE: Do NOT exclude 'SPR' here because all SD01 Events & Items have '-SPR' in their card IDs!
     const legalPool = allCards
       .filter((c) => {
         const idStr = String(c.id || '');
         if (idStr.includes('-S')) return false;
         if (subPrefixRegex.test(idStr)) return true;
-        if (idStr.includes('SPR')) return false;
+        if (/^SD01-SPR/i.test(idStr)) return true; // Shared SD01 Events & Items
         const el = String(c.element || '').trim().toLowerCase();
         return el === def.element.toLowerCase() || el === 'everyday' || !el;
       })
@@ -81,7 +82,7 @@ async function buildStarterDecks() {
         return String(a.id).localeCompare(String(b.id));
       });
 
-    // 3. Story Deck: 4-stage retail Story arc
+    // 3. Story Deck: 4-stage retail Story arc (e.g., SD01A-C06..C09)
     const storyCandidates = legalPool.filter((c) => {
       const t = String(c.card_type || '').trim().toLowerCase();
       return t === 'story' || String(c.name || '').includes(' - ') || String(c.name || '').includes(' – ');

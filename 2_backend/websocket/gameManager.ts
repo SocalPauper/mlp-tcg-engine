@@ -25,11 +25,11 @@ import {
   activateManeLeaderAbility,
   resolveTargetSelection,
   cancelTargetSelection,
-  resolveHandCardChoice,
+  resolveHandChoice,
 } from '../../3_engine/gameRules.js';
 import { pool } from '../../4_data/db.js';
 
-const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000;
+const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 
 interface RoomClient {
   ws: WebSocket;
@@ -61,13 +61,13 @@ interface Room {
   lastActivityAt: number;
 }
 
-const STARTER_META: Record<string, { prefix: string; element: string; pony: string }> = {
-  'starter-sd01': { prefix: 'SD01A', element: 'Magic', pony: 'Twilight Sparkle' },
-  'starter-sd02': { prefix: 'SD01E', element: 'Loyalty', pony: 'Rainbow Dash' },
-  'starter-sd03': { prefix: 'SD01D', element: 'Honesty', pony: 'Applejack' },
-  'starter-sd04': { prefix: 'SD01F', element: 'Generosity', pony: 'Rarity' },
-  'starter-sd05': { prefix: 'SD01B', element: 'Kindness', pony: 'Fluttershy' },
-  'starter-sd06': { prefix: 'SD01C', element: 'Laughter', pony: 'Pinkie Pie' },
+const STARTER_META: Record<string, { subCode: string; element: string; pony: string }> = {
+  'starter-sd01': { subCode: 'SD01A', element: 'Magic', pony: 'Twilight Sparkle' },
+  'starter-sd02': { subCode: 'SD01E', element: 'Loyalty', pony: 'Rainbow Dash' },
+  'starter-sd03': { subCode: 'SD01D', element: 'Honesty', pony: 'Applejack' },
+  'starter-sd04': { subCode: 'SD01F', element: 'Generosity', pony: 'Rarity' },
+  'starter-sd05': { subCode: 'SD01B', element: 'Kindness', pony: 'Fluttershy' },
+  'starter-sd06': { subCode: 'SD01C', element: 'Laughter', pony: 'Pinkie Pie' },
 };
 
 function mapDbRowToCardDef(row: any): CardDefinition {
@@ -85,22 +85,6 @@ function mapDbRowToCardDef(row: any): CardDefinition {
     rarity: row.rarity || 'C',
     setCode: row.set_code || 'SD01',
   };
-}
-
-function fillCardDefBucket(poolRows: any[], targetCount: number, maxPerBaseId: number): CardDefinition[] {
-  const result: CardDefinition[] = [];
-  const counts: Record<string, number> = {};
-  for (const row of poolRows) {
-    if (result.length >= targetCount) break;
-    const baseId = String(row.id).replace(/-S$/i, '');
-    const current = counts[baseId] || 0;
-    const toAdd = Math.min(maxPerBaseId - current, targetCount - result.length);
-    for (let i = 0; i < toAdd; i++) {
-      result.push(mapDbRowToCardDef(row));
-    }
-    counts[baseId] = current + toAdd;
-  }
-  return result;
 }
 
 export class GameManager {
@@ -625,54 +609,56 @@ export class GameManager {
 
     const normalizedStarter = deckId.toLowerCase();
     const meta = STARTER_META[normalizedStarter] || STARTER_META['starter-sd01'];
-    const subPrefixRegex = new RegExp(`^${meta.prefix}-`, 'i');
+    const subRegex = new RegExp(`^${meta.subCode}-`, 'i');
 
-    const isTrueMane = (r: any) =>
-      r.card_type === 'Mane Character' &&
-      !String(r.name || '').includes(' - ') &&
-      !String(r.name || '').includes(' – ') &&
-      !String(r.id || '').includes('SPR') &&
-      Number(r.cost || 0) === 0;
+    const isTrueMane = (r: any) => {
+      const t = String(r.card_type || '').trim().toLowerCase();
+      return (
+        (t === 'mane character' || t === 'maincharacter') &&
+        !String(r.name || '').includes(' - ') &&
+        !String(r.name || '').includes(' – ') &&
+        !String(r.id || '').includes('-S') &&
+        Number(r.cost || 0) === 0
+      );
+    };
 
     const maneRow =
-      allRows.find(
-        (r: any) =>
-          isTrueMane(r) &&
-          subPrefixRegex.test(r.id) &&
-          String(r.name || '').toLowerCase().includes(meta.pony.toLowerCase())
-      ) ||
+      allRows.find((r: any) => isTrueMane(r) && subRegex.test(r.id)) ||
       allRows.find(
         (r: any) =>
           isTrueMane(r) &&
           String(r.name || '').toLowerCase().includes(meta.pony.toLowerCase()) &&
           /^SD/i.test(r.id)
       ) ||
+      allRows.find(
+        (r: any) =>
+          isTrueMane(r) && String(r.name || '').toLowerCase().includes(meta.pony.toLowerCase())
+      ) ||
       allRows.find((r: any) => isTrueMane(r)) ||
       allRows[0];
 
+    // Include all non-alt (-S) cards from this retail starter box (SD01A..SD01F), shared SD01-SPR*, and matching element cards
+    // NOTE: Do NOT exclude 'SPR' because all SD01 Events & Items have '-SPR' in their card IDs!
     const legalPool = allRows
-      .filter(
-        (r: any) =>
-          !String(r.id).includes('-S') &&
-          !String(r.id).includes('SPR') &&
-          (subPrefixRegex.test(r.id) ||
-            String(r.element || '').toLowerCase() === meta.element.toLowerCase() ||
-            String(r.element || '').toLowerCase() === 'everyday' ||
-            !r.element)
-      )
+      .filter((r: any) => {
+        const idStr = String(r.id || '');
+        if (idStr.includes('-S')) return false;
+        if (subRegex.test(idStr)) return true;
+        if (/^SD01-SPR/i.test(idStr)) return true;
+        const el = String(r.element || '').trim().toLowerCase();
+        return el === meta.element.toLowerCase() || el === 'everyday' || !el;
+      })
       .sort((a: any, b: any) => {
-        const aExact = subPrefixRegex.test(a.id) ? 0 : /^SD01-/i.test(a.id) ? 1 : 2;
-        const bExact = subPrefixRegex.test(b.id) ? 0 : /^SD01-/i.test(b.id) ? 1 : 2;
-        if (aExact !== bExact) return aExact - bExact;
-        return a.id.localeCompare(b.id);
+        const aSub = subRegex.test(a.id) ? 0 : /^SD01-/i.test(a.id) ? 1 : 2;
+        const bSub = subRegex.test(b.id) ? 0 : /^SD01-/i.test(b.id) ? 1 : 2;
+        if (aSub !== bSub) return aSub - bSub;
+        return String(a.id).localeCompare(String(b.id));
       });
 
-    const storyRows = legalPool.filter(
-      (r: any) =>
-        r.card_type === 'Story' ||
-        String(r.name || '').includes(' - ') ||
-        String(r.name || '').includes(' – ')
-    );
+    const storyRows = legalPool.filter((r: any) => {
+      const t = String(r.card_type || '').trim().toLowerCase();
+      return t === 'story' || String(r.name || '').includes(' - ') || String(r.name || '').includes(' – ');
+    });
     const storyDeck: CardDefinition[] = [];
     let arcPrefix = '';
     for (const sr of storyRows) {
@@ -684,30 +670,53 @@ export class GameManager {
       if (storyDeck.length === 4) break;
     }
 
-    const sceneRows = legalPool.filter((r: any) => r.card_type === 'Scene');
-    const sceneDeck = fillCardDefBucket(sceneRows, 15, 3);
+    const sceneRows = legalPool.filter(
+      (r: any) => String(r.card_type || '').trim().toLowerCase() === 'scene'
+    );
+    const sceneDeck: CardDefinition[] = [];
+    for (const scr of sceneRows) {
+      for (let i = 0; i < 3 && sceneDeck.length < 15; i++) {
+        sceneDeck.push(mapDbRowToCardDef(scr));
+      }
+      if (sceneDeck.length >= 15) break;
+    }
 
-    // Retail Starter Deck Main Deck Composition: 34 Characters/Friends + 12 Events + 4 Items = 50 Cards
-    const charRows = legalPool.filter(
-      (r: any) =>
-        ['Character', 'Friend Character'].includes(r.card_type) &&
+    const charRows = legalPool.filter((r: any) => {
+      const t = String(r.card_type || '').trim().toLowerCase();
+      return (
+        (t === 'character' || t === 'friend character') &&
         !String(r.name || '').includes(' - ') &&
         !String(r.name || '').includes(' – ') &&
         !isTrueMane(r)
+      );
+    });
+    const eventRows = legalPool.filter(
+      (r: any) => String(r.card_type || '').trim().toLowerCase() === 'event'
     );
-    const eventRows = legalPool.filter((r: any) => r.card_type === 'Event');
-    const itemRows = legalPool.filter((r: any) => r.card_type === 'Item');
+    const itemRows = legalPool.filter(
+      (r: any) => String(r.card_type || '').trim().toLowerCase() === 'item'
+    );
 
-    let mainDeck: CardDefinition[] = [
-      ...fillCardDefBucket(charRows, 34, 3),
-      ...fillCardDefBucket(eventRows, 12, 3),
-      ...fillCardDefBucket(itemRows, 4, 3),
-    ];
+    const mainDeck: CardDefinition[] = [];
+    const counts: Record<string, number> = {};
+    const fillQuota = (rows: any[], target: number) => {
+      for (const row of rows) {
+        if (mainDeck.length >= target) break;
+        const baseId = String(row.id).replace(/-S$/i, '');
+        const curr = counts[baseId] || 0;
+        const add = Math.min(3 - curr, target - mainDeck.length);
+        for (let i = 0; i < add; i++) {
+          mainDeck.push(mapDbRowToCardDef(row));
+        }
+        counts[baseId] = curr + add;
+      }
+    };
 
+    fillQuota(charRows, 34);
+    fillQuota(eventRows, 46);
+    fillQuota(itemRows, 50);
     if (mainDeck.length < 50) {
-      const usedIds = new Set(mainDeck.map((c) => c.id));
-      const extras = [...charRows, ...eventRows, ...itemRows].filter((r: any) => !usedIds.has(r.id));
-      mainDeck = [...mainDeck, ...fillCardDefBucket(extras, 50 - mainDeck.length, 3)];
+      fillQuota([...eventRows, ...itemRows, ...charRows], 50);
     }
 
     return {
@@ -773,8 +782,8 @@ export class GameManager {
         return resolveTargetSelection(state, playerId, payload.targetOwner, payload.laneIndex);
       case 'CANCEL_TARGET':
         return cancelTargetSelection(state, playerId);
-      case 'SELECT_HAND_CHOICE':
-        return resolveHandCardChoice(state, playerId, payload.selectedIndices || []);
+      case 'RESOLVE_HAND_CHOICE':
+        return resolveHandChoice(state, playerId, payload.selectedIndices || []);
       default:
         return state;
     }
