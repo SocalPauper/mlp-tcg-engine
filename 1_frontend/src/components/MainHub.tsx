@@ -30,14 +30,14 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   const { user } = useAuth();
   const isGuest = !user;
 
-  // Safemode check (User is considered safemode if isSafeMode is true or age < 13 representation)
+  // Safemode check
   const isSafeMode = user?.isSafeMode ?? true;
   const canChat = user && !isSafeMode && (user.isVerified || user.role === 'admin');
 
   const wsRef = useRef<WebSocket | null>(null);
   const [availableDecks, setAvailableDecks] = useState<SelectableDeck[]>(FALLBACK_STARTERS);
 
-  // Matchmaking State matching wireframe
+  // Matchmaking State
   const [matchMode, setMatchMode] = useState<'Casual' | 'Ranked'>('Casual');
   const [selectedDeck, setSelectedDeck] = useState<string>(() => {
     const saved = localStorage.getItem('mlp_last_deck_id');
@@ -60,6 +60,10 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
     { user: 'Princess Celestia', text: 'May the harmony of the cards guide your battles today! ✨' },
   ]);
   const [inputMsg, setInputMsg] = useState('');
+
+  // Background and Opacity settings from localStorage (managed by Admin)
+  const customBgUrl = localStorage.getItem('bg_hub') || '';
+  const bgOpacity = Number(localStorage.getItem('bg_hub_opacity') || '1');
 
   useEffect(() => {
     localStorage.setItem('mlp_last_deck_id', selectedDeck);
@@ -155,8 +159,28 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   const currentDeckObj = availableDecks.find((d) => d.id === selectedDeck);
 
   return (
-    <div className="hub-container">
-      <div className="hub-wireframe-layout">
+    <div
+      className="hub-container"
+      style={{
+        backgroundImage: customBgUrl ? `url(${customBgUrl})` : undefined,
+        backgroundBlendMode: customBgUrl ? 'overlay' : undefined,
+      }}
+    >
+      {/* Background Opacity Overlay Layer */}
+      {customBgUrl && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: '#170826',
+            opacity: 1 - bgOpacity,
+            zIndex: 1,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+
+      <div className="hub-wireframe-layout" style={{ position: 'relative', zIndex: 2 }}>
         
         {/* TOP LEFT CLUSTER: Matchmaking UI */}
         <div className="hub-top-left-cluster">
@@ -166,7 +190,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
             <div className="matchmaking-grid">
               {/* Match Type Box (Casual / Ranked) */}
               <div className="match-subbox">
-                <span style={{ fontSize: '12px', fontWeight: 800, color: '#d8b4fe', marginBottom: '8px', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#fbcfe8', marginBottom: '10px', textTransform: 'uppercase' }}>
                   Match Mode
                 </span>
                 <div className="mode-radio-group">
@@ -193,8 +217,8 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
 
               {/* Selected Deck Box */}
               <div className="match-subbox">
-                <span style={{ fontSize: '12px', fontWeight: 800, color: '#d8b4fe', marginBottom: '8px', textTransform: 'uppercase' }}>
-                  Selected Deck (Local)
+                <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#fbcfe8', marginBottom: '10px', textTransform: 'uppercase' }}>
+                  Selected Deck
                 </span>
                 <div className="deck-select-inner">
                   <div className="deck-current-name">
@@ -215,15 +239,15 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
             </button>
           </div>
 
-          {/* QUICK PLAY MODULE (Starter Decks Only) */}
+          {/* QUICK PLAY MODULE */}
           <div className="cloud-panel quick-play-module">
-            <h3 style={{ marginBottom: '6px' }}>⚡ Quick Play (Starter Decks Only)</h3>
-            <p style={{ fontSize: '13px', color: '#f3e8ff', marginBottom: '16px', maxWidth: '420px' }}>
-              Jump straight into a fast-paced duel using any of the 6 official Mane 6 starter decks!
+            <h3 style={{ marginBottom: '6px', color: '#fffdf7' }}>⚡ Quick Play (Starter Decks Only)</h3>
+            <p style={{ fontSize: '13.5px', color: '#fce7f3', marginBottom: '16px', maxWidth: '440px' }}>
+              Jump straight into a fast-paced magical duel using any of the official Mane 6 starter decks!
             </p>
             <button
               className="mlp-cloud-btn"
-              style={{ maxWidth: '280px', padding: '10px 20px', fontSize: '14px' }}
+              style={{ maxWidth: '280px', padding: '12px 24px', fontSize: '15px' }}
               onClick={() => {
                 setShowQuickPlayModal(true);
                 handleStartMatch();
@@ -238,7 +262,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         <div className="cloud-panel chat-wireframe-panel">
           <div>
             <h3>💬 Equestrian Community Chat</h3>
-            <p style={{ fontSize: '11.5px', color: '#fbcfe8', lineHeight: '1.4', margin: '4px 0 10px' }}>
+            <p style={{ fontSize: '12px', color: '#fbcfe8', lineHeight: '1.45', margin: '6px 0 12px' }}>
               {canChat
                 ? 'Authorized chat active. Chat freely with fellow card duelists!'
                 : 'Chat (only verified accounts that are non safemode accounts [i.e. older than 13] can see and participate in chat here. safemode users will be greeted by pre generated text and announcements.'}
@@ -261,12 +285,12 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
                 value={inputMsg}
                 onChange={(e) => setInputMsg(e.target.value)}
               />
-              <button type="submit" className="mlp-cloud-btn secondary" style={{ padding: '8px 16px' }}>
+              <button type="submit" className="mlp-cloud-btn secondary" style={{ padding: '10px 20px' }}>
                 Send
               </button>
             </form>
           ) : (
-            <div style={{ fontSize: '11.5px', color: '#f472b6', fontStyle: 'italic', textAlign: 'center', padding: '6px' }}>
+            <div style={{ fontSize: '12px', color: '#f472b6', fontStyle: 'italic', textAlign: 'center', padding: '8px' }}>
               🔒 Chat locked in Safe Mode / Guest Mode.
             </div>
           )}
