@@ -4,16 +4,6 @@ import { API_BASE_URL } from '../config';
 import { LiveGameState } from './GameBoard';
 import './MainHub.css';
 
-interface GameLobby {
-  code: string;
-  name: string;
-  host: string;
-  mode: 'Casual' | 'Ranked';
-  status: 'Waiting' | 'In-Progress';
-  allowSpectators: boolean;
-  playerCount: number;
-}
-
 interface SelectableDeck {
   id: string;
   name: string;
@@ -40,44 +30,42 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   const { user } = useAuth();
   const isGuest = !user;
 
+  // Safemode check (User is considered safemode if isSafeMode is true or age < 13 representation)
+  const isSafeMode = user?.isSafeMode ?? true;
+  const canChat = user && !isSafeMode && (user.isVerified || user.role === 'admin');
+
   const wsRef = useRef<WebSocket | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
-  const [lobbies, setLobbies] = useState<GameLobby[]>([]);
   const [availableDecks, setAvailableDecks] = useState<SelectableDeck[]>(FALLBACK_STARTERS);
 
-  // Create Game Form Modal State
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newRoomName, setNewRoomName] = useState('');
-  const [roomMode, setRoomMode] = useState<'Casual' | 'Ranked'>('Casual');
-  const [allowSpectators, setAllowSpectators] = useState(true);
-
-  // Quick Play & Selected Deck State
-  const [showQuickPlayModal, setShowQuickPlayModal] = useState(false);
+  // Matchmaking State matching wireframe
+  const [matchMode, setMatchMode] = useState<'Casual' | 'Ranked'>('Casual');
   const [selectedDeck, setSelectedDeck] = useState<string>(() => {
     const saved = localStorage.getItem('mlp_last_deck_id');
     return saved && saved.startsWith('starter-sd') ? saved : 'starter-sd01';
   });
+
+  // Quick Play Modal / Queue state
+  const [showQuickPlayModal, setShowQuickPlayModal] = useState(false);
   const [isSearchingQueue, setIsSearchingQueue] = useState(false);
-  const [queueStatusText, setQueueStatusText] = useState('Searching for opponent in casual queue...');
+  const [queueStatusText, setQueueStatusText] = useState('Searching for opponent...');
 
   // Chat state
   const [chatMessages, setChatMessages] = useState([
     {
       user: 'System',
-      text: isGuest
-        ? 'Welcome Guest! Choose any of the 6 Mane Starter Decks in Quick Play.'
-        : 'Welcome to Equestria Clash! Select any Starter or Custom Deck to battle.',
+      text: canChat
+        ? 'Welcome to the Equestria Clash Authorized Chatroom!'
+        : 'Safe Mode / Guest Notice: Chat is restricted to verified accounts older than 13. Enjoy pre-generated announcements and news below!',
     },
+    { user: 'Princess Celestia', text: 'May the harmony of the cards guide your battles today! ✨' },
   ]);
   const [inputMsg, setInputMsg] = useState('');
-
-  const customBgUrl = localStorage.getItem('bg_hub');
 
   useEffect(() => {
     localStorage.setItem('mlp_last_deck_id', selectedDeck);
   }, [selectedDeck]);
 
-  // Fetch all 6 starter decks + user custom decks from /api/decks
+  // Fetch decks
   useEffect(() => {
     const token = localStorage.getItem('token');
     fetch(`${API_BASE_URL}/api/decks`, {
@@ -101,27 +89,19 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
           }
         }
       })
-      .catch((err) => console.error('Error loading decks for Hub:', err));
+      .catch((err) => console.error('Error loading decks:', err));
   }, [isGuest]);
 
-  // Establish live WebSocket connection to Render backend
+  // WebSocket for matchmaking
   useEffect(() => {
     const wsUrl = API_BASE_URL.replace(/^http/, 'ws');
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
 
-    socket.onopen = () => {
-      setWsConnected(true);
-      socket.send(JSON.stringify({ type: 'GET_ROOMS' }));
-    };
-
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-
-        if (data.type === 'ROOMS_LIST') {
-          setLobbies(data.rooms || []);
-        } else if (data.type === 'QUEUED') {
+        if (data.type === 'QUEUED') {
           setQueueStatusText(data.message || 'Waiting for opponent...');
         } else if (data.type === 'STATE_UPDATE' && data.state) {
           setIsSearchingQueue(false);
@@ -135,362 +115,220 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         console.error('[WS PARSE ERROR]', err);
       }
     };
-
-    socket.onclose = () => {
-      setWsConnected(false);
-    };
   }, []);
 
-  const handleQuickPlayStart = () => {
+  const handleStartMatch = () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      alert('Connecting to game server... Please wait a moment and try again.');
+      alert('Connecting to game server... Please try again.');
       return;
     }
-
     setIsSearchingQueue(true);
-    setQueueStatusText('Joining Quick Play queue...');
+    setQueueStatusText(`Joining ${matchMode} queue...`);
     wsRef.current.send(
       JSON.stringify({
         type: 'QUICK_PLAY',
         deckId: selectedDeck,
-        username: user?.displayName || user?.username || `Guest_${Math.floor(100 + Math.random() * 900)}`,
+        mode: matchMode,
+        username: user?.displayName || user?.username || `Pony_${Math.floor(100 + Math.random() * 900)}`,
       })
     );
   };
 
-  const handleCancelQuickPlay = () => {
+  const handleCancelQueue = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'CANCEL_QUICK_PLAY' }));
     }
     setIsSearchingQueue(false);
-    setShowQuickPlayModal(false);
   };
 
-  const handleCreateGameSubmit = (e: React.FormEvent) => {
+  const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isGuest) {
-      alert('Guests cannot create custom lobbies. Please use Quick Play or log in.');
-      return;
-    }
-    if (!newRoomName.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    wsRef.current.send(
-      JSON.stringify({
-        type: 'CREATE_ROOM',
-        roomName: newRoomName.trim(),
-        mode: roomMode,
-        allowSpectators,
-        deckId: selectedDeck,
-        username: user?.displayName || user?.username || 'Player',
-      })
-    );
-
-    setNewRoomName('');
-    setShowCreateModal(false);
-  };
-
-  const handleJoinRoom = (lobby: GameLobby) => {
-    if (isGuest && lobby.mode === 'Ranked') {
-      alert('Ranked matches require a registered account.');
-      return;
-    }
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    wsRef.current.send(
-      JSON.stringify({
-        type: 'JOIN_ROOM',
-        roomCode: lobby.code,
-        deckId: selectedDeck,
-        username: user?.displayName || user?.username || `Guest_${Math.floor(100 + Math.random() * 900)}`,
-      })
-    );
-  };
-
-  const handleSpectateRoom = (lobby: GameLobby) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(
-      JSON.stringify({
-        type: 'SPECTATE_ROOM',
-        roomCode: lobby.code,
-      })
-    );
-  };
-
-  const sendChatMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isGuest) {
-      alert('Guest mode restricted: Chat is reserved for registered users.');
+    if (!canChat) {
+      alert('Chat is restricted to verified non-safemode accounts older than 13.');
       return;
     }
     if (!inputMsg.trim()) return;
-    setChatMessages([...chatMessages, { user: user?.displayName || user?.username || 'User', text: inputMsg }]);
+    setChatMessages([...chatMessages, { user: user?.displayName || user?.username || 'You', text: inputMsg }]);
     setInputMsg('');
   };
 
-  return (
-    <div
-      className="hub-container"
-      style={customBgUrl ? { backgroundImage: `url(${customBgUrl})` } : undefined}
-    >
-      {/* Whimsical Equestrian Welcome Banner */}
-      <div className="hub-welcome-hero">
-        <div className="hub-welcome-copy">
-          <span className="hub-welcome-kicker">✨ Elements of Harmony Trading Card Arena</span>
-          <h1 className="hub-welcome-title">Welcome to Equestria Clash</h1>
-          <p className="hub-welcome-subtitle">
-            Build custom decks around your favorite Mane Character, harmonize your Scenes, and advance your Story to victory!
-          </p>
-        </div>
+  const currentDeckObj = availableDecks.find((d) => d.id === selectedDeck);
 
-        {onNavigateTab && (
-          <div className="hub-element-pills">
-            <button className="hub-shortcut-pill" onClick={() => onNavigateTab('stable')}>
-              🐎 Build a Deck
-            </button>
-            <button className="hub-shortcut-pill" onClick={() => onNavigateTab('collection')}>
-              📖 View Binder
-            </button>
-            <button className="hub-shortcut-pill" onClick={() => onNavigateTab('rules')}>
-              📚 Storybook Rules
+  return (
+    <div className="hub-container">
+      <div className="hub-wireframe-layout">
+        
+        {/* TOP LEFT CLUSTER: Matchmaking UI */}
+        <div className="hub-top-left-cluster">
+          <div className="cloud-panel">
+            <h3>☁️ Matchmaking Control Center</h3>
+            
+            <div className="matchmaking-grid">
+              {/* Match Type Box (Casual / Ranked) */}
+              <div className="match-subbox">
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#d8b4fe', marginBottom: '8px', textTransform: 'uppercase' }}>
+                  Match Mode
+                </span>
+                <div className="mode-radio-group">
+                  <label className="mode-radio-label">
+                    <input
+                      type="radio"
+                      name="matchMode"
+                      checked={matchMode === 'Casual'}
+                      onChange={() => setMatchMode('Casual')}
+                    />
+                    Casual
+                  </label>
+                  <label className="mode-radio-label">
+                    <input
+                      type="radio"
+                      name="matchMode"
+                      checked={matchMode === 'Ranked'}
+                      onChange={() => setMatchMode('Ranked')}
+                    />
+                    Ranked
+                  </label>
+                </div>
+              </div>
+
+              {/* Selected Deck Box */}
+              <div className="match-subbox">
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#d8b4fe', marginBottom: '8px', textTransform: 'uppercase' }}>
+                  Selected Deck (Local)
+                </span>
+                <div className="deck-select-inner">
+                  <div className="deck-current-name">
+                    {currentDeckObj ? `${currentDeckObj.name}` : 'Default Starter'}
+                  </div>
+                  {onNavigateTab && (
+                    <button className="mlp-cloud-btn secondary" onClick={() => onNavigateTab('stable')}>
+                      Deck Select ⚙️
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* START Match Button */}
+            <button className="mlp-cloud-btn" onClick={handleStartMatch}>
+              ✨ START {matchMode.toUpperCase()} MATCH ✨
             </button>
           </div>
-        )}
-      </div>
 
-      <div className="hub-grid">
-        <div className="hub-left-column">
-          {/* Quick Play Hero Banner */}
-          <div className="panel-box quick-play-banner">
-            <div
-              className="server-status-pill"
-              style={{ color: wsConnected ? '#34d399' : '#fbbf24' }}
-            >
-              <span>{wsConnected ? '🟢' : '🟡'}</span>
-              <span>{wsConnected ? 'Live Matchmaking Server Connected' : 'Connecting to Game Server...'}</span>
-            </div>
-            <h2 style={{ color: '#ffffff', fontSize: '26px', marginBottom: '8px' }}>
-              ⚡ Instant Quick Play
-            </h2>
-            <p style={{ color: '#f3e8ff', fontSize: '14px', marginBottom: '20px' }}>
-              {isGuest
-                ? 'Playing as Guest: Choose from all 6 Mane Starter Decks (No Pony Points awarded).'
-                : 'Battle with any of the 6 Official Starter Decks or your Custom Saved Decks!'}
+          {/* QUICK PLAY MODULE (Starter Decks Only) */}
+          <div className="cloud-panel quick-play-module">
+            <h3 style={{ marginBottom: '6px' }}>⚡ Quick Play (Starter Decks Only)</h3>
+            <p style={{ fontSize: '13px', color: '#f3e8ff', marginBottom: '16px', maxWidth: '420px' }}>
+              Jump straight into a fast-paced duel using any of the 6 official Mane 6 starter decks!
             </p>
             <button
-              onClick={() => setShowQuickPlayModal(true)}
-              className="quick-play-cta-btn"
+              className="mlp-cloud-btn"
+              style={{ maxWidth: '280px', padding: '10px 20px', fontSize: '14px' }}
+              onClick={() => {
+                setShowQuickPlayModal(true);
+                handleStartMatch();
+              }}
             >
-              🚀 Find Quick Play Match
+              Quick Play Now 🚀
             </button>
-          </div>
-
-          {/* Game Lobbies & Custom Matches */}
-          <div className="panel-box lobbies-panel">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-              <h2 style={{ margin: 0 }}>🎮 Custom Lobbies & Spectate</h2>
-              {!isGuest ? (
-                <button onClick={() => setShowCreateModal(true)} className="mlp-btn">
-                  + Create Custom Game
-                </button>
-              ) : (
-                <span style={{ fontSize: '12px', color: '#f472b6', fontStyle: 'italic' }}>
-                  Custom creation locked for Guests
-                </span>
-              )}
-            </div>
-
-            <div className="lobby-list">
-              {lobbies.length === 0 ? (
-                <div className="lobby-empty-state">
-                  <div style={{ fontSize: '24px', marginBottom: '6px' }}>🦄</div>
-                  <div>No active lobbies right now. Start a Quick Play match or create a custom room!</div>
-                </div>
-              ) : (
-                lobbies.map((lobby) => (
-                  <div key={lobby.code} className="lobby-card">
-                    <div>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
-                        <strong style={{ color: '#ffffff', fontSize: '15px' }}>{lobby.name}</strong>
-                        <span className={`mode-badge ${lobby.mode.toLowerCase()}`}>{lobby.mode}</span>
-                      </div>
-                      <span style={{ fontSize: '12.5px', color: '#d8b4fe' }}>
-                        Host: {lobby.host} • Players: {lobby.playerCount}/2 • Status: {lobby.status}
-                      </span>
-                    </div>
-                    <div className="lobby-actions">
-                      {lobby.playerCount < 2 && (
-                        <button className="mlp-btn secondary" onClick={() => handleJoinRoom(lobby)}>
-                          Join
-                        </button>
-                      )}
-                      {lobby.allowSpectators ? (
-                        <button className="mlp-btn secondary" onClick={() => handleSpectateRoom(lobby)}>
-                          Spectate
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: '11px', color: '#9ca3af', alignSelf: 'center' }}>No Specs</span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
         </div>
 
-        {/* Right Column: Chatroom */}
-        <div className="panel-box chat-panel">
-          <h2>💬 {isGuest ? 'Community Chat (Locked for Guests)' : 'Authorized User Chatroom'}</h2>
-          <div className="chat-messages">
+        {/* RIGHT COLUMN: Chatroom */}
+        <div className="cloud-panel chat-wireframe-panel">
+          <div>
+            <h3>💬 Equestrian Community Chat</h3>
+            <p style={{ fontSize: '11.5px', color: '#fbcfe8', lineHeight: '1.4', margin: '4px 0 10px' }}>
+              {canChat
+                ? 'Authorized chat active. Chat freely with fellow card duelists!'
+                : 'Chat (only verified accounts that are non safemode accounts [i.e. older than 13] can see and participate in chat here. safemode users will be greeted by pre generated text and announcements.'}
+            </p>
+          </div>
+
+          <div className="chat-wireframe-messages">
             {chatMessages.map((msg, i) => (
-              <div key={i} className="chat-msg">
-                <span className="chat-username">{msg.user}:</span> {msg.text}
+              <div key={i} className="chat-wireframe-msg">
+                <span className="chat-wireframe-user">{msg.user}:</span> {msg.text}
               </div>
             ))}
           </div>
-          {!isGuest ? (
-            <form onSubmit={sendChatMessage} className="chat-form">
+
+          {canChat ? (
+            <form onSubmit={handleSendChat} className="chat-wireframe-form">
               <input
                 type="text"
-                placeholder="Type a message..."
+                placeholder="Type a message to chat..."
                 value={inputMsg}
                 onChange={(e) => setInputMsg(e.target.value)}
               />
-              <button type="submit" className="mlp-btn">
+              <button type="submit" className="mlp-cloud-btn secondary" style={{ padding: '8px 16px' }}>
                 Send
               </button>
             </form>
           ) : (
-            <p className="auth-prompt-msg">🔒 Guest Mode: Log in to chat, earn Pony Points, and unlock cards.</p>
+            <div style={{ fontSize: '11.5px', color: '#f472b6', fontStyle: 'italic', textAlign: 'center', padding: '6px' }}>
+              🔒 Chat locked in Safe Mode / Guest Mode.
+            </div>
           )}
         </div>
+
+        {/* BOTTOM ROW: Leaderboard & News Feed */}
+        <div className="hub-bottom-row">
+          
+          {/* Top 10 Player Leaderboard */}
+          <div className="cloud-panel bottom-module-card">
+            <h3>🏆 Top 10 Player Leaderboard</h3>
+            <div className="leaderboard-list">
+              <div className="leaderboard-row">
+                <span>1. 🌟 TwilightSparkle99</span>
+                <span><strong>2,450 MMR</strong></span>
+              </div>
+              <div className="leaderboard-row">
+                <span>2. ⚡ DashieFast</span>
+                <span><strong>2,380 MMR</strong></span>
+              </div>
+              <div className="leaderboard-row">
+                <span>3. 🍎 AppleBucks</span>
+                <span><strong>2,210 MMR</strong></span>
+              </div>
+              <div className="leaderboard-row">
+                <span>4. 🎨 RarityBoutique</span>
+                <span><strong>2,150 MMR</strong></span>
+              </div>
+              <div className="leaderboard-row">
+                <span>5. 🦋 Flutter Sanctuary</span>
+                <span><strong>2,090 MMR</strong></span>
+              </div>
+            </div>
+          </div>
+
+          {/* Kayou MLP TCG News Feed */}
+          <div className="cloud-panel bottom-module-card">
+            <h3>📜 Kayou MLP TCG News Feed</h3>
+            <div className="news-item">
+              <div className="news-title">BP04 Hearth’s Warming Expansion Live!</div>
+              <p className="news-snippet">Present unwrapping mechanics and new CMCs are now fully playable in online matches.</p>
+            </div>
+            <div className="news-item">
+              <div className="news-title">SoCal Pauper Championship Announced</div>
+              <p className="news-snippet">Check socalpauper.com for upcoming local tournaments across Southern California!</p>
+            </div>
+          </div>
+
+        </div>
+
       </div>
 
-      {/* Quick Play Deck Selection Modal */}
-      {showQuickPlayModal && (
-        <div className="auth-modal-overlay" onClick={() => !isSearchingQueue && setShowQuickPlayModal(false)}>
-          <div className="auth-modal" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center', maxWidth: '480px' }}>
-            <h2>⚡ Quick Play Matchmaking</h2>
-            {isSearchingQueue ? (
-              <div style={{ padding: '30px 0' }}>
-                <div className="spinner" style={{ fontSize: '28px', marginBottom: '15px' }}>🌀</div>
-                <p style={{ color: '#fbcfe8', fontWeight: 'bold' }}>{queueStatusText}</p>
-                <p style={{ fontSize: '12px', color: '#d8b4fe', marginTop: '8px', marginBottom: '20px' }}>
-                  Deck: {availableDecks.find((d) => d.id === selectedDeck)?.name || selectedDeck}
-                </p>
-                <button onClick={handleCancelQuickPlay} className="mlp-btn secondary">
-                  Cancel Search
-                </button>
-              </div>
-            ) : (
-              <>
-                <p style={{ fontSize: '13px', color: '#d8b4fe', marginBottom: '15px' }}>
-                  Select your deck ({availableDecks.length} available):
-                </p>
-                <select
-                  value={selectedDeck}
-                  onChange={(e) => setSelectedDeck(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: '#1e1124',
-                    color: '#fbcfe8',
-                    border: '1px solid #9333ea',
-                    borderRadius: '8px',
-                    marginBottom: '20px',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  <optgroup label="Official Mane 6 Starter Decks">
-                    {availableDecks
-                      .filter((d) => d.is_starter)
-                      .map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name} ({d.element})
-                        </option>
-                      ))}
-                  </optgroup>
-                  {availableDecks.some((d) => !d.is_starter) && (
-                    <optgroup label="Custom Saved Decks">
-                      {availableDecks
-                        .filter((d) => !d.is_starter)
-                        .map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.name} ({d.element})
-                          </option>
-                        ))}
-                    </optgroup>
-                  )}
-                </select>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button onClick={handleQuickPlayStart} className="mlp-btn" style={{ flex: 1, padding: '12px' }}>
-                    Start Match
-                  </button>
-                  <button onClick={() => setShowQuickPlayModal(false)} className="mlp-btn secondary" style={{ flex: 1 }}>
-                    Cancel
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Create Custom Game Modal */}
-      {showCreateModal && (
-        <div className="auth-modal-overlay" onClick={() => setShowCreateModal(false)}>
-          <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>🛠️ Create Custom Game Lobby</h2>
-            <form onSubmit={handleCreateGameSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <input
-                type="text"
-                placeholder="Room Name (e.g., Chill Harmony Game)"
-                value={newRoomName}
-                onChange={(e) => setNewRoomName(e.target.value)}
-                required
-              />
-              <label style={{ fontSize: '13px', color: '#fbcfe8', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                Select Your Deck:
-                <select
-                  value={selectedDeck}
-                  onChange={(e) => setSelectedDeck(e.target.value)}
-                  style={{ padding: '10px', background: '#1e1124', color: '#fbcfe8', border: '1px solid #9333ea', borderRadius: '8px' }}
-                >
-                  {availableDecks.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name} ({d.element})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={{ fontSize: '13px', color: '#fbcfe8', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                Match Type:
-                <select
-                  value={roomMode}
-                  onChange={(e) => setRoomMode(e.target.value as 'Casual' | 'Ranked')}
-                  style={{ padding: '10px', background: '#1e1124', color: '#fbcfe8', border: '1px solid #9333ea', borderRadius: '8px' }}
-                >
-                  <option value="Casual">Casual (Practice & Fun)</option>
-                  <option value="Ranked">Ranked (Competitive Ladder & MMR)</option>
-                </select>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#fbcfe8', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={allowSpectators}
-                  onChange={(e) => setAllowSpectators(e.target.checked)}
-                />
-                Allow Spectators
-              </label>
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <button type="submit" className="mlp-btn" style={{ flex: 1, padding: '12px' }}>
-                  Create Room
-                </button>
-                <button type="button" onClick={() => setShowCreateModal(false)} className="mlp-btn secondary" style={{ flex: 1 }}>
-                  Cancel
-                </button>
-              </div>
-            </form>
+      {/* Quick Play Queue Modal */}
+      {showQuickPlayModal && isSearchingQueue && (
+        <div className="auth-modal-overlay" onClick={handleCancelQueue}>
+          <div className="auth-modal" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center', maxWidth: '420px' }}>
+            <div style={{ fontSize: '32px', marginBottom: '12px' }}>✨🦄✨</div>
+            <h3 style={{ color: '#fbcfe8', marginBottom: '8px' }}>Matchmaking in Progress</h3>
+            <p style={{ fontSize: '14px', color: '#e9d5ff', marginBottom: '20px' }}>{queueStatusText}</p>
+            <button className="mlp-cloud-btn secondary" onClick={handleCancelQueue}>
+              Cancel & Return
+            </button>
           </div>
         </div>
       )}
