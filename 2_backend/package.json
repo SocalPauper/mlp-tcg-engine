@@ -6,15 +6,18 @@
     "start": "node --import tsx/esm 2_backend/index.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1171.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "multer": "^2.5.0",
     "pg": "^8.11.3",
     "resend": "^6.37.0",
     "tsx": "^4.7.0"
   },
   "devDependencies": {
+    "@types/multer": "^2.3.0",
     "sharp": "^0.35.5",
     "tesseract.js": "^7.0.0"
   }

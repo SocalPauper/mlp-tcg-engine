@@ -7,6 +7,7 @@ import authRouter from './routes/auth.js';
 import cardsRouter from './routes/cards.js';
 import decksRouter from './routes/decks.js';
 import shopsRouter from './routes/shops.js';
+import mediaRouter from './routes/media.js';
 import { GameManager } from './websocket/gameManager.js';
 
 const app = express();
@@ -49,7 +50,6 @@ async function startServer() {
       );
     `);
 
-    // Safety check: If auth.users was previously created as integer (serial), convert it to UUID safely
     await pool.query(`
       DO $$ 
       BEGIN
@@ -101,6 +101,31 @@ async function startServer() {
       );
     `);
 
+    // 6. Persistent Global Site Settings (Wallpapers, Opacity, Live Announcements)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS auth.site_settings (
+        setting_key VARCHAR(100) PRIMARY KEY,
+        setting_value TEXT NOT NULL,
+        updated_by VARCHAR(100),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // 7. Persistent Media Registry (R2 uploads for Admin Themes & Fan Page)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS auth.uploaded_media (
+        id SERIAL PRIMARY KEY,
+        category VARCHAR(50) NOT NULL,
+        target_key VARCHAR(100),
+        title VARCHAR(255),
+        file_name VARCHAR(255) NOT NULL,
+        public_url TEXT NOT NULL,
+        uploaded_by VARCHAR(100),
+        is_approved BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     console.log('[DATABASE] Initialization and schema hardening complete.');
   } catch (err: any) {
     console.error('[DATABASE INIT ERROR]', err.message);
@@ -110,6 +135,7 @@ async function startServer() {
   app.use('/api/auth', authRouter);
   app.use('/api/users', authRouter);
   app.use('/api/shop', shopsRouter);
+  app.use('/api/media', mediaRouter);
   app.use('/api', cardsRouter);
   app.use('/api', decksRouter);
 
@@ -117,8 +143,18 @@ async function startServer() {
     res.json({ status: 'ok', engine: 'MLP TCG Engine online' });
   });
 
-  app.get('/api/site/announcement', (req, res) => {
-    res.json({ success: true, announcement: "Welcome to Equestria Clash TCG Online!" });
+  app.get('/api/site/announcement', async (_req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT setting_value FROM auth.site_settings WHERE setting_key = 'site_announcement'`
+      );
+      res.json({
+        success: true,
+        announcement: rows[0]?.setting_value || 'Welcome to Equestria Clash TCG Online!',
+      });
+    } catch {
+      res.json({ success: true, announcement: 'Welcome to Equestria Clash TCG Online!' });
+    }
   });
 
   const server = createServer(app);

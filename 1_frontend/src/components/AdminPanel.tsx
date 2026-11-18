@@ -1,31 +1,71 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
+import { useAuth } from '../App';
 import BackgroundUploader from './BackgroundUploader';
 import './AdminPanel.css';
 
 export default function AdminPanel() {
+  const { user } = useAuth();
   const [announcement, setAnnouncement] = useState('');
   const [targetUser, setTargetUser] = useState('');
   const [selectedBgTab, setSelectedBgTab] = useState<string>('hub');
-  
-  // Opacity state for the selected tab background (default 1.0)
-  const [opacity, setOpacity] = useState<number>(() => {
-    const saved = localStorage.getItem(`bg_${selectedBgTab}_opacity`);
-    return saved !== null ? parseFloat(saved) : 1.0;
-  });
+  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [opacity, setOpacity] = useState<number>(1.0);
+  const [savingOpacity, setSavingOpacity] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/media/settings`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.settings) {
+          setSettings(data.settings);
+          const initialOpacity = data.settings[`bg_${selectedBgTab}_opacity`];
+          setOpacity(initialOpacity !== undefined ? parseFloat(initialOpacity) : 1.0);
+        }
+      })
+      .catch((err) => console.error('Failed to load admin settings:', err));
+  }, []);
 
   const handleTabChange = (tab: string) => {
     setSelectedBgTab(tab);
-    const saved = localStorage.getItem(`bg_${tab}_opacity`);
-    setOpacity(saved !== null ? parseFloat(saved) : 1.0);
+    const saved = settings[`bg_${tab}_opacity`];
+    setOpacity(saved !== undefined ? parseFloat(saved) : 1.0);
   };
 
-  const handleOpacityChange = (val: number) => {
-    setOpacity(val);
-    localStorage.setItem(`bg_${selectedBgTab}_opacity`, val.toString());
+  const handleSaveOpacity = async () => {
+    setSavingOpacity(true);
+    try {
+      const key = `bg_${selectedBgTab}_opacity`;
+      const res = await fetch(`${API_BASE_URL}/api/media/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key,
+          value: opacity.toString(),
+          updatedBy: user?.username || 'admin',
+        }),
+      });
+      if (res.ok) {
+        setSettings((prev) => ({ ...prev, [key]: opacity.toString() }));
+        alert(`Global opacity (${Math.round(opacity * 100)}%) saved for all users!`);
+      }
+    } finally {
+      setSavingOpacity(false);
+    }
   };
 
-  const postAnnouncement = () => {
-    alert(`Public Announcement Posted: "${announcement}"`);
+  const postAnnouncement = async () => {
+    if (!announcement.trim()) return;
+    await fetch(`${API_BASE_URL}/api/media/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: 'site_announcement',
+        value: announcement.trim(),
+        updatedBy: user?.username || 'admin',
+      }),
+    });
+    alert(`Global Announcement Published: "${announcement}"`);
     setAnnouncement('');
   };
 
@@ -34,45 +74,72 @@ export default function AdminPanel() {
     setTargetUser('');
   };
 
+  const currentTabBgUrl = settings[`bg_${selectedBgTab}`] || '';
+
   return (
-    <div className="admin-container" style={{ backgroundImage: `url(${localStorage.getItem('bg_admin') || ''})` }}>
+    <div
+      className="admin-container"
+      style={settings['bg_admin'] ? { backgroundImage: `url(${settings['bg_admin']})` } : undefined}
+    >
       <h1>🛡️ Admin Control Panel</h1>
 
       <div className="admin-grid">
-        {/* Theme & Tab Background Customizer with Opacity Slider */}
+        {/* Global Theme & Tab Background Customizer */}
         <div className="panel-box">
-          <h3>🎨 Tab Background & Opacity Manager</h3>
+          <h3>🎨 Global Tab Background & Opacity</h3>
           <p style={{ fontSize: '13px', margin: 0, color: '#d8b4fe' }}>
-            Upload background art and adjust backdrop opacity for any site tab.
+            Upload wallpapers to R2 and adjust background opacity globally for all visitors.
           </p>
           <label style={{ fontSize: '12px', fontWeight: 800, color: '#fbcfe8', display: 'flex', flexDirection: 'column', gap: '4px' }}>
             Target Tab:
-            <select
-              value={selectedBgTab}
-              onChange={(e) => handleTabChange(e.target.value)}
-            >
+            <select value={selectedBgTab} onChange={(e) => handleTabChange(e.target.value)}>
               <option value="hub">Main Hub (Landing Arena)</option>
               <option value="stable">The Stable (Deck Builder)</option>
               <option value="collection">Collection Binder</option>
               <option value="shop">Card Shop</option>
+              <option value="fanPage">Fan Art & Lore Page</option>
               <option value="admin">Admin Panel</option>
             </select>
           </label>
 
-          <BackgroundUploader tabKey={selectedBgTab} />
+          <BackgroundUploader
+            tabKey={selectedBgTab}
+            currentUrl={currentTabBgUrl}
+            onUploaded={(newUrl) =>
+              setSettings((prev) => ({ ...prev, [`bg_${selectedBgTab}`]: newUrl }))
+            }
+          />
 
-          <label style={{ fontSize: '12px', fontWeight: 800, color: '#fbcfe8', display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-            Background Image Opacity: {Math.round(opacity * 100)}%
+          {currentTabBgUrl && (
+            <div style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid #9333ea', maxHeight: '110px' }}>
+              <img
+                src={currentTabBgUrl}
+                alt="Active Wallpaper Preview"
+                style={{ width: '100%', height: '110px', objectFit: 'cover', opacity }}
+              />
+            </div>
+          )}
+
+          <label style={{ fontSize: '12px', fontWeight: 800, color: '#fbcfe8', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            Global Wallpaper Opacity: {Math.round(opacity * 100)}%
             <input
               type="range"
               min="0.1"
               max="1.0"
               step="0.05"
               value={opacity}
-              onChange={(e) => handleOpacityChange(parseFloat(e.target.value))}
+              onChange={(e) => setOpacity(parseFloat(e.target.value))}
               style={{ accentColor: '#ec4899', cursor: 'pointer' }}
             />
           </label>
+          <button
+            type="button"
+            onClick={handleSaveOpacity}
+            disabled={savingOpacity}
+            className="mlp-btn"
+          >
+            {savingOpacity ? 'Saving...' : 'Save Global Opacity'}
+          </button>
         </div>
 
         {/* Statistics */}
@@ -85,10 +152,10 @@ export default function AdminPanel() {
 
         {/* Public Announcements */}
         <div className="panel-box">
-          <h3>📢 Post Public Announcement</h3>
+          <h3>📢 Post Global Announcement</h3>
           <textarea
             rows={3}
-            placeholder="Type announcement broadcast..."
+            placeholder="Type announcement broadcast for all users..."
             value={announcement}
             onChange={(e) => setAnnouncement(e.target.value)}
           />
