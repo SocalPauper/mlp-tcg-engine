@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+vimport React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config';
 import './StableHub.css';
 
@@ -12,6 +12,7 @@ export interface DeckSummary {
   is_starter: boolean;
   is_public: boolean;
   card_count: number;
+  has_wishlist_cards: boolean;
   owner_id?: string;
 }
 
@@ -20,12 +21,31 @@ interface StableHubProps {
   onOpenBuilder: (deckId: string | null, mode: 'CREATE' | 'EDIT' | 'VIEW' | 'COPY') => void;
 }
 
+function isCardUnowned(card: any, ownedIds: Set<string>): boolean {
+  if (!card) return false;
+  const id = String(card.id || '');
+  const setCode = String(card.set_code || '');
+  if (/^SD/i.test(id) || /^SD/i.test(setCode)) return false;
+
+  const rarity = String(card.rarity || 'C').toUpperCase();
+  if (['C', 'U', 'R'].includes(rarity) && !id.includes('-S')) return false;
+
+  const isEverydayScene =
+    card.card_type === 'Scene' &&
+    (!card.element ||
+      String(card.element).toLowerCase() === 'everyday' ||
+      /everyday/i.test(card.name || '') ||
+      /-EV/i.test(id));
+  if (isEverydayScene && !id.includes('-S')) return false;
+
+  return !ownedIds.has(id);
+}
+
 export default function StableHub({ currentUserId, onOpenBuilder }: StableHubProps) {
   const [activeTab, setActiveTab] = useState<'MY_DECKS' | 'STARTERS' | 'COMMUNITY'>('MY_DECKS');
   const [allDecks, setAllDecks] = useState<DeckSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Global wallpaper & opacity loaded from auth.site_settings
   const [customBgUrl, setCustomBgUrl] = useState<string>('');
   const [bgOpacity, setBgOpacity] = useState<number>(1);
 
@@ -47,15 +67,26 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const [decksRes, cardsRes] = await Promise.all([
+      const [decksRes, cardsRes, colRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/decks`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }),
         fetch(`${API_BASE_URL}/api/cards`),
+        token
+          ? fetch(`${API_BASE_URL}/api/auth/me/collection`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+          : Promise.resolve(null),
       ]);
 
       const rawDecks = decksRes.ok ? await decksRes.json() : [];
       const cards = cardsRes.ok ? await cardsRes.json() : [];
+      const colData = colRes && colRes.ok ? await colRes.json() : [];
+
+      const ownedIds = new Set<string>(
+        Array.isArray(colData) ? colData.map((row: any) => String(row.card_id)) : []
+      );
+
       const cardList = Array.isArray(cards) ? cards : [];
       const cardMap = new Map<string, any>(
         cardList.map((c: any) => [String(c.id).toLowerCase(), c])
@@ -75,10 +106,28 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
           );
         }
 
-        const storyCount = Array.isArray(d.story_deck) ? d.story_deck.length : 0;
-        const sceneCount = Array.isArray(d.scene_deck) ? d.scene_deck.length : 0;
-        const mainCount = Array.isArray(d.main_deck) ? d.main_deck.length : 0;
-        const totalCount = (d.mane_character || maneCard ? 1 : 0) + storyCount + sceneCount + mainCount;
+        const storyIds: string[] = Array.isArray(d.story_deck) ? d.story_deck : [];
+        const sceneIds: string[] = Array.isArray(d.scene_deck) ? d.scene_deck : [];
+        const mainIds: string[] = Array.isArray(d.main_deck) ? d.main_deck : [];
+        const totalCount =
+          (d.mane_character || maneCard ? 1 : 0) +
+          storyIds.length +
+          sceneIds.length +
+          mainIds.length;
+
+        const isStarter = Boolean(d.is_starter || String(d.id).startsWith('starter-'));
+        const allIdsInDeck = [
+          ...(maneCard ? [maneCard.id] : []),
+          ...storyIds,
+          ...sceneIds,
+          ...mainIds,
+        ];
+        const hasWishlist =
+          !isStarter &&
+          allIdsInDeck.some((cid) => {
+            const cObj = cardMap.get(String(cid).toLowerCase());
+            return cObj ? isCardUnowned(cObj, ownedIds) : false;
+          });
 
         return {
           id: d.id,
@@ -90,9 +139,10 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
             d.mane_image_url ||
             maneCard?.image_url ||
             'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp',
-          is_starter: Boolean(d.is_starter || String(d.id).startsWith('starter-')),
+          is_starter: isStarter,
           is_public: d.is_public ?? true,
           card_count: totalCount,
+          has_wishlist_cards: hasWishlist,
           owner_id: d.user_id || d.owner_id || currentUserId,
         };
       });
@@ -146,7 +196,6 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
       className="stable-hub-container"
       style={customBgUrl ? { backgroundImage: `url(${customBgUrl})` } : undefined}
     >
-      {/* Opacity Tint Layer Controlled by Admin Settings */}
       {customBgUrl && (
         <div
           style={{
@@ -217,6 +266,11 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
                     <div className="deck-card-stats">
                       <span>{deck.card_count} / 70 Cards</span>
                       {deck.is_starter && <span style={{ color: '#ffd700' }}>★ Official Starter</span>}
+                      {deck.has_wishlist_cards && (
+                        <span style={{ color: '#fda4af' }} title="Unlock missing cards from packs before queuing">
+                          🔒 Wishlist Cards
+                        </span>
+                      )}
                     </div>
 
                     <div className="deck-card-actions">

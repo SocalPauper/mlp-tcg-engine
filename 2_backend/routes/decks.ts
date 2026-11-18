@@ -3,13 +3,14 @@ import { pool } from '../../4_data/db.js';
 
 const router = Router();
 
+// Maps the 6 retail Kayou Starter Boxes (SD01A through SD01F) to their exact elements & card prefixes
 const STARTER_DEFINITIONS = [
-  { id: 'starter-sd01', name: 'Twilight Sparkle - Magic Starter', element: 'Magic', pony: 'Twilight Sparkle' },
-  { id: 'starter-sd02', name: 'Rainbow Dash - Loyalty Starter', element: 'Loyalty', pony: 'Rainbow Dash' },
-  { id: 'starter-sd03', name: 'Applejack - Honesty Starter', element: 'Honesty', pony: 'Applejack' },
-  { id: 'starter-sd04', name: 'Rarity - Generosity Starter', element: 'Generosity', pony: 'Rarity' },
-  { id: 'starter-sd05', name: 'Fluttershy - Kindness Starter', element: 'Kindness', pony: 'Fluttershy' },
-  { id: 'starter-sd06', name: 'Pinkie Pie - Laughter Starter', element: 'Laughter', pony: 'Pinkie Pie' },
+  { id: 'starter-sd01', prefix: 'SD01A', name: 'Twilight Sparkle - Magic Starter', element: 'Magic', pony: 'Twilight Sparkle' },
+  { id: 'starter-sd02', prefix: 'SD01E', name: 'Rainbow Dash - Loyalty Starter', element: 'Loyalty', pony: 'Rainbow Dash' },
+  { id: 'starter-sd03', prefix: 'SD01D', name: 'Applejack - Honesty Starter', element: 'Honesty', pony: 'Applejack' },
+  { id: 'starter-sd04', prefix: 'SD01F', name: 'Rarity - Generosity Starter', element: 'Generosity', pony: 'Rarity' },
+  { id: 'starter-sd05', prefix: 'SD01B', name: 'Fluttershy - Kindness Starter', element: 'Kindness', pony: 'Fluttershy' },
+  { id: 'starter-sd06', prefix: 'SD01C', name: 'Pinkie Pie - Laughter Starter', element: 'Laughter', pony: 'Pinkie Pie' },
 ];
 
 function isTrueManeCharacter(c: any): boolean {
@@ -24,12 +25,28 @@ function isTrueManeCharacter(c: any): boolean {
   return true;
 }
 
+function fillBucketWithCap(poolRows: any[], targetCount: number, maxPerBaseId: number): string[] {
+  const result: string[] = [];
+  const counts: Record<string, number> = {};
+  for (const row of poolRows) {
+    if (result.length >= targetCount) break;
+    const baseId = String(row.id).replace(/-S$/i, '');
+    const current = counts[baseId] || 0;
+    const toAdd = Math.min(maxPerBaseId - current, targetCount - result.length);
+    for (let i = 0; i < toAdd; i++) {
+      result.push(row.id);
+    }
+    counts[baseId] = current + toAdd;
+  }
+  return result;
+}
+
 async function buildStarterDecks() {
   const cardRes = await pool.query(
     `SELECT id, name, set_code, card_type, element, rarity, cost, effect_text, image_url
      FROM game.cards
      ORDER BY
-       CASE WHEN set_code ILIKE 'SD%' OR id ~* '^SD' THEN 0 ELSE 1 END,
+       CASE WHEN id ~* '^SD01[A-F]-' THEN 0 WHEN set_code ILIKE 'SD%' OR id ~* '^SD' THEN 1 ELSE 2 END,
        id ASC;`
   );
 
@@ -37,86 +54,81 @@ async function buildStarterDecks() {
   const trueManes = allCards.filter(isTrueManeCharacter);
 
   return STARTER_DEFINITIONS.map((def) => {
+    const subPrefixRegex = new RegExp(`^${def.prefix}-`, 'i');
+
+    // 1. Main Character (prefer exact retail sub-deck card, then shared SD01)
     const maneCard =
-      trueManes.find(
-        (c) =>
-          c.name.toLowerCase().includes(def.pony.toLowerCase()) &&
-          (c.element?.toLowerCase() === def.element.toLowerCase() || !c.element) &&
-          /^SD/i.test(c.id)
-      ) ||
+      trueManes.find((c) => subPrefixRegex.test(c.id) && c.name.toLowerCase().includes(def.pony.toLowerCase())) ||
+      trueManes.find((c) => c.name.toLowerCase().includes(def.pony.toLowerCase()) && /^SD/i.test(c.id)) ||
       trueManes.find((c) => c.name.toLowerCase().includes(def.pony.toLowerCase())) ||
-      trueManes.find((c) => c.element?.toLowerCase() === def.element.toLowerCase()) ||
       null;
 
-    const legalPool = allCards.filter(
-      (c) =>
-        !c.id.includes('-S') &&
-        !c.id.includes('SPR') &&
-        (c.element?.toLowerCase() === def.element.toLowerCase() ||
-          c.element?.toLowerCase() === 'everyday' ||
-          !c.element)
-    );
+    // Sort candidate pool so cards from this retail starter box (e.g., SD01A-*) come first, followed by shared SD01-* & matching element
+    const legalPool = allCards
+      .filter(
+        (c) =>
+          !c.id.includes('-S') &&
+          !c.id.includes('SPR') &&
+          (subPrefixRegex.test(c.id) ||
+            c.element?.toLowerCase() === def.element.toLowerCase() ||
+            c.element?.toLowerCase() === 'everyday' ||
+            !c.element)
+      )
+      .sort((a, b) => {
+        const aExact = subPrefixRegex.test(a.id) ? 0 : /^SD01-/i.test(a.id) ? 1 : 2;
+        const bExact = subPrefixRegex.test(b.id) ? 0 : /^SD01-/i.test(b.id) ? 1 : 2;
+        if (aExact !== bExact) return aExact - bExact;
+        return a.id.localeCompare(b.id);
+      });
 
-    // 1. Pick 4 Story cards
+    // 2. Story Deck: 4-stage retail Story arc
     const storyCandidates = legalPool.filter(
-      (c) =>
-        c.card_type === 'Story' ||
-        c.name.includes(' - ') ||
-        c.name.includes(' – ')
+      (c) => c.card_type === 'Story' || c.name.includes(' - ') || c.name.includes(' – ')
     );
     const storyDeck: string[] = [];
-    const seenStoryPrefixes = new Set<string>();
+    let arcPrefix = '';
     for (const sc of storyCandidates) {
       const arcName = sc.name.split(/[-–]/)[0].trim().toLowerCase();
-      if (seenStoryPrefixes.size === 0 || seenStoryPrefixes.has(arcName)) {
-        seenStoryPrefixes.add(arcName);
-        if (storyDeck.length < 4) storyDeck.push(sc.id);
+      if (!arcPrefix) arcPrefix = arcName;
+      if (arcName === arcPrefix && storyDeck.length < 4) {
+        storyDeck.push(sc.id);
       }
       if (storyDeck.length === 4) break;
     }
 
-    // 2. Pick up to 15 Scene cards
+    // 3. Scene Deck: 15 Scenes
     const sceneCandidates = legalPool.filter((c) => c.card_type === 'Scene');
-    const sceneDeck: string[] = [];
-    const sceneCounts: Record<string, number> = {};
-    for (const sc of sceneCandidates) {
-      if (sceneDeck.length >= 15) break;
-      const baseId = sc.id.replace('-S', '');
-      const isEveryday = !sc.element || sc.element.toLowerCase() === 'everyday';
-      const maxCopies = isEveryday ? 5 : 3;
-      const current = sceneCounts[baseId] || 0;
-      const toAdd = Math.min(maxCopies - current, 15 - sceneDeck.length);
-      for (let i = 0; i < toAdd; i++) {
-        sceneDeck.push(sc.id);
-      }
-      sceneCounts[baseId] = current + toAdd;
-    }
+    const sceneDeck = fillBucketWithCap(sceneCandidates, 15, 3);
 
-    // 3. Pick exactly 50 Main Deck cards (Characters, Friend Characters, Events, Items)
-    const mainCandidates = legalPool.filter(
+    // 4. Main Deck: Retail starter ratio = 34 Characters/Friends + 12 Events + 4 Items = 50 Cards
+    const charCandidates = legalPool.filter(
       (c) =>
-        ['Character', 'Friend Character', 'Event', 'Item'].includes(c.card_type) &&
+        ['Character', 'Friend Character'].includes(c.card_type) &&
         !c.name.includes(' - ') &&
         !c.name.includes(' – ') &&
         !isTrueManeCharacter(c)
     );
-    const mainDeck: string[] = [];
-    const mainCounts: Record<string, number> = {};
-    for (const mc of mainCandidates) {
-      if (mainDeck.length >= 50) break;
-      const baseId = mc.id.replace('-S', '');
-      const current = mainCounts[baseId] || 0;
-      const toAdd = Math.min(3 - current, 50 - mainDeck.length);
-      for (let i = 0; i < toAdd; i++) {
-        mainDeck.push(mc.id);
-      }
-      mainCounts[baseId] = current + toAdd;
+    const eventCandidates = legalPool.filter((c) => c.card_type === 'Event');
+    const itemCandidates = legalPool.filter((c) => c.card_type === 'Item');
+
+    const pickedChars = fillBucketWithCap(charCandidates, 34, 3);
+    const pickedEvents = fillBucketWithCap(eventCandidates, 12, 3);
+    const pickedItems = fillBucketWithCap(itemCandidates, 4, 3);
+
+    let mainDeck = [...pickedChars, ...pickedEvents, ...pickedItems];
+    if (mainDeck.length < 50) {
+      const extraNeeded = 50 - mainDeck.length;
+      const usedSet = new Set(mainDeck);
+      const fallbackPool = [...charCandidates, ...eventCandidates, ...itemCandidates].filter(
+        (c) => !usedSet.has(c.id)
+      );
+      mainDeck = [...mainDeck, ...fillBucketWithCap(fallbackPool, extraNeeded, 3)];
     }
 
     return {
       id: def.id,
       name: def.name,
-      author: 'Official Starter',
+      author: 'Official Retail Starter',
       element: def.element,
       mane_image_url: maneCard?.image_url || null,
       is_public: true,
@@ -124,7 +136,7 @@ async function buildStarterDecks() {
       mane_character: maneCard ? maneCard.id : null,
       story_deck: storyDeck,
       scene_deck: sceneDeck,
-      main_deck: mainDeck,
+      main_deck: mainDeck.slice(0, 50),
     };
   });
 }

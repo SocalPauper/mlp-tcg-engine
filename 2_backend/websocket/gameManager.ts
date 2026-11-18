@@ -25,10 +25,11 @@ import {
   activateManeLeaderAbility,
   resolveTargetSelection,
   cancelTargetSelection,
+  resolveHandCardChoice,
 } from '../../3_engine/gameRules.js';
 import { pool } from '../../4_data/db.js';
 
-const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000;
 
 interface RoomClient {
   ws: WebSocket;
@@ -60,13 +61,13 @@ interface Room {
   lastActivityAt: number;
 }
 
-const STARTER_META: Record<string, { element: string; pony: string }> = {
-  'starter-sd01': { element: 'Magic', pony: 'Twilight Sparkle' },
-  'starter-sd02': { element: 'Loyalty', pony: 'Rainbow Dash' },
-  'starter-sd03': { element: 'Honesty', pony: 'Applejack' },
-  'starter-sd04': { element: 'Generosity', pony: 'Rarity' },
-  'starter-sd05': { element: 'Kindness', pony: 'Fluttershy' },
-  'starter-sd06': { element: 'Laughter', pony: 'Pinkie Pie' },
+const STARTER_META: Record<string, { prefix: string; element: string; pony: string }> = {
+  'starter-sd01': { prefix: 'SD01A', element: 'Magic', pony: 'Twilight Sparkle' },
+  'starter-sd02': { prefix: 'SD01E', element: 'Loyalty', pony: 'Rainbow Dash' },
+  'starter-sd03': { prefix: 'SD01D', element: 'Honesty', pony: 'Applejack' },
+  'starter-sd04': { prefix: 'SD01F', element: 'Generosity', pony: 'Rarity' },
+  'starter-sd05': { prefix: 'SD01B', element: 'Kindness', pony: 'Fluttershy' },
+  'starter-sd06': { prefix: 'SD01C', element: 'Laughter', pony: 'Pinkie Pie' },
 };
 
 function mapDbRowToCardDef(row: any): CardDefinition {
@@ -86,6 +87,22 @@ function mapDbRowToCardDef(row: any): CardDefinition {
   };
 }
 
+function fillCardDefBucket(poolRows: any[], targetCount: number, maxPerBaseId: number): CardDefinition[] {
+  const result: CardDefinition[] = [];
+  const counts: Record<string, number> = {};
+  for (const row of poolRows) {
+    if (result.length >= targetCount) break;
+    const baseId = String(row.id).replace(/-S$/i, '');
+    const current = counts[baseId] || 0;
+    const toAdd = Math.min(maxPerBaseId - current, targetCount - result.length);
+    for (let i = 0; i < toAdd; i++) {
+      result.push(mapDbRowToCardDef(row));
+    }
+    counts[baseId] = current + toAdd;
+  }
+  return result;
+}
+
 export class GameManager {
   private rooms = new Map<string, Room>();
   private quickPlayQueue: QueuedPlayer[] = [];
@@ -102,7 +119,6 @@ export class GameManager {
       const now = Date.now();
       for (const [code, room] of this.rooms.entries()) {
         if (room.state.phase === 'GAME_OVER' || room.state.phase === 'WAITING_FOR_PLAYERS') {
-          // Clean up abandoned waiting rooms after 15 minutes
           if (room.state.phase === 'WAITING_FOR_PLAYERS' && now - room.lastActivityAt >= 15 * 60 * 1000) {
             this.rooms.delete(code);
             this.broadcastLobbyRooms();
@@ -110,7 +126,6 @@ export class GameManager {
           continue;
         }
 
-        // 1. Check if either seated player has been disconnected for > 3 minutes
         for (const seat of ['0', '1'] as const) {
           const discTime = room.disconnectedAt[seat];
           if (discTime && now - discTime >= INACTIVITY_TIMEOUT_MS) {
@@ -128,7 +143,6 @@ export class GameManager {
 
         if (room.state.phase === 'GAME_OVER') continue;
 
-        // 2. Check if the active/prompted player has made NO move for > 3 minutes
         if (now - room.lastActivityAt >= INACTIVITY_TIMEOUT_MS) {
           const stalledSeat: '0' | '1' =
             room.state.phase === 'CONTACT_INSPIRE' && room.state.contactState
@@ -146,7 +160,6 @@ export class GameManager {
         }
       }
 
-      // Clean up finished rooms with zero connected clients
       for (const [code, room] of this.rooms.entries()) {
         const activeSockets = room.clients.filter((c) => c.ws.readyState === WebSocket.OPEN);
         if (activeSockets.length === 0 && room.state.phase === 'GAME_OVER') {
@@ -166,7 +179,6 @@ export class GameManager {
         );
       };
 
-      // Socket drop (window close, refresh, or network blip) -> keep room alive for 3-minute reconnect window
       const handleSocketDisconnect = () => {
         removeFromQueue();
         if (!userSession) return;
@@ -183,7 +195,6 @@ export class GameManager {
         this.broadcastLobbyRooms();
       };
 
-      // Explicit Leave Match button -> immediate forfeit so opponent wins right away
       const handleExplicitLeave = () => {
         removeFromQueue();
         if (!userSession) return;
@@ -226,7 +237,6 @@ export class GameManager {
             return;
           }
 
-          // Reconnect after window close, browser refresh, or transient network interruption
           if (message.type === 'RECONNECT_MATCH') {
             const { roomCode, seat, sessionToken } = message;
             const room = this.rooms.get(String(roomCode || '').trim().toLowerCase());
@@ -577,7 +587,7 @@ export class GameManager {
       `SELECT id, name, set_code, card_type, element, rarity, cost, power, defense, effect_text, image_url
        FROM game.cards
        ORDER BY
-         CASE WHEN set_code ILIKE 'SD%' OR id ~* '^SD' THEN 0 ELSE 1 END,
+         CASE WHEN id ~* '^SD01[A-F]-' THEN 0 WHEN set_code ILIKE 'SD%' OR id ~* '^SD' THEN 1 ELSE 2 END,
          id ASC;`
     );
     const allRows = cardRes.rows;
@@ -615,6 +625,7 @@ export class GameManager {
 
     const normalizedStarter = deckId.toLowerCase();
     const meta = STARTER_META[normalizedStarter] || STARTER_META['starter-sd01'];
+    const subPrefixRegex = new RegExp(`^${meta.prefix}-`, 'i');
 
     const isTrueMane = (r: any) =>
       r.card_type === 'Mane Character' &&
@@ -627,24 +638,34 @@ export class GameManager {
       allRows.find(
         (r: any) =>
           isTrueMane(r) &&
-          String(r.name || '').toLowerCase().includes(meta.pony.toLowerCase()) &&
-          /^SD/i.test(r.id)
+          subPrefixRegex.test(r.id) &&
+          String(r.name || '').toLowerCase().includes(meta.pony.toLowerCase())
       ) ||
       allRows.find(
         (r: any) =>
-          isTrueMane(r) && String(r.name || '').toLowerCase().includes(meta.pony.toLowerCase())
+          isTrueMane(r) &&
+          String(r.name || '').toLowerCase().includes(meta.pony.toLowerCase()) &&
+          /^SD/i.test(r.id)
       ) ||
       allRows.find((r: any) => isTrueMane(r)) ||
       allRows[0];
 
-    const legalPool = allRows.filter(
-      (r: any) =>
-        !String(r.id).includes('-S') &&
-        !String(r.id).includes('SPR') &&
-        (String(r.element || '').toLowerCase() === meta.element.toLowerCase() ||
-          String(r.element || '').toLowerCase() === 'everyday' ||
-          !r.element)
-    );
+    const legalPool = allRows
+      .filter(
+        (r: any) =>
+          !String(r.id).includes('-S') &&
+          !String(r.id).includes('SPR') &&
+          (subPrefixRegex.test(r.id) ||
+            String(r.element || '').toLowerCase() === meta.element.toLowerCase() ||
+            String(r.element || '').toLowerCase() === 'everyday' ||
+            !r.element)
+      )
+      .sort((a: any, b: any) => {
+        const aExact = subPrefixRegex.test(a.id) ? 0 : /^SD01-/i.test(a.id) ? 1 : 2;
+        const bExact = subPrefixRegex.test(b.id) ? 0 : /^SD01-/i.test(b.id) ? 1 : 2;
+        if (aExact !== bExact) return aExact - bExact;
+        return a.id.localeCompare(b.id);
+      });
 
     const storyRows = legalPool.filter(
       (r: any) =>
@@ -664,34 +685,36 @@ export class GameManager {
     }
 
     const sceneRows = legalPool.filter((r: any) => r.card_type === 'Scene');
-    const sceneDeck: CardDefinition[] = [];
-    for (const scr of sceneRows) {
-      for (let i = 0; i < 3 && sceneDeck.length < 15; i++) {
-        sceneDeck.push(mapDbRowToCardDef(scr));
-      }
-      if (sceneDeck.length >= 15) break;
-    }
+    const sceneDeck = fillCardDefBucket(sceneRows, 15, 3);
 
-    const mainRows = legalPool.filter(
+    // Retail Starter Deck Main Deck Composition: 34 Characters/Friends + 12 Events + 4 Items = 50 Cards
+    const charRows = legalPool.filter(
       (r: any) =>
-        ['Character', 'Friend Character', 'Event', 'Item'].includes(r.card_type) &&
+        ['Character', 'Friend Character'].includes(r.card_type) &&
         !String(r.name || '').includes(' - ') &&
         !String(r.name || '').includes(' – ') &&
         !isTrueMane(r)
     );
-    const mainDeck: CardDefinition[] = [];
-    for (const mr of mainRows) {
-      for (let i = 0; i < 3 && mainDeck.length < 50; i++) {
-        mainDeck.push(mapDbRowToCardDef(mr));
-      }
-      if (mainDeck.length >= 50) break;
+    const eventRows = legalPool.filter((r: any) => r.card_type === 'Event');
+    const itemRows = legalPool.filter((r: any) => r.card_type === 'Item');
+
+    let mainDeck: CardDefinition[] = [
+      ...fillCardDefBucket(charRows, 34, 3),
+      ...fillCardDefBucket(eventRows, 12, 3),
+      ...fillCardDefBucket(itemRows, 4, 3),
+    ];
+
+    if (mainDeck.length < 50) {
+      const usedIds = new Set(mainDeck.map((c) => c.id));
+      const extras = [...charRows, ...eventRows, ...itemRows].filter((r: any) => !usedIds.has(r.id));
+      mainDeck = [...mainDeck, ...fillCardDefBucket(extras, 50 - mainDeck.length, 3)];
     }
 
     return {
       leader: mapDbRowToCardDef(maneRow),
       storyDeck,
       sceneDeck,
-      mainDeck,
+      mainDeck: mainDeck.slice(0, 50),
     };
   }
 
@@ -750,6 +773,8 @@ export class GameManager {
         return resolveTargetSelection(state, playerId, payload.targetOwner, payload.laneIndex);
       case 'CANCEL_TARGET':
         return cancelTargetSelection(state, playerId);
+      case 'SELECT_HAND_CHOICE':
+        return resolveHandCardChoice(state, playerId, payload.selectedIndices || []);
       default:
         return state;
     }

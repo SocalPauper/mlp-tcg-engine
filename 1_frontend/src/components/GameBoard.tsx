@@ -41,9 +41,9 @@ interface AdventureSlot {
 
 interface PendingTargetSelection {
   sourceCard: CardDefinition;
-  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT';
+  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT' | 'STORY_PROMOTION';
   sourceLane?: 'left' | 'center' | 'right';
-  effectAction: 'BUFF_POWER' | 'RETIRE_OPPONENT' | 'MOVE_FRIENDLY' | 'READY_FRIENDLY';
+  effectAction: string;
   value: number;
   promptText: string;
   validTargets: {
@@ -51,6 +51,25 @@ interface PendingTargetSelection {
     lane: 'left' | 'center' | 'right';
   }[];
   selectedFromLane?: 'left' | 'center' | 'right';
+}
+
+interface PendingHandChoice {
+  sourceCard: CardDefinition;
+  choiceType: 'DISCARD_FROM_HAND' | 'RECOVER_FROM_RETIREMENT';
+  count: number;
+  promptText: string;
+  candidateCards: CardDefinition[];
+  filterLabel?: string;
+}
+
+interface ActionLogEntry {
+  id: string;
+  turn: number;
+  actor: string;
+  sourceCard?: string;
+  text: string;
+  category: 'PLAY' | 'EFFECT' | 'CLASH' | 'STORY' | 'SYSTEM';
+  timestamp: number;
 }
 
 interface PlayerState {
@@ -84,6 +103,7 @@ export interface LiveGameState {
     | 'MULLIGAN'
     | 'MAIN_PHASE'
     | 'PENDING_TARGET'
+    | 'PENDING_HAND_CHOICE'
     | 'CONTACT_INSPIRE'
     | 'CONTACT_RESOLUTION'
     | 'CLASH_HOLD'
@@ -106,6 +126,7 @@ export interface LiveGameState {
     defenderPower: number;
   } | null;
   pendingTarget?: PendingTargetSelection | null;
+  pendingHandChoice?: PendingHandChoice | null;
   lastClashEvent: {
     id: number;
     lane: 'left' | 'center' | 'right';
@@ -137,6 +158,7 @@ export interface LiveGameState {
     isGameWinningStage: boolean;
   } | null;
   announcements: { type: string; message: string; timestamp: number }[];
+  actionLog?: ActionLogEntry[];
 }
 
 interface PowerBreakdownDetails {
@@ -176,7 +198,7 @@ function hasAdventureTapAbility(card: CardDefinition | null): boolean {
 
 function hasManeActivatedAbility(card: CardDefinition | null): boolean {
   if (!card) return false;
-  return /Mane Ability|Once per turn|Activate\s*:/i.test(cleanCardText(card.effectText));
+  return /Main Character Ability|Mane Ability|Once per turn|Activate\s*:/i.test(cleanCardText(card.effectText));
 }
 
 function canAffordCardWithHarmony(player: PlayerState, card: CardDefinition): boolean {
@@ -229,7 +251,7 @@ function computeClientPowerDetails(
   if (player.leader) {
     const lb = checkPassive(player.leader.effectText);
     if (lb > 0) {
-      lines.push({ label: `Mane Passive (${player.leader.name})`, bonus: lb, color: '#fde047' });
+      lines.push({ label: `Main Character Passive (${player.leader.name})`, bonus: lb, color: '#fde047' });
     }
   }
 
@@ -245,13 +267,13 @@ function computeClientPowerDetails(
     if (!st.isStoryCompleted || !st.storyCard) continue;
     const stb = checkPassive(st.storyCard.effectText);
     if (stb > 0) {
-      lines.push({ label: `Story ${st.stage} (${st.storyCard.name})`, bonus: stb, color: '#c084fc' });
+      lines.push({ label: `Story Stage ${st.stage} (${st.storyCard.name})`, bonus: stb, color: '#c084fc' });
     }
   }
 
   if ((slot.inspoBoost || 0) > 0) {
     lines.push({
-      label: 'Inspiration / Event / Adventure Boosts',
+      label: 'Inspiration Boost / Event Modifiers',
       bonus: slot.inspoBoost,
       color: '#f472b6',
     });
@@ -287,7 +309,7 @@ function checkSceneInspireEligibility(
     /Inspo Boost|Inspiration Boost|\+\d+\s*Inspiration/i.test(text) || id.includes('-ER');
 
   if (!hasInspo) {
-    return { eligible: false, reason: 'No Inspo Boost text on card' };
+    return { eligible: false, reason: 'No Inspiration Boost text on card' };
   }
 
   const actualCharName = String(targetChar.name || '').toLowerCase();
@@ -350,6 +372,16 @@ export default function GameBoard({
   const [powerBreakdown, setPowerBreakdown] = useState<PowerBreakdownDetails | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number>(180);
 
+  // Collapsible Action Log Drawer + First-Game Onboarding Bubble + Action Toast
+  const [isLogOpen, setIsLogOpen] = useState<boolean>(false);
+  const [showLogOnboardingBubble, setShowLogOnboardingBubble] = useState<boolean>(true);
+  const [actionToast, setActionToast] = useState<ActionLogEntry | null>(null);
+  const lastSeenLogIdRef = useRef<string | null>(null);
+  const logEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Interactive Hand / Retirement Choice Selections
+  const [pickedChoiceIndices, setPickedChoiceIndices] = useState<number[]>([]);
+
   const [turnBannerText, setTurnBannerText] = useState<string | null>(null);
   const prevTurnKeyRef = useRef<string | null>(null);
 
@@ -364,6 +396,37 @@ export default function GameBoard({
   const opp = gameState.players[oppSeat];
   const isMyTurn = !isSpectator && gameState.turnPlayerId === mySeat;
   const isOppTurn = gameState.turnPlayerId === oppSeat;
+
+  // Auto-dismiss the onboarding bubble after 9 seconds or when user opens the drawer
+  useEffect(() => {
+    const timer = setTimeout(() => setShowLogOnboardingBubble(false), 9000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Show non-invasive toast when new EFFECT or STORY log entries arrive
+  useEffect(() => {
+    const logs = gameState.actionLog || [];
+    if (logs.length === 0) return;
+    const latest = logs[logs.length - 1];
+    if (lastSeenLogIdRef.current !== latest.id) {
+      lastSeenLogIdRef.current = latest.id;
+      if (latest.category === 'EFFECT' || latest.category === 'STORY') {
+        setActionToast(latest);
+        const timer = setTimeout(() => setActionToast(null), 4200);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [gameState.actionLog]);
+
+  useEffect(() => {
+    if (isLogOpen) {
+      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [isLogOpen, gameState.actionLog?.length]);
+
+  useEffect(() => {
+    setPickedChoiceIndices([]);
+  }, [gameState.phase, gameState.pendingHandChoice?.promptText]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -481,6 +544,12 @@ export default function GameBoard({
     gameState.phase === 'CONTACT_INSPIRE' &&
     gameState.contactState?.promptPlayerId === mySeat;
 
+  const showHandChoiceModalForMe =
+    !isSpectator &&
+    gameState.phase === 'PENDING_HAND_CHOICE' &&
+    gameState.turnPlayerId === mySeat &&
+    Boolean(gameState.pendingHandChoice);
+
   const activeClashLaneForModal = gameState.contactState?.activeLane;
   const myCharacterInClashLane = activeClashLaneForModal
     ? me.adventureArea[activeClashLaneForModal].character
@@ -498,7 +567,7 @@ export default function GameBoard({
     return (
       <div className={`lane-strip-band ${isOpponent ? 'opponent-band' : 'self-band'}`}>
         <span className={`lane-band-tag ${isOpponent ? 'opponent-tag' : 'self-tag'}`}>
-          {isOpponent ? `👑 ${player.displayName}'s Lanes` : `✨ ${player.displayName}'s Lanes`}
+          {isOpponent ? `👑 ${player.displayName}'s Adventure Area` : `✨ ${player.displayName}'s Adventure Area`}
         </span>
 
         <div className="adventure-area-row">
@@ -553,7 +622,7 @@ export default function GameBoard({
                   <>
                     <div
                       className={`total-power-above-badge ${totalBonus > 0 ? 'buffed' : ''}`}
-                      title="Click to view Total Power & Passive Aura breakdown"
+                      title="Click to view Inspiration & Passive Aura breakdown"
                       onClick={(e) => {
                         e.stopPropagation();
                         setPowerBreakdown(details);
@@ -641,10 +710,10 @@ export default function GameBoard({
 
           <div className="hud-pills">
             <span className="hud-pill story-pill">
-              📖 Story: {me.storyProgress}/4 (You) vs {opp.storyProgress}/4 (Opp)
+              📖 Story Stages: {me.storyProgress}/4 (You) vs {opp.storyProgress}/4 (Opp)
             </span>
             <span className="hud-pill">
-              🌈 Harmony: {readyHarmony}/{player.sceneArea.length}
+              🌈 Force of Harmony: {readyHarmony}/{player.sceneArea.length}
             </span>
             <span className="hud-pill">🃏 Hand: {player.hand.length}</span>
             <button
@@ -668,7 +737,7 @@ export default function GameBoard({
             {player.leader?.imageUrl ? (
               <img src={player.leader.imageUrl} alt={player.leader.name} />
             ) : (
-              <img src={CARD_BACK_URL} alt="Mane Card Back" className="kayou-card-back-img" />
+              <img src={CARD_BACK_URL} alt="Main Character Card Back" className="kayou-card-back-img" />
             )}
             {canActivateMane && (
               <button
@@ -677,7 +746,7 @@ export default function GameBoard({
                 title={cleanCardText(player.leader?.effectText)}
                 onClick={() => sendAction('ACTIVATE_MANE_ABILITY')}
               >
-                ✨ Mane Ability
+                ✨ Main Character
               </button>
             )}
             <span className="zone-caption">Main Character</span>
@@ -703,8 +772,8 @@ export default function GameBoard({
                     <img src={st.storyCard.imageUrl} alt={st.storyCard.name} />
                   ) : (
                     <div className="story-uncompleted-overlay">
-                      <img src={CARD_BACK_URL} alt={`Story ${st.stage}`} className="kayou-card-back-img" />
-                      <span className="story-stage-label-pill">Story {st.stage}</span>
+                      <img src={CARD_BACK_URL} alt={`Story Stage ${st.stage}`} className="kayou-card-back-img" />
+                      <span className="story-stage-label-pill">Story Stage {st.stage}</span>
                     </div>
                   )}
 
@@ -715,7 +784,7 @@ export default function GameBoard({
                           ? 'intervene-target'
                           : ''
                       }`}
-                      title={`Story ${st.stage} Face-Down Plan`}
+                      title={`Story Stage ${st.stage} Face-Down Plan`}
                     >
                       <img src={CARD_BACK_URL} alt="Plan Card" className="kayou-card-back-img" />
                       <span className="plan-tag-badge">Plan {st.stage}</span>
@@ -728,7 +797,7 @@ export default function GameBoard({
 
           <div
             className="side-portrait-zone retirement-pile-zone"
-            title="Right-click or long-press to view all cards in Retirement"
+            title="Right-click or long-press to view all cards in Retirement Area"
             onContextMenu={(e) => {
               e.preventDefault();
               setViewedRetirement({
@@ -750,7 +819,7 @@ export default function GameBoard({
               <>
                 <img
                   src={player.retirement[player.retirement.length - 1].imageUrl}
-                  alt="Retirement Top"
+                  alt="Retirement Area Top"
                 />
                 <span className="retirement-inspect-pill">🔍 Hold / R-Click</span>
               </>
@@ -774,7 +843,7 @@ export default function GameBoard({
           <div className="scene-area-tray">
             {player.sceneArea.length === 0 ? (
               <span className="slot-empty-label" style={{ margin: '0 auto' }}>
-                Scene Area (Harmony Resources)
+                Scene Area (Force of Harmony)
               </span>
             ) : (
               player.sceneArea.map((sc, idx) => (
@@ -783,9 +852,9 @@ export default function GameBoard({
                   className={`scene-card-slot ${sc.isExhausted ? 'exhausted' : ''}`}
                   title={
                     sc.isLockedFaceDown
-                      ? 'First-Turn Locked Scene (Cannot be used for Inspo)'
+                      ? 'First-Turn Locked Scene (Cannot be used for Inspiration Boost)'
                       : !sc.isFaceUp
-                      ? 'Inspo Boost already used'
+                      ? 'Inspiration Boost already used'
                       : sc.card.name
                   }
                   onContextMenu={(e) => handleContextMenu(e, sc.isFaceUp ? sc.card : null)}
@@ -798,7 +867,7 @@ export default function GameBoard({
                     <>
                       <img src={CARD_BACK_URL} alt="Face-Down Scene" className="kayou-card-back-img" />
                       <span className="scene-status-tag">
-                        {sc.isLockedFaceDown ? '🔒 Locked' : 'Inspo Used'}
+                        {sc.isLockedFaceDown ? '🔒 Locked' : 'Boost Used'}
                       </span>
                     </>
                   )}
@@ -820,6 +889,7 @@ export default function GameBoard({
   };
 
   const winnerPlayer = gameState.winnerId ? gameState.players[gameState.winnerId] : null;
+  const actionLogs = gameState.actionLog || [];
 
   return (
     <div className="kayou-playmat-wrapper">
@@ -828,6 +898,64 @@ export default function GameBoard({
           🔄 Connection interrupted — Reconnecting to match room...
         </div>
       )}
+
+      {/* Non-Invasive Action Trigger Toast */}
+      {actionToast && (
+        <div className="action-toast-banner">
+          ✨ <strong>{actionToast.actor}:</strong> {actionToast.text}
+        </div>
+      )}
+
+      {/* Collapsible Action Log Drawer + Onboarding Bubble */}
+      <div className="action-log-dock">
+        {showLogOnboardingBubble && !isLogOpen && (
+          <div className="action-log-onboarding-bubble">
+            💬 <strong>Tip:</strong> All card abilities, Story promotions, and clash logs are recorded right here!
+          </div>
+        )}
+
+        {isLogOpen && (
+          <div className="action-log-drawer">
+            <div className="action-log-drawer-header">
+              <span>📜 Match Action Log ({actionLogs.length})</span>
+              <button
+                type="button"
+                onClick={() => setIsLogOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontWeight: 900,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="action-log-entries">
+              {actionLogs.map((entry) => (
+                <div key={entry.id} className={`action-log-item cat-${entry.category}`}>
+                  <strong style={{ color: '#fde047' }}>[T{entry.turn}] {entry.actor}:</strong>{' '}
+                  <span>{entry.text}</span>
+                </div>
+              ))}
+              <div ref={logEndRef} />
+            </div>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="action-log-toggle-pill"
+          onClick={() => {
+            setIsLogOpen((prev) => !prev);
+            setShowLogOnboardingBubble(false);
+          }}
+        >
+          <span>📜 Action Log ({actionLogs.length})</span>
+          <span>{isLogOpen ? '▼' : '▲'}</span>
+        </button>
+      </div>
 
       {turnBannerText && gameState.phase !== 'REVEAL_HOLD' && gameState.phase !== 'CLASH_HOLD' && (
         <div className="turn-transition-banner-overlay">
@@ -927,17 +1055,71 @@ export default function GameBoard({
         </div>
       )}
 
+      {/* 2B. Interactive Hand / Retirement Choice Prompt Modal (e.g., Draw 2, Discard 1) */}
+      {showHandChoiceModalForMe && gameState.pendingHandChoice && (
+        <div className="inspector-backdrop">
+          <div className="hand-choice-modal">
+            <h3 style={{ margin: 0, color: '#fde047', fontSize: '20px' }}>
+              ✨ {gameState.pendingHandChoice.sourceCard.name} — Action Required
+            </h3>
+            <p style={{ margin: 0, fontSize: '13.5px', color: '#fbcfe8', textAlign: 'center' }}>
+              {gameState.pendingHandChoice.promptText}
+            </p>
+
+            <div className="hand-choice-grid">
+              {gameState.pendingHandChoice.candidateCards.map((card, idx) => {
+                const isPicked = pickedChoiceIndices.includes(idx);
+                return (
+                  <div
+                    key={`${card.id}-${idx}`}
+                    className={`hand-choice-card ${isPicked ? 'picked' : ''}`}
+                    onClick={() => {
+                      const maxNeeded = gameState.pendingHandChoice!.count;
+                      if (isPicked) {
+                        setPickedChoiceIndices((prev) => prev.filter((i) => i !== idx));
+                      } else if (maxNeeded === 1) {
+                        setPickedChoiceIndices([idx]);
+                      } else if (pickedChoiceIndices.length < maxNeeded) {
+                        setPickedChoiceIndices((prev) => [...prev, idx]);
+                      }
+                    }}
+                    onContextMenu={(e) => handleContextMenu(e, card)}
+                  >
+                    <img src={card.imageUrl || CARD_BACK_URL} alt={card.name} />
+                    <span style={{ fontSize: '10px', fontWeight: 800, textAlign: 'center' }}>
+                      {isPicked ? '✅ Selected' : card.name}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              className="action-bar-btn gold"
+              style={{ fontSize: '14px', padding: '10px 28px' }}
+              disabled={pickedChoiceIndices.length < gameState.pendingHandChoice.count}
+              onClick={() =>
+                sendAction('RESOLVE_HAND_CHOICE', { selectedIndices: pickedChoiceIndices })
+              }
+            >
+              Confirm Selection ({pickedChoiceIndices.length}/{gameState.pendingHandChoice.count}) ✓
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 3. Dedicated Inspiration Boost Popup */}
       {showInspireModalForMe && gameState.contactState && (
         <div className="inspector-backdrop">
           <div className="inspire-popup-modal">
             <h3 style={{ margin: 0, color: '#fde047', fontSize: '20px' }}>
-              ✨ Inspiration Boost Step — {gameState.contactState.activeLane.toUpperCase()} Lane Clash
+              ✨ Inspiration Boost Step — {gameState.contactState.activeLane.toUpperCase()} Lane Contact
             </h3>
             <div style={{ fontSize: '13px', color: '#fbcfe8', textAlign: 'center' }}>
               Active Character: <strong>{myCharacterInClashLane?.name || 'None'}</strong>
               <br />
-              Current Clash Power: <strong>⚡ {gameState.contactState.attackerPower}</strong> (Attacker) vs{' '}
+              Current Inspiration: <strong>⚡ {gameState.contactState.attackerPower}</strong> (Attacker) vs{' '}
               <strong>⚡ {gameState.contactState.defenderPower}</strong> (Defender)
             </div>
 
@@ -971,7 +1153,7 @@ export default function GameBoard({
                         color: eligibility.eligible ? '#fde047' : '#d1d5db',
                       }}
                     >
-                      {eligibility.eligible ? '✨ Tap to Inspire!' : eligibility.reason}
+                      {eligibility.eligible ? '✨ Tap for Boost!' : eligibility.reason}
                     </span>
                   </div>
                 );
@@ -984,7 +1166,7 @@ export default function GameBoard({
               style={{ fontSize: '14px', padding: '10px 28px' }}
               onClick={() => sendAction('PASS_INSPIRE')}
             >
-              Pass Inspiration ✓
+              Pass Inspiration Boost ✓
             </button>
           </div>
         </div>
@@ -994,7 +1176,7 @@ export default function GameBoard({
       {gameState.phase === 'CLASH_HOLD' && gameState.lastClashEvent && (
         <div className="clash-showdown-overlay">
           <h2 style={{ color: '#fde047', fontSize: '24px', marginBottom: '18px' }}>
-            ⚔️ {gameState.lastClashEvent.lane.toUpperCase()} LANE CLASH!
+            ⚔️ {gameState.lastClashEvent.lane.toUpperCase()} LANE CONTACT!
           </h2>
           <div className="clash-cards-arena">
             <div
@@ -1099,7 +1281,7 @@ export default function GameBoard({
               )}
 
               <div style={{ fontSize: '12px', color: '#34d399', fontWeight: 800 }}>
-                🃏 Card placed into {gameState.lastPlanRevealEvent.defenderName}&apos;s hand!
+                🃏 Card placed into {gameState.lastPlanRevealEvent.defenderName}&apos;s Hand!
               </div>
 
               <div className="ack-status-row">
@@ -1251,7 +1433,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Power & Passive Aura Breakdown Popover Modal */}
+      {/* Inspiration & Passive Aura Breakdown Popover Modal */}
       {powerBreakdown && (
         <div className="inspector-backdrop" onClick={() => setPowerBreakdown(null)}>
           <div
@@ -1260,7 +1442,7 @@ export default function GameBoard({
             onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ margin: 0, color: '#fde047', fontSize: '18px' }}>
-              ⚡ Total Power Breakdown ({powerBreakdown.laneName} Lane)
+              ⚡ Total Inspiration Breakdown ({powerBreakdown.laneName} Lane)
             </h3>
             <div style={{ fontSize: '14px', fontWeight: 800, color: '#fbcfe8' }}>
               {powerBreakdown.cardName}
@@ -1277,7 +1459,7 @@ export default function GameBoard({
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Base Character Power:</span>
+                <span>Base Character Inspiration:</span>
                 <strong>{powerBreakdown.basePower}</strong>
               </div>
               {powerBreakdown.lines.map((line, idx) => (
@@ -1300,7 +1482,7 @@ export default function GameBoard({
                   fontSize: '15px',
                 }}
               >
-                <span>Total Current Power:</span>
+                <span>Total Current Inspiration:</span>
                 <strong>⚡ {powerBreakdown.totalPower}</strong>
               </div>
             </div>
@@ -1375,7 +1557,7 @@ export default function GameBoard({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '17px' }}>{inspectedCard.name}</h3>
               <div style={{ fontSize: '12px', color: '#d8b4fe' }}>
-                {inspectedCard.type} • {inspectedCard.element} • Cost: {inspectedCard.cost} • Power: {inspectedCard.power}
+                {inspectedCard.type} • {inspectedCard.element} • Force of Harmony Cost: {inspectedCard.cost} • Inspiration: {inspectedCard.power}
               </div>
               <p style={{ fontSize: '13px', lineHeight: 1.45, color: '#f3e8ff', margin: 0 }}>
                 {cleanCardText(inspectedCard.effectText) || 'No special ability text.'}
@@ -1435,11 +1617,11 @@ export default function GameBoard({
                   className="action-bar-btn primary"
                   onClick={() => sendAction('START_CONTACT')}
                 >
-                  ⚔️ Attack / Contact
+                  ⚔️ Contact Phase
                 </button>
               ) : (
                 <span style={{ fontSize: '11px', color: '#fbcfe8', fontStyle: 'italic' }}>
-                  (Turn 1: No Attack)
+                  (Turn 1: No Contact)
                 </span>
               )}
               <button
@@ -1460,7 +1642,7 @@ export default function GameBoard({
                   className="action-bar-btn primary"
                   onClick={() => sendAction('BREAKTHROUGH_CHOICE', { choice: 'PROGRESS_STORY' })}
                 >
-                  🔮 Progress Story ({me.storyProgress + 1}/4)
+                  🔮 Progress Story Stage ({me.storyProgress + 1}/4)
                 </button>
               )}
 
@@ -1470,7 +1652,7 @@ export default function GameBoard({
                   className="action-bar-btn gold"
                   onClick={() => sendAction('BREAKTHROUGH_CHOICE', { choice: 'INTERVENE_PLAN' })}
                 >
-                  ⚡ Intervene Plan (Flip Story {nextOpponentPlanStage.stage})
+                  ⚡ Intervene Plan (Flip Story Stage {nextOpponentPlanStage.stage})
                 </button>
               )}
             </>
@@ -1491,7 +1673,7 @@ export default function GameBoard({
         </div>
       </div>
 
-      {/* FULL-SCREEN DUAL-LANE ADVENTURE ARENA (Both Players' Lanes Visible Simultaneously) */}
+      {/* FULL-SCREEN DUAL-LANE ADVENTURE ARENA */}
       <div className="dual-adventure-arena">
         {renderLaneStrip(opp, true)}
 
@@ -1507,7 +1689,7 @@ export default function GameBoard({
       {/* Color-Coded Story, Scene & Deck Playmat */}
       {zoneFocus === 'ME' ? renderPlayerZonesMat(me, false) : renderPlayerZonesMat(opp, true)}
 
-      {/* Player Hand Dock with "My Hand" Label */}
+      {/* Player Hand Dock */}
       {!isSpectator && (
         <div className="player-hand-section">
           <div className="my-hand-label-pill">🃏 My Hand ({me.hand.length})</div>

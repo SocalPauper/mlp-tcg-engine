@@ -22,7 +22,7 @@ export function getEffectiveCardCost(player: PlayerState, card: CardDefinition):
   const leaderText = sanitizeCardText(player.leader?.effectText);
   if (
     leaderText &&
-    /cost\s+1\s+less/i.test(leaderText) &&
+    /cost\s+(?:of\s+Force\s+of\s+Harmony\s+)?1\s+less|-\s*1\s*Cost/i.test(leaderText) &&
     ((cardType.includes('friend') && /friend/i.test(leaderText)) ||
       (cardType.includes('character') && /character/i.test(leaderText)) ||
       (cardType === 'item' && /item/i.test(leaderText)) ||
@@ -35,7 +35,7 @@ export function getEffectiveCardCost(player: PlayerState, card: CardDefinition):
     if (!sc.isFaceUp) continue;
     const scText = sanitizeCardText(sc.card.effectText);
     if (
-      /cost\s+1\s+less/i.test(scText) &&
+      /cost\s+(?:of\s+Force\s+of\s+Harmony\s+)?1\s+less|-\s*1\s*Cost/i.test(scText) &&
       ((cardType.includes('friend') && /friend/i.test(scText)) ||
         (cardType.includes('character') && /character/i.test(scText)) ||
         (cardType === 'item' && /item/i.test(scText)) ||
@@ -269,7 +269,7 @@ export function calculateLanePowerBreakdown(
     );
     if (leaderBonus > 0) {
       modifiers.push({
-        sourceName: `Mane Passive: ${player.leader.name}`,
+        sourceName: `Main Character Passive: ${player.leader.name}`,
         sourceType: 'MANE_PASSIVE',
         amount: leaderBonus,
       });
@@ -311,7 +311,7 @@ export function calculateLanePowerBreakdown(
     );
     if (stBonus > 0) {
       modifiers.push({
-        sourceName: `Story ${st.stage}: ${st.storyCard.name}`,
+        sourceName: `Story Stage ${st.stage}: ${st.storyCard.name}`,
         sourceType: 'STORY_PASSIVE',
         amount: stBonus,
       });
@@ -341,7 +341,11 @@ export function calculateLanePowerBreakdown(
 export interface ParsedActivatedEffect {
   kind:
     | 'DRAW'
+    | 'DRAW_THEN_DISCARD'
+    | 'DISCARD_THEN_DRAW'
     | 'RECOVER_RETIREMENT'
+    | 'UNTAP_SCENES'
+    | 'REVEAL_TOP_PICK_HAND'
     | 'TARGET_BUFF_POWER'
     | 'TARGET_DEBUFF_OPPONENT'
     | 'TARGET_RETIRE_OPPONENT'
@@ -353,10 +357,12 @@ export interface ParsedActivatedEffect {
     | 'DELIVER_PRESENT'
     | 'UNWRAP_PRESENT';
   amount: number;
+  secondaryAmount?: number;
   maxLimit?: number;
   isSelfOnly?: boolean;
   isGlobal?: boolean;
   targetSide?: 'SELF' | 'OPPONENT' | 'ANY';
+  requiredTypeFilter?: string;
   requiredNameFilter?: string;
 }
 
@@ -382,6 +388,55 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
 
   const nameBracket = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
   const nameFilter = nameBracket ? nameBracket[1].trim() : undefined;
+
+  // 0A. Draw X, then discard Y (e.g., SD01C-SR02 Gummy, SD01-SR01 Twilight Sparkle)
+  const drawDiscardMatch = text.match(/draw\s+(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?discard\s+(\d+|a|an)\s+cards?/i);
+  if (drawDiscardMatch) {
+    const dRaw = drawDiscardMatch[1].toLowerCase();
+    const discRaw = drawDiscardMatch[2].toLowerCase();
+    return {
+      kind: 'DRAW_THEN_DISCARD',
+      amount: dRaw === 'a' || dRaw === 'an' ? 1 : parseInt(dRaw, 10) || 1,
+      secondaryAmount: discRaw === 'a' || discRaw === 'an' ? 1 : parseInt(discRaw, 10) || 1,
+    };
+  }
+
+  // 0B. Discard X, draw Y (e.g., BP04-GR06 Rarity, BP04-GR02 Fluttershy)
+  const discardDrawMatch = text.match(/discard\s+(?:up\s+to\s+)?(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?draw\s+(\d+|a|an)\s+cards?/i);
+  if (discardDrawMatch) {
+    const discRaw = discardDrawMatch[1].toLowerCase();
+    const dRaw = discardDrawMatch[2].toLowerCase();
+    return {
+      kind: 'DISCARD_THEN_DRAW',
+      amount: discRaw === 'a' || discRaw === 'an' ? 1 : parseInt(discRaw, 10) || 1,
+      secondaryAmount: dRaw === 'a' || dRaw === 'an' ? 1 : parseInt(dRaw, 10) || 1,
+      requiredNameFilter: nameFilter,
+    };
+  }
+
+  // 0C. Untap Scenes in Scene Area (e.g., BP01-CR10, BP01-GR10, SD01D-U04 Winona)
+  const untapSceneMatch = text.match(/choose\s+(\d+|a|an)\s+(?:face-down\s+tapped\s+)?scenes?\s+in\s+your\s+scene\s+area.*?(?:untap|turn\s+it\s+up)/i);
+  if (untapSceneMatch) {
+    const raw = untapSceneMatch[1].toLowerCase();
+    return {
+      kind: 'UNTAP_SCENES',
+      amount: raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10) || 1,
+    };
+  }
+
+  // 0D. Reveal top X cards of Deck, choose 1 matching card to add to Hand (e.g., BP01-CR03, BP01-GR08, SD01D-SR01)
+  const revealPickMatch = text.match(/reveal\s+the\s+top\s+(\d+)\s+cards?\s+of\s+(?:your|the)\s+deck.*?choose\s+1\s+(Item|Event|Character|Scene|[｢\[「][^｣\]」]+[｣\]」])/i);
+  if (revealPickMatch) {
+    const count = parseInt(revealPickMatch[1], 10) || 3;
+    const rawTarget = revealPickMatch[2].replace(/[｢\[「｣\]」]/g, '').trim();
+    const isCardType = ['item', 'event', 'character', 'scene'].includes(rawTarget.toLowerCase());
+    return {
+      kind: 'REVEAL_TOP_PICK_HAND',
+      amount: count,
+      requiredTypeFilter: isCardType ? rawTarget : undefined,
+      requiredNameFilter: !isCardType ? rawTarget : nameFilter,
+    };
+  }
 
   // 1. Treat for you! (BP03 Nightmare Night mechanic)
   if (/treat for you!|put\s+\d+\s+treat/i.test(text)) {
@@ -467,7 +522,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       text
     )
   ) {
-    const limitMatch = text.match(/(?:cost|power|inspiration)\s*(\d+)\s*or\s*less/i);
+    const limitMatch = text.match(/(?:cost(?:\s+of\s+Force\s+of\s+Harmony)?|power|inspiration)\s*(\d+)\s*or\s*less/i);
     return {
       kind: 'TARGET_RETIRE_OPPONENT',
       amount: 1,
@@ -480,13 +535,19 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     return { kind: 'TARGET_READY_FRIENDLY', amount: 1 };
   }
 
-  // 9. Recover from Retirement Area
+  // 9. Recover from Retirement Area (including Story Stage 2/3 effects like SD01C-C08 & SD01F-SR01)
   if (
-    /from\s+your\s+retirement\s+(?:area\s+|pile\s+)?to\s+(?:your\s+)?hand|in\s+your\s+retirement\s+area,\s*add\s+(?:it|them)\s+to\s+(?:your\s+)?hand/i.test(
+    /in\s+your\s+retirement\s+(?:area\s+|pile\s+)?(?:,|\s)*add\s+(?:it|them)\s+to\s+(?:your\s+)?hand|from\s+your\s+retirement\s+(?:area\s+|pile\s+)?to\s+(?:your\s+)?hand/i.test(
       text
     )
   ) {
-    return { kind: 'RECOVER_RETIREMENT', amount: 1 };
+    const typeMatch = text.match(/choose\s+1\s+(Item|Event|Character|Scene)/i);
+    return {
+      kind: 'RECOVER_RETIREMENT',
+      amount: 1,
+      requiredTypeFilter: typeMatch ? typeMatch[1] : undefined,
+      requiredNameFilter: nameFilter,
+    };
   }
 
   // 10. Draw cards

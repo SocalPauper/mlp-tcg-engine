@@ -88,7 +88,7 @@ export type PendingEffectAction =
 
 export interface PendingTargetSelection {
   sourceCard: CardDefinition;
-  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT';
+  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT' | 'STORY_PROMOTION';
   sourceLane?: LaneKey;
   effectAction: PendingEffectAction;
   value: number;
@@ -99,6 +99,28 @@ export interface PendingTargetSelection {
     lane: LaneKey;
   }[];
   selectedFromLane?: LaneKey;
+}
+
+export interface PendingHandChoice {
+  sourceCard: CardDefinition;
+  playerId: '0' | '1';
+  action: 'DISCARD_FROM_HAND' | 'RECOVER_FROM_RETIREMENT';
+  count: number;
+  promptText: string;
+  filterType?: string;
+  filterName?: string;
+  bonusInspirationOnMatch?: number;
+  sourceLane?: LaneKey;
+}
+
+export interface ActionLogEntry {
+  id: string;
+  turn: number;
+  actor: string;
+  sourceCard?: string;
+  text: string;
+  category: 'PLAY' | 'EFFECT' | 'CLASH' | 'STORY' | 'SYSTEM';
+  timestamp: number;
 }
 
 export interface PlayerState {
@@ -130,6 +152,7 @@ export type GamePhase =
   | 'MULLIGAN'
   | 'MAIN_PHASE'
   | 'PENDING_TARGET'
+  | 'PENDING_HAND_CHOICE'
   | 'CONTACT_INSPIRE'
   | 'CONTACT_RESOLUTION'
   | 'CLASH_HOLD'
@@ -206,9 +229,11 @@ export interface KayouGameState {
   players: Record<'0' | '1', PlayerState>;
   contactState: ContactCombatState | null;
   pendingTarget: PendingTargetSelection | null;
+  pendingHandChoice?: PendingHandChoice | null;
   pendingLaneQueueAfterReveal: LaneKey[] | null;
   lastClashEvent: ClashAnimationEvent | null;
   lastPlanRevealEvent: PlanRevealEvent | null;
   lastStoryRevealEvent: StoryRevealEvent | null;
   announcements: PublicAnnouncement[];
+  actionLog: ActionLogEntry[];
 }
