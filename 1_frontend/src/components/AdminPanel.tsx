@@ -13,6 +13,10 @@ export default function AdminPanel() {
   const [opacity, setOpacity] = useState<number>(1.0);
   const [savingOpacity, setSavingOpacity] = useState(false);
 
+  // Collection Binder Cover Title state
+  const [binderTitle, setBinderTitle] = useState<string>('Equestria Royal Archive');
+  const [savingBinderTitle, setSavingBinderTitle] = useState(false);
+
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/media/settings`)
       .then((res) => res.json())
@@ -21,6 +25,9 @@ export default function AdminPanel() {
           setSettings(data.settings);
           const initialOpacity = data.settings[`bg_${selectedBgTab}_opacity`];
           setOpacity(initialOpacity !== undefined ? parseFloat(initialOpacity) : 1.0);
+          if (data.settings.binder_cover_title) {
+            setBinderTitle(data.settings.binder_cover_title);
+          }
         }
       })
       .catch((err) => console.error('Failed to load admin settings:', err));
@@ -54,6 +61,29 @@ export default function AdminPanel() {
     }
   };
 
+  const handleSaveBinderTitle = async () => {
+    const trimmed = binderTitle.trim() || 'Equestria Royal Archive';
+    setSavingBinderTitle(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/media/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'binder_cover_title',
+          value: trimmed,
+          updatedBy: user?.username || 'admin',
+        }),
+      });
+      if (res.ok) {
+        setSettings((prev) => ({ ...prev, binder_cover_title: trimmed }));
+        setBinderTitle(trimmed);
+        alert(`Global Collection Binder title updated to "${trimmed}"!`);
+      }
+    } finally {
+      setSavingBinderTitle(false);
+    }
+  };
+
   const postAnnouncement = async () => {
     if (!announcement.trim()) return;
     await fetch(`${API_BASE_URL}/api/media/settings`, {
@@ -75,6 +105,7 @@ export default function AdminPanel() {
   };
 
   const currentTabBgUrl = settings[`bg_${selectedBgTab}`] || '';
+  const currentBinderCoverUrl = settings['bg_binder_cover'] || '';
 
   return (
     <div
@@ -140,6 +171,55 @@ export default function AdminPanel() {
           >
             {savingOpacity ? 'Saving...' : 'Save Global Opacity'}
           </button>
+        </div>
+
+        {/* Collection Binder Cover Art & Name Customizer */}
+        <div className="panel-box">
+          <h3>📖 Collection Binder Cover &amp; Title</h3>
+          <p style={{ fontSize: '13px', margin: 0, color: '#d8b4fe' }}>
+            Customize the closed 3-ring binder front cover art and global album name for all players.
+          </p>
+
+          <label style={{ fontSize: '12px', fontWeight: 800, color: '#fbcfe8', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            Global Binder Title:
+            <input
+              type="text"
+              placeholder="e.g., Equestria Royal Archive"
+              value={binderTitle}
+              onChange={(e) => setBinderTitle(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleSaveBinderTitle}
+            disabled={savingBinderTitle}
+            className="mlp-btn"
+          >
+            {savingBinderTitle ? 'Saving Title...' : 'Save Binder Title'}
+          </button>
+
+          <div style={{ marginTop: '4px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 800, color: '#fbcfe8', display: 'block', marginBottom: '6px' }}>
+              Binder Cover Artwork (R2 Upload):
+            </span>
+            <BackgroundUploader
+              tabKey="binder_cover"
+              currentUrl={currentBinderCoverUrl}
+              onUploaded={(newUrl) =>
+                setSettings((prev) => ({ ...prev, bg_binder_cover: newUrl }))
+              }
+            />
+          </div>
+
+          {currentBinderCoverUrl && (
+            <div style={{ borderRadius: '10px', overflow: 'hidden', border: '2px solid #ffd700', maxHeight: '140px' }}>
+              <img
+                src={currentBinderCoverUrl}
+                alt="Binder Cover Preview"
+                style={{ width: '100%', height: '140px', objectFit: 'cover' }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Statistics */}

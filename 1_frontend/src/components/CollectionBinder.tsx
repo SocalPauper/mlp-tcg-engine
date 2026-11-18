@@ -32,9 +32,11 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
   const [isBinderOpen, setIsBinderOpen] = useState<boolean>(false);
   const [flipDirection, setFlipDirection] = useState<'none' | 'next' | 'prev'>('none');
 
-  // Global wallpaper & opacity loaded from auth.site_settings
+  // Global wallpaper, opacity, cover art & title loaded from auth.site_settings
   const [customBgUrl, setCustomBgUrl] = useState<string>('');
   const [bgOpacity, setBgOpacity] = useState<number>(1);
+  const [coverArtUrl, setCoverArtUrl] = useState<string>('');
+  const [coverTitle, setCoverTitle] = useState<string>('Equestria Royal Archive');
 
   // Filters & Spread Pagination
   const [selectedSet, setSelectedSet] = useState<string>('ALL');
@@ -52,6 +54,12 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
           if (data.settings.bg_collection) setCustomBgUrl(data.settings.bg_collection);
           if (data.settings.bg_collection_opacity !== undefined) {
             setBgOpacity(parseFloat(data.settings.bg_collection_opacity));
+          }
+          if (data.settings.bg_binder_cover) {
+            setCoverArtUrl(data.settings.bg_binder_cover);
+          }
+          if (data.settings.binder_cover_title) {
+            setCoverTitle(data.settings.binder_cover_title);
           }
         }
       })
@@ -203,7 +211,6 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
   const spreadStart = (safeSpread - 1) * CARDS_PER_SPREAD;
   const spreadCards = filteredCards.slice(spreadStart, spreadStart + CARDS_PER_SPREAD);
 
-  // Split 18 cards into Left 9-pocket sheet and Right 9-pocket sheet
   const leftLeafSlots: (BinderCard | null)[] = spreadCards.slice(0, CARDS_PER_LEAF);
   while (leftLeafSlots.length < CARDS_PER_LEAF) leftLeafSlots.push(null);
 
@@ -305,7 +312,7 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
               </button>
             )}
             <div>
-              <h2>📖 Equestria Collection Binder</h2>
+              <h2>📖 {coverTitle}</h2>
               <span className="binder-subtitle">
                 {selectedSet === 'ALL' ? 'Complete Master Card Pool' : `Set: ${selectedSet}`} •{' '}
                 <strong>
@@ -339,22 +346,30 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
           <div className="binder-closed-stage">
             <div
               className="binder-closed-cover"
+              style={coverArtUrl ? { backgroundImage: `url(${coverArtUrl})` } : undefined}
               onClick={() => setIsBinderOpen(true)}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && setIsBinderOpen(true)}
             >
-              <div className="binder-cover-emblem">🦄✨📖</div>
-              <div>
-                <h1 className="binder-cover-title">Equestria Royal Archive</h1>
-                <p className="binder-cover-desc">
-                  Official 3-Ring Collector's Album • 9-Pocket Ultra-Clear Protective Sleeves
-                </p>
+              {coverArtUrl && <div className="binder-cover-art-vignette" aria-hidden="true" />}
+
+              <div className="binder-cover-content">
+                <div className="binder-cover-emblem">{coverArtUrl ? '✨' : '🦄✨📖'}</div>
+
+                <div className="binder-cover-title-plate">
+                  <h1 className="binder-cover-title">{coverTitle}</h1>
+                  <p className="binder-cover-desc">
+                    Official 3-Ring Collector's Album • 9-Pocket Ultra-Clear Protective Sleeves
+                  </p>
+                </div>
+
+                <div className="binder-cover-stats-pill">
+                  Master Progress: {setStats.collected} / {setStats.total} Cards ({setStats.pct}%)
+                </div>
+
+                <div className="binder-open-cta">✨ Click to Flip Open Binder ✨</div>
               </div>
-              <div className="binder-cover-stats-pill">
-                Master Progress: {setStats.collected} / {setStats.total} Cards ({setStats.pct}%)
-              </div>
-              <div className="binder-open-cta">✨ Click to Flip Open Binder ✨</div>
             </div>
           </div>
         ) : (
