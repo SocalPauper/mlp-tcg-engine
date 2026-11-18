@@ -10,6 +10,7 @@ export interface DeckSummary {
   mane_character: string | null;
   mane_image_url: string;
   banner_crop_position: string;
+  banner_zoom: number;
   is_starter: boolean;
   is_public: boolean;
   card_count: number;
@@ -141,12 +142,13 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
             d.mane_image_url ||
             maneCard?.image_url ||
             'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp',
-          banner_crop_position: d.banner_crop_position || 'center 20%',
+          banner_crop_position: d.banner_crop_position || '50% 25%',
+          banner_zoom: Number(d.banner_zoom || 100),
           is_starter: isStarter,
           is_public: d.is_public ?? true,
           card_count: totalCount,
           has_wishlist_cards: hasWishlist,
-          owner_id: d.user_id || d.owner_id || currentUserId,
+          owner_id: d.author_id || d.user_id || d.owner_id || currentUserId,
         };
       });
 
@@ -259,7 +261,8 @@ export default function StableHub({ currentUserId, onOpenBuilder }: StableHubPro
                     className="deck-card-banner"
                     style={{
                       backgroundImage: `url(${deck.mane_image_url})`,
-                      backgroundPosition: deck.banner_crop_position || 'center 20%',
+                      backgroundPosition: deck.banner_crop_position || '50% 25%',
+                      backgroundSize: deck.banner_zoom && deck.banner_zoom > 100 ? `${deck.banner_zoom}%` : 'cover',
                     }}
                   >
                     <div className="deck-card-element">{deck.element}</div>

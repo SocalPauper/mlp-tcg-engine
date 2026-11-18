@@ -71,9 +71,20 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   // Banner Art & Crop Modal States
   const [deckBannerUrl, setDeckBannerUrl] = useState<string>('');
-  const [bannerCrop, setBannerCrop] = useState<string>('center 20%');
+  const [cropX, setCropX] = useState<number>(50);
+  const [cropY, setCropY] = useState<number>(25);
+  const [cropZoom, setCropZoom] = useState<number>(100);
   const [showCropModal, setShowCropModal] = useState(false);
   const [cropCandidateUrl, setCropCandidateUrl] = useState<string>('');
+  const isDraggingCrop = useRef<boolean>(false);
+  const dragStartPos = useRef<{ x: number; y: number; startCropX: number; startCropY: number }>({
+    x: 0,
+    y: 0,
+    startCropX: 50,
+    startCropY: 25,
+  });
+
+  const bannerCrop = `${cropX}% ${cropY}%`;
   
   const [buildPhase, setBuildPhase] = useState<BuildPhase>('MANE');
   const deckElement = maneCharacter?.element || null;
@@ -248,8 +259,18 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         setStoryDeck(loadedStory);
         setSceneDeck(loadedScene);
         setMainDeck(loadedMain);
-        setDeckBannerUrl(deckData.deck_banner_url || loadedMane?.image_url || '');
-        setBannerCrop(deckData.banner_crop_position || 'center 20%');
+
+        setDeckBannerUrl(deckData.deck_banner_url || deckData.mane_image_url || loadedMane?.image_url || '');
+        const rawPos = String(deckData.banner_crop_position || '50% 25%');
+        const pctMatch = rawPos.match(/(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%/);
+        if (pctMatch) {
+          setCropX(Number(pctMatch[1]));
+          setCropY(Number(pctMatch[2]));
+        } else {
+          setCropX(50);
+          setCropY(rawPos.includes('top') ? 10 : rawPos.includes('bottom') ? 85 : 25);
+        }
+        setCropZoom(Number(deckData.banner_zoom || 100));
 
         const count = (loadedMane ? 1 : 0) + loadedStory.length + loadedScene.length + loadedMain.length;
         if (readOnlyView || count === 70) setShowDeckContents(true);
@@ -501,7 +522,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       is_public: isPublic,
       mane_character: maneCharacter?.id,
       deck_banner_url: deckBannerUrl || maneCharacter?.image_url,
-      banner_crop_position: bannerCrop,
+      banner_crop_position: `${cropX}% ${cropY}%`,
+      banner_zoom: cropZoom,
       story_deck: storyDeck.map(c => c.id),
       scene_deck: sceneDeck.map(c => c.id),
       main_deck: mainDeck.map(c => c.id)
@@ -833,56 +855,114 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       )}
 
       {showCropModal && (
-        <div className="inspector-overlay" style={{ pointerEvents: 'auto', zIndex: 11000 }}>
-          <div className="inspector-modal" style={{ flexDirection: 'column', padding: '24px', width: '500px', height: 'auto', textAlign: 'center' }}>
-            <h2 style={{ color: '#fff', marginBottom: '12px' }}>Customize Deck Banner Crop</h2>
-            <p style={{ color: '#aaa', fontSize: '12px', marginBottom: '16px' }}>
-              Preview how your deck card banner will look in the Stable. Select alignment or click cards below to change art.
+        <div className="inspector-overlay" style={{ pointerEvents: 'auto', zIndex: 11000 }} onClick={() => setShowCropModal(false)}>
+          <div
+            className="inspector-modal"
+            style={{ flexDirection: 'column', padding: '24px', width: '480px', maxWidth: '94vw', height: 'auto', textAlign: 'center' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 style={{ color: '#fff', margin: '0 0 6px 0', fontSize: '20px' }}>Adjust Deck Preview Crop ✨</h2>
+            <p style={{ color: '#aaa', fontSize: '12px', margin: '0 0 14px 0' }}>
+              Drag inside the preview window or use the sliders below to frame your deck art.
             </p>
 
-            <div 
-              style={{ 
-                width: '100%', 
-                height: '140px', 
-                borderRadius: '16px', 
+            {/* Exact 2:1 Stable Banner Crop Box */}
+            <div
+              onMouseDown={e => {
+                isDraggingCrop.current = true;
+                dragStartPos.current = { x: e.clientX, y: e.clientY, startCropX: cropX, startCropY: cropY };
+              }}
+              onMouseMove={e => {
+                if (!isDraggingCrop.current) return;
+                const dx = e.clientX - dragStartPos.current.x;
+                const dy = e.clientY - dragStartPos.current.y;
+                setCropX(Math.max(0, Math.min(100, Math.round(dragStartPos.current.startCropX - dx * 0.35))));
+                setCropY(Math.max(0, Math.min(100, Math.round(dragStartPos.current.startCropY - dy * 0.35))));
+              }}
+              onMouseUp={() => { isDraggingCrop.current = false; }}
+              onMouseLeave={() => { isDraggingCrop.current = false; }}
+              style={{
+                width: '320px',
+                height: '160px',
+                margin: '0 auto 14px auto',
+                borderRadius: '20px',
                 backgroundImage: `url(${cropCandidateUrl})`,
-                backgroundSize: 'cover',
-                backgroundPosition: bannerCrop,
+                backgroundSize: `${cropZoom}%`,
+                backgroundPosition: `${cropX}% ${cropY}%`,
+                backgroundRepeat: 'no-repeat',
                 border: '3px solid var(--mlp-gold)',
-                marginBottom: '16px',
-                boxShadow: '0 8px 25px rgba(0,0,0,0.5)'
-              }} 
-            />
-
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '20px' }}>
-              {['top', 'center 20%', 'center', 'bottom'].map(pos => (
-                <button
-                  key={pos}
-                  className={`phase-btn ${bannerCrop === pos ? 'active' : ''}`}
-                  onClick={() => setBannerCrop(pos)}
-                  style={{ fontSize: '11px', textTransform: 'capitalize' }}
-                >
-                  {pos.replace(' 20%', '')}
-                </button>
-              ))}
+                boxShadow: '0 8px 25px rgba(0,0,0,0.6)',
+                cursor: 'grab',
+                userSelect: 'none',
+                position: 'relative',
+              }}
+            >
+              <span style={{
+                position: 'absolute',
+                bottom: '6px',
+                right: '10px',
+                background: 'rgba(0,0,0,0.65)',
+                color: '#ffd700',
+                fontSize: '10px',
+                fontWeight: 800,
+                padding: '2px 8px',
+                borderRadius: '10px',
+              }}>
+                Drag to Pan • {cropX}%, {cropY}%
+              </span>
             </div>
 
-            <p style={{ color: '#fff', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>Select Artwork from Deck:</p>
-            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '20px', maxWidth: '100%' }}>
-              {maneCharacter && (
-                <img src={maneCharacter.image_url} alt="Mane" style={{ width: '50px', height: '70px', borderRadius: '6px', cursor: 'pointer', border: cropCandidateUrl === maneCharacter.image_url ? '2px solid #ffd700' : '2px solid transparent', flexShrink: 0 }} onClick={() => setCropCandidateUrl(maneCharacter.image_url)} />
-              )}
-              {storyDeck.map((c, idx) => (
-                <img key={idx} src={c.image_url} alt="Story" style={{ width: '50px', height: '70px', borderRadius: '6px', cursor: 'pointer', border: cropCandidateUrl === c.image_url ? '2px solid #ffd700' : '2px solid transparent', flexShrink: 0 }} onClick={() => setCropCandidateUrl(c.image_url)} />
-              ))}
-              {sceneDeck.slice(0, 5).map((c, idx) => (
-                <img key={idx} src={c.image_url} alt="Scene" style={{ width: '50px', height: '70px', borderRadius: '6px', cursor: 'pointer', border: cropCandidateUrl === c.image_url ? '2px solid #ffd700' : '2px solid transparent', flexShrink: 0 }} onClick={() => setCropCandidateUrl(c.image_url)} />
+            {/* Fine-Tune Sliders */}
+            <div style={{ display: 'grid', gridTemplateColumns: '75px 1fr 40px', gap: '8px', alignItems: 'center', marginBottom: '16px', fontSize: '12px', color: '#ddd' }}>
+              <span>Horizontal</span>
+              <input type="range" min={0} max={100} value={cropX} onChange={e => setCropX(Number(e.target.value))} />
+              <span>{cropX}%</span>
+
+              <span>Vertical</span>
+              <input type="range" min={0} max={100} value={cropY} onChange={e => setCropY(Number(e.target.value))} />
+              <span>{cropY}%</span>
+
+              <span>Zoom</span>
+              <input type="range" min={100} max={220} value={cropZoom} onChange={e => setCropZoom(Number(e.target.value))} />
+              <span>{cropZoom}%</span>
+            </div>
+
+            <p style={{ color: '#fff', fontSize: '12px', fontWeight: 'bold', margin: '0 0 8px 0' }}>Select Artwork from Deck:</p>
+            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '16px', maxWidth: '100%' }}>
+              {[
+                ...(maneCharacter ? [maneCharacter] : []),
+                ...Array.from(new Map([...storyDeck, ...sceneDeck, ...mainDeck].map(c => [c.id, c])).values()),
+              ].map((c) => (
+                <img
+                  key={c.id}
+                  src={c.image_url}
+                  alt={c.name}
+                  title={c.name}
+                  style={{
+                    width: '48px',
+                    height: '68px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    border: cropCandidateUrl === c.image_url ? '2px solid #ffd700' : '2px solid transparent',
+                    flexShrink: 0,
+                  }}
+                  onClick={() => setCropCandidateUrl(c.image_url)}
+                />
               ))}
             </div>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button className="phase-btn" onClick={() => setShowCropModal(false)}>Cancel</button>
-              <button className="phase-btn active" onClick={() => { setDeckBannerUrl(cropCandidateUrl); setShowCropModal(false); setHasUnsavedChanges(true); }}>Apply Art 💾</button>
+              <button
+                className="phase-btn active"
+                onClick={() => {
+                  setDeckBannerUrl(cropCandidateUrl);
+                  setShowCropModal(false);
+                  setHasUnsavedChanges(true);
+                }}
+              >
+                Apply Art 💾
+              </button>
             </div>
           </div>
         </div>
@@ -1310,7 +1390,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                 height: '45px', 
                 borderRadius: '10px', 
                 backgroundImage: `url(${deckBannerUrl || maneCharacter?.image_url || 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp'})`,
-                backgroundSize: 'cover',
+                backgroundSize: cropZoom > 100 ? `${cropZoom}%` : 'cover',
                 backgroundPosition: bannerCrop,
                 border: '2px solid var(--mlp-light-purple)'
               }} 
