@@ -37,7 +37,6 @@ async function buildStarterDecks() {
   const trueManes = allCards.filter(isTrueManeCharacter);
 
   return STARTER_DEFINITIONS.map((def) => {
-    // 1. Find the exact Mane Character for this starter pony/element (prefer SD set)
     const maneCard =
       trueManes.find(
         (c) =>
@@ -49,7 +48,6 @@ async function buildStarterDecks() {
       trueManes.find((c) => c.element?.toLowerCase() === def.element.toLowerCase()) ||
       null;
 
-    // Pool of cards legal for this element (prioritizing SD cards, excluding alt-arts -S)
     const legalPool = allCards.filter(
       (c) =>
         !c.id.includes('-S') &&
@@ -59,7 +57,7 @@ async function buildStarterDecks() {
           !c.element)
     );
 
-    // 2. Pick 1 complete 4-card Story arc (4/4)
+    // 1. Pick 4 Story cards
     const storyCandidates = legalPool.filter(
       (c) =>
         c.card_type === 'Story' ||
@@ -77,7 +75,7 @@ async function buildStarterDecks() {
       if (storyDeck.length === 4) break;
     }
 
-    // 3. Pick up to 15 Scene cards (max 3 copies per element scene)
+    // 2. Pick up to 15 Scene cards
     const sceneCandidates = legalPool.filter((c) => c.card_type === 'Scene');
     const sceneDeck: string[] = [];
     const sceneCounts: Record<string, number> = {};
@@ -94,7 +92,7 @@ async function buildStarterDecks() {
       sceneCounts[baseId] = current + toAdd;
     }
 
-    // 4. Pick exactly 50 Main Deck cards (Character, Friend Character, Event, Item; max 3 copies each)
+    // 3. Pick exactly 50 Main Deck cards (Characters, Friend Characters, Events, Items)
     const mainCandidates = legalPool.filter(
       (c) =>
         ['Character', 'Friend Character', 'Event', 'Item'].includes(c.card_type) &&
@@ -167,7 +165,6 @@ function normalizeDeckRow(row: any) {
   };
 }
 
-// GET /api/decks -> Returns all 6 official starter decks + player decks
 router.get('/decks', async (req, res) => {
   try {
     const [starters, result] = await Promise.all([
@@ -183,7 +180,6 @@ router.get('/decks', async (req, res) => {
   }
 });
 
-// GET /api/decks/:id -> Hydrates a single starter deck or user deck for EDIT / VIEW / COPY
 router.get('/decks/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -209,7 +205,6 @@ router.get('/decks/:id', async (req, res) => {
   }
 });
 
-// POST /api/decks -> Creates a new user deck (including copies of starter decks)
 router.post('/decks', async (req, res) => {
   const {
     id,
@@ -270,7 +265,6 @@ router.post('/decks', async (req, res) => {
   }
 });
 
-// PUT /api/decks/:id -> Updates an existing custom deck (blocks editing starter decks)
 router.put('/decks/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -338,7 +332,6 @@ router.put('/decks/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/decks/:id -> Deletes a custom deck (blocks deleting starter decks)
 router.delete('/decks/:id', async (req, res) => {
   const { id } = req.params;
 

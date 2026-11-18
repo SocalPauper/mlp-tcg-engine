@@ -61,7 +61,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [unlockedCardIds, setUnlockedCardIds] = useState<string[]>([]);
   const [newlyUnlockedCards, setNewlyUnlockedCards] = useState<Card[]>([]);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
-  const [showLockedCards, setShowLockedCards] = useState(false);
+  const [showLockedCards, setShowLockedCards] = useState(true); // Default to true so wishlist cards are visible for building
 
   // Deck Structure States
   const [maneCharacter, setManeCharacter] = useState<Card | null>(null);
@@ -72,7 +72,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [buildPhase, setBuildPhase] = useState<BuildPhase>('MANE');
   const deckElement = maneCharacter?.element || null;
 
-  // Collapsible right-panel zones (auto-syncs with active phase, also manually toggleable)
+  // Collapsible right-panel zones
   const [collapsedZones, setCollapsedZones] = useState<Record<BuildPhase, boolean>>({
     MANE: false,
     STORY: true,
@@ -80,7 +80,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     MAIN: true,
   });
   
-  // UI Meta States
   const [deckName, setDeckName] = useState('My Sparkle Deck');
   const [isPublic, setIsPublic] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,13 +96,11 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importText, setImportText] = useState('');
 
-  // Inspector & Story Carousel States
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [inspectorGroup, setInspectorGroup] = useState<Card[]>([]);
   const [inspectorIndex, setInspectorIndex] = useState<number>(0);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Switch active build phase and auto-collapse inactive deck zones on the right
   const activatePhase = (phase: BuildPhase) => {
     setShowDeckContents(false);
     setBuildPhase(phase);
@@ -122,7 +119,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     }));
   };
 
-  // 1. Fetch entire card catalog
   useEffect(() => {
     fetch(`${API_BASE}/api/cards`)
       .then(res => res.json())
@@ -136,7 +132,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       });
   }, []);
 
-  // 2. Fetch User Inventory & New Alerts from auth.user_cards
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token || cards.length === 0) return;
@@ -178,7 +173,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     loadCollection();
   }, [cards]);
 
-  // 3. Fetch existing deck data if editing/viewing/copying
   useEffect(() => {
     if (!deckId || cards.length === 0) return;
 
@@ -245,27 +239,12 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         const loadedScene = hydrateCards(deckData.scene_deck);
         const loadedMain = hydrateCards(deckData.main_deck);
 
-        if (!rawMane && loadedStory.length === 0 && loadedScene.length === 0 && loadedMain.length === 0 && Array.isArray(deckData.cards)) {
-          const allHydrated = hydrateCards(deckData.cards);
-          const foundMane = allHydrated.find(isValidManeCharacter) || null;
-          const stories = allHydrated.filter(c => c.card_type === 'Story');
-          const scenes = allHydrated.filter(c => c.card_type === 'Scene');
-          const mains = allHydrated.filter(c => !['Mane Character', 'Story', 'Scene'].includes(c.card_type));
-          setManeCharacter(foundMane);
-          setStoryDeck(stories);
-          setSceneDeck(scenes);
-          setMainDeck(mains);
+        setStoryDeck(loadedStory);
+        setSceneDeck(loadedScene);
+        setMainDeck(loadedMain);
 
-          const count = (foundMane ? 1 : 0) + stories.length + scenes.length + mains.length;
-          if (readOnlyView || count === 70) setShowDeckContents(true);
-        } else {
-          setStoryDeck(loadedStory);
-          setSceneDeck(loadedScene);
-          setMainDeck(loadedMain);
-
-          const count = (loadedMane ? 1 : 0) + loadedStory.length + loadedScene.length + loadedMain.length;
-          if (readOnlyView || count === 70) setShowDeckContents(true);
-        }
+        const count = (loadedMane ? 1 : 0) + loadedStory.length + loadedScene.length + loadedMain.length;
+        if (readOnlyView || count === 70) setShowDeckContents(true);
 
         setBuildPhase('MAIN');
         setCollapsedZones({
@@ -279,8 +258,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   }, [deckId, cards, mode]);
 
   const totalCards = (maneCharacter ? 1 : 0) + storyDeck.length + sceneDeck.length + mainDeck.length;
-
-  // --- Logic Helpers ---
 
   const openInspector = (card: Card, group: Card[] = []) => {
     if (group.length > 0) {
@@ -377,6 +354,14 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     return true;
   };
 
+  const hasMissingWishlistCards = () => {
+    if (maneCharacter && isCardLocked(maneCharacter)) return true;
+    if (storyDeck.some(isCardLocked)) return true;
+    if (sceneDeck.some(isCardLocked)) return true;
+    if (mainDeck.some(isCardLocked)) return true;
+    return false;
+  };
+
   const handleContextMenu = (e: React.MouseEvent, card: Card, group: Card[] = []) => {
     e.preventDefault();
     openInspector(card, group);
@@ -397,8 +382,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   const addCardToDeck = (card: Card) => {
     if (isStarter) return;
-    if (isCardLocked(card)) return alert('You must unlock this rare card from a pack first!');
-
+    
+    // Wishlist rule: Allow adding unowned cards as missing/wishlist placeholders
     const baseId = card.id.replace('-S', '');
 
     if (buildPhase === 'MANE') {
@@ -439,7 +424,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
   const addStoryGroup = (group: Card[]) => {
     if (isStarter) return; 
-    if (group.some(c => isCardLocked(c))) return alert('You must unlock this alternate art first!');
     if (storyDeck.length + group.length > 4) return alert('Story Deck can only hold 4 cards.');
     
     const nextStory = [...storyDeck, ...group];
@@ -497,8 +481,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     alert('Deck copied! You can now make changes and save it to your account.');
   };
 
-  // --- Save & Return to Stable Handlers ---
-
   const saveDeckToServer = async (): Promise<boolean> => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -539,6 +521,11 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   };
 
   const handleSaveDeck = async () => {
+    if (hasMissingWishlistCards()) {
+      const proceed = window.confirm('⚠️ This deck contains wishlist/unowned placeholder cards. You can save and view this deck in your Stable, but you will not be able to queue into matches until all placeholder cards are unlocked from packs. Save anyway?');
+      if (!proceed) return;
+    }
+
     const saved = await saveDeckToServer();
     if (saved) {
       alert('Deck successfully saved!');
@@ -624,8 +611,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     alert('Deck successfully imported!');
   };
 
-  // --- Grouping Helper for Deck Contents Showcase ---
-
   const groupCardsById = (cardList: Card[], isStoryGroup: boolean = false): StackedCardGroup[] => {
     const groupedMap = new Map<string, StackedCardGroup>();
     for (const c of cardList) {
@@ -644,8 +629,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
     }
     return Array.from(groupedMap.values());
   };
-
-  // --- Rendering Helpers ---
 
   const baseFilteredCards = cards.filter(card => {
     const matchesSearch = card.name.toLowerCase().includes(searchQuery.toLowerCase()) || card.id.toLowerCase().includes(searchQuery.toLowerCase());
@@ -724,7 +707,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   return (
     <div className="deck-builder-container">
 
-      {/* --- UNSAVED DECK EXIT CONFIRMATION MODAL --- */}
       {showExitConfirmModal && (
         <div
           className="inspector-overlay"
@@ -780,7 +762,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         </div>
       )}
 
-      {/* --- UNLOCK CELEBRATION MODAL --- */}
       {showUnlockModal && newlyUnlockedCards.length > 0 && (
         <div className="inspector-overlay" style={{ pointerEvents: 'auto', zIndex: 10000 }}>
           <div className="unlock-modal">
@@ -819,7 +800,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         </div>
       )}
       
-      {/* Import Modal */}
       {importModalOpen && (
         <div className="inspector-overlay" style={{ pointerEvents: 'auto' }}>
           <div className="inspector-modal" style={{ flexDirection: 'column', padding: '30px', height: 'auto', width: '500px' }}>
@@ -839,7 +819,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         </div>
       )}
 
-      {/* Card Inspector Tooltip (zIndex 10005 so it layers cleanly above Unlock Modal) */}
       {hoveredCard && (
         <div className="inspector-overlay" style={{ pointerEvents: 'auto', zIndex: 10005 }} onClick={closeInspector}>
           <div
@@ -928,7 +907,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
       {/* Main Library / Deck Contents Showcase */}
       <div className="card-library-section">
-        {/* Sticky Top Header (Phase Tabs + Search/Filters + Show Deck Contents Toggle) */}
         <div className="library-sticky-header">
           <div className="phase-tracker">
             <button
@@ -1000,7 +978,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                   checked={showLockedCards}
                   onChange={e => setShowLockedCards(e.target.checked)}
                 />
-                <span>Show Locked 🔒</span>
+                <span>Show Wishlist / Locked 🔒</span>
               </label>
             </div>
           )}
@@ -1013,6 +991,11 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                 <h2 className="showcase-deck-title">{deckName}</h2>
                 <span className="showcase-deck-subtitle">
                   {deckElement || 'Unaligned'} Element • {totalCards} / 70 Cards
+                  {hasMissingWishlistCards() && (
+                    <strong style={{ color: '#e53935', marginLeft: '10px' }}>
+                      ⚠️ Contains Wishlist Placeholders
+                    </strong>
+                  )}
                 </span>
               </div>
               <button
@@ -1030,7 +1013,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
               </div>
             ) : (
               <>
-                {/* Section 1: Mane Character & Story Arc */}
                 {(maneCharacter || storyDeck.length > 0) && (
                   <div className="showcase-section">
                     <h3 className="showcase-section-title">Mane Character & Story Deck</h3>
@@ -1041,8 +1023,9 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                           onClick={() => openInspector(maneCharacter)}
                           onContextMenu={(e) => handleContextMenu(e, maneCharacter)}
                         >
-                          <div className="card-copy-stack count-1">
+                          <div className={`card-copy-stack count-1 ${isCardLocked(maneCharacter) ? 'locked' : ''}`}>
                             <img src={maneCharacter.image_url} alt={maneCharacter.name} className="stacked-copy-img layer-0" />
+                            {isCardLocked(maneCharacter) && <div className="lock-icon" style={{ fontSize: '24px' }}>🔒</div>}
                           </div>
                           <div className="diamond-count-wrapper">
                             <div className="diamond-badge"><span>1</span></div>
@@ -1077,70 +1060,76 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                   </div>
                 )}
 
-                {/* Section 2: Scene Deck */}
                 {groupedScenes.length > 0 && (
                   <div className="showcase-section">
                     <h3 className="showcase-section-title">Scene Deck ({sceneDeck.length}/15)</h3>
                     <div className="showcase-cards-grid">
-                      {groupedScenes.map((group) => (
-                        <div
-                          key={group.card.id}
-                          className="stacked-deck-slot"
-                          onClick={() => openInspector(group.card)}
-                          onContextMenu={(e) => handleContextMenu(e, group.card)}
-                        >
-                          <div className={`card-copy-stack count-${Math.min(group.count, 5)}`}>
-                            {group.copies.slice(0, 5).map((copyCard, idx) => (
-                              <img
-                                key={`${copyCard.id}-${idx}`}
-                                src={copyCard.image_url}
-                                alt={copyCard.name}
-                                className={`stacked-copy-img layer-${idx}`}
-                              />
-                            ))}
+                      {groupedScenes.map((group) => {
+                        const lockedCount = group.copies.filter(isCardLocked).length;
+                        return (
+                          <div
+                            key={group.card.id}
+                            className="stacked-deck-slot"
+                            onClick={() => openInspector(group.card)}
+                            onContextMenu={(e) => handleContextMenu(e, group.card)}
+                          >
+                            <div className={`card-copy-stack count-${Math.min(group.count, 5)} ${lockedCount > 0 ? 'locked' : ''}`}>
+                              {group.copies.slice(0, 5).map((copyCard, idx) => (
+                                <img
+                                  key={`${copyCard.id}-${idx}`}
+                                  src={copyCard.image_url}
+                                  alt={copyCard.name}
+                                  className={`stacked-copy-img layer-${idx}`}
+                                />
+                              ))}
+                              {lockedCount > 0 && <div className="lock-icon" style={{ fontSize: '24px' }}>🔒</div>}
+                            </div>
+                            <div className="diamond-count-wrapper">
+                              <div className="diamond-badge"><span>{group.count}</span></div>
+                              <span className="diamond-copies-label">
+                                {lockedCount > 0 ? `${lockedCount} Wishlist` : (group.count === 1 ? 'Copy' : 'Copies')}
+                              </span>
+                            </div>
                           </div>
-                          <div className="diamond-count-wrapper">
-                            <div className="diamond-badge"><span>{group.count}</span></div>
-                            <span className="diamond-copies-label">
-                              {group.count === 1 ? 'Copy' : 'Copies'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
-                {/* Section 3: Main Deck */}
                 {groupedMain.length > 0 && (
                   <div className="showcase-section">
                     <h3 className="showcase-section-title">Main Deck ({mainDeck.length}/50)</h3>
                     <div className="showcase-cards-grid">
-                      {groupedMain.map((group) => (
-                        <div
-                          key={group.card.id}
-                          className="stacked-deck-slot"
-                          onClick={() => openInspector(group.card)}
-                          onContextMenu={(e) => handleContextMenu(e, group.card)}
-                        >
-                          <div className={`card-copy-stack count-${Math.min(group.count, 5)}`}>
-                            {group.copies.slice(0, 5).map((copyCard, idx) => (
-                              <img
-                                key={`${copyCard.id}-${idx}`}
-                                src={copyCard.image_url}
-                                alt={copyCard.name}
-                                className={`stacked-copy-img layer-${idx}`}
-                              />
-                            ))}
+                      {groupedMain.map((group) => {
+                        const lockedCount = group.copies.filter(isCardLocked).length;
+                        return (
+                          <div
+                            key={group.card.id}
+                            className="stacked-deck-slot"
+                            onClick={() => openInspector(group.card)}
+                            onContextMenu={(e) => handleContextMenu(e, group.card)}
+                          >
+                            <div className={`card-copy-stack count-${Math.min(group.count, 5)} ${lockedCount > 0 ? 'locked' : ''}`}>
+                              {group.copies.slice(0, 5).map((copyCard, idx) => (
+                                <img
+                                  key={`${copyCard.id}-${idx}`}
+                                  src={copyCard.image_url}
+                                  alt={copyCard.name}
+                                  className={`stacked-copy-img layer-${idx}`}
+                                />
+                              ))}
+                              {lockedCount > 0 && <div className="lock-icon" style={{ fontSize: '24px' }}>🔒</div>}
+                            </div>
+                            <div className="diamond-count-wrapper">
+                              <div className="diamond-badge"><span>{group.count}</span></div>
+                              <span className="diamond-copies-label">
+                                {lockedCount > 0 ? `${lockedCount} Wishlist` : (group.count === 1 ? 'Copy' : 'Copies')}
+                              </span>
+                            </div>
                           </div>
-                          <div className="diamond-count-wrapper">
-                            <div className="diamond-badge"><span>{group.count}</span></div>
-                            <span className="diamond-copies-label">
-                              {group.count === 1 ? 'Copy' : 'Copies'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1154,15 +1143,12 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             {buildPhase === 'STORY' ? (
               Object.entries(storyGroups).map(([groupKey, group]) => {
                 const displayName = group[0]?.name ? group[0].name.split(/[-–]/)[0].trim() : groupKey;
-                const isLocked = group.some(c => isCardLocked(c));
+                const isLocked = group.some(isCardLocked);
                 return (
                   <div 
                     key={groupKey} 
                     className={`story-stack ${isLocked ? 'locked' : ''}`} 
-                    onClick={() => {
-                      if (isLocked) alert('You must unlock this alternate art first!');
-                      else addStoryGroup(group);
-                    }}
+                    onClick={() => addStoryGroup(group)}
                     onContextMenu={(e) => handleContextMenu(e, group[0], group)}
                     onTouchStart={() => handleTouchStart(group[0], group)}
                     onTouchEnd={handleTouchEnd}
@@ -1176,7 +1162,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                       />
                     ))}
                     {isLocked && <div className="lock-icon">🔒</div>}
-                    <div className="story-stack-label">{displayName} {isLocked ? '(Locked)' : `(${group.length}/4)`}</div>
+                    <div className="story-stack-label">{displayName} {isLocked ? '(Wishlist)' : `(${group.length}/4)`}</div>
                   </div>
                 );
               })
@@ -1187,10 +1173,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                   <div 
                     key={card.id} 
                     className={`card-item ${isLocked ? 'locked' : ''}`} 
-                    onClick={() => {
-                      if (isLocked) alert('You must unlock this rare card from a pack first!');
-                      else addCardToDeck(card);
-                    }}
+                    onClick={() => addCardToDeck(card)}
                     onContextMenu={(e) => handleContextMenu(e, card)}
                     onTouchStart={() => handleTouchStart(card)}
                     onTouchEnd={handleTouchEnd}
@@ -1205,7 +1188,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         )}
       </div>
 
-      {/* Right Deck Zones Panel (Auto-Collapses Inactive Zones) */}
       <div className="deck-panel-section">
         <button 
           onClick={handleReturnToStable} 
@@ -1265,10 +1247,14 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
 
         <div className="deck-header-stats">
           <span>Cards: <strong>{totalCards}</strong> / 70</span>
+          {hasMissingWishlistCards() && (
+            <span style={{ fontSize: '11px', color: '#e53935', fontWeight: 900, display: 'block', marginTop: '2px' }}>
+              ⚠️ Includes unowned wishlist cards
+            </span>
+          )}
         </div>
 
         <div className="deck-zones-container">
-          {/* Collapsible Zone 1: Mane Character */}
           <div className={`deck-zone ${collapsedZones.MANE ? 'collapsed' : ''}`}>
             <h3 className="collapsible-zone-header" onClick={() => toggleZoneCollapse('MANE')}>
               <span>Mane Character ({maneCharacter ? 1 : 0}/1)</span>
@@ -1276,15 +1262,14 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             </h3>
             {!collapsedZones.MANE && (
               maneCharacter ? (
-                <div className="deck-row mane-row" onClick={() => removeCard('mane', 0)}>
-                  <span>{maneCharacter.name}</span>
+                <div className={`deck-row mane-row ${isCardLocked(maneCharacter) ? 'locked-row' : ''}`} onClick={() => removeCard('mane', 0)}>
+                  <span>{maneCharacter.name} {isCardLocked(maneCharacter) ? '🔒' : ''}</span>
                   {!isStarter && <span className="remove-tag">✕</span>}
                 </div>
               ) : <div className="empty-zone">Select a Mane Character</div>
             )}
           </div>
 
-          {/* Collapsible Zone 2: Story Deck */}
           <div className={`deck-zone ${collapsedZones.STORY ? 'collapsed' : ''}`}>
             <h3 className="collapsible-zone-header" onClick={() => toggleZoneCollapse('STORY')}>
               <span>Story Deck ({storyDeck.length}/4)</span>
@@ -1293,15 +1278,14 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             {!collapsedZones.STORY && (
               storyDeck.length > 0 ? (
                 storyDeck.map((c, i) => (
-                  <div key={i} className="deck-row" onClick={() => removeCard('story', i)}>
-                    <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
+                  <div key={i} className={`deck-row ${isCardLocked(c) ? 'locked-row' : ''}`} onClick={() => removeCard('story', i)}>
+                    <span>{c.name} {isCardLocked(c) ? '🔒' : ''}</span>{!isStarter && <span className="remove-tag">✕</span>}
                   </div>
                 ))
               ) : <div className="empty-zone">Select Story Cards</div>
             )}
           </div>
 
-          {/* Collapsible Zone 3: Scene Deck */}
           <div className={`deck-zone ${collapsedZones.SCENE ? 'collapsed' : ''}`}>
             <h3 className="collapsible-zone-header" onClick={() => toggleZoneCollapse('SCENE')}>
               <span>Scene Deck ({sceneDeck.length}/15)</span>
@@ -1310,15 +1294,14 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             {!collapsedZones.SCENE && (
               sceneDeck.length > 0 ? (
                 sceneDeck.map((c, i) => (
-                  <div key={i} className="deck-row" onClick={() => removeCard('scene', i)}>
-                    <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
+                  <div key={i} className={`deck-row ${isCardLocked(c) ? 'locked-row' : ''}`} onClick={() => removeCard('scene', i)}>
+                    <span>{c.name} {isCardLocked(c) ? '🔒' : ''}</span>{!isStarter && <span className="remove-tag">✕</span>}
                   </div>
                 ))
               ) : <div className="empty-zone">Select Scene Cards</div>
             )}
           </div>
 
-          {/* Collapsible Zone 4: Main Deck */}
           <div className={`deck-zone main-deck-zone ${collapsedZones.MAIN ? 'collapsed' : ''}`}>
             <h3 className="collapsible-zone-header" onClick={() => toggleZoneCollapse('MAIN')}>
               <span>Main Deck ({mainDeck.length}/50)</span>
@@ -1327,8 +1310,8 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
             {!collapsedZones.MAIN && (
               mainDeck.length > 0 ? (
                 mainDeck.map((c, i) => (
-                  <div key={i} className="deck-row" onClick={() => removeCard('main', i)}>
-                    <span>{c.name}</span>{!isStarter && <span className="remove-tag">✕</span>}
+                  <div key={i} className={`deck-row ${isCardLocked(c) ? 'locked-row' : ''}`} onClick={() => removeCard('main', i)}>
+                    <span>{c.name} {isCardLocked(c) ? '🔒' : ''}</span>{!isStarter && <span className="remove-tag">✕</span>}
                   </div>
                 ))
               ) : <div className="empty-zone">Select Main Deck Cards</div>
