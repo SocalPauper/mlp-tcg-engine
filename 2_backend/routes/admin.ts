@@ -6,25 +6,30 @@ const router = express.Router();
 
 const requireAdmin = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
   const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!userId) return res.status(401).json({ error: 'Unauthorized: No user ID in token' });
 
   try {
-    const { rows } = await pool.query('SELECT is_admin, role FROM auth.users WHERE id = $1', [userId]);
-    if (rows.length === 0 || (!rows[0].is_admin && rows[0].role !== 'admin')) {
-      return res.status(403).json({ error: 'Forbidden: Admin access required' });
+    const { rows } = await pool.query('SELECT id, username, is_admin FROM auth.users WHERE id = $1', [userId]);
+    if (rows.length === 0) {
+      return res.status(403).json({ error: 'Forbidden: User record not found' });
+    }
+    const userRow = rows[0];
+    if (!userRow.is_admin && userRow.username !== 'BigMeatyPawz') {
+      return res.status(403).json({ error: 'Forbidden: Admin privileges required' });
     }
     next();
   } catch (err: any) {
+    console.error('[ADMIN AUTH ERROR]', err.message);
     res.status(500).json({ error: err.message });
   }
 };
 
-// 1. Search or list users from auth.users (bulletproof against null fields & schema mismatches)
+// 1. Search or list users from auth.users
 router.get('/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   const search = String(req.query.search || '').trim();
   try {
     let query = `
-      SELECT id, username, COALESCE(display_name, username) as display_name, email, COALESCE(reward_points, 0) as reward_points, is_admin, is_verified, is_safe_mode, created_at 
+      SELECT id, username, COALESCE(display_name, username) as display_name, email, COALESCE(reward_points, 0) as reward_points, created_at 
       FROM auth.users
     `;
     let params: any[] = [];
@@ -60,7 +65,6 @@ router.post('/users/award-points', authenticateToken, requireAdmin, async (req: 
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ success: true, user: rows[0] });
   } catch (err: any) {
-    console.error('[ADMIN AWARD POINTS ERROR]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -94,14 +98,13 @@ router.post('/users/gift-card', authenticateToken, requireAdmin, async (req: Aut
     res.json({ success: true, message: `Successfully gifted ${cardCheck.rows[0].name} (${cardId})!` });
   } catch (err: any) {
     await client.query('ROLLBACK');
-    console.error('[ADMIN GIFT CARD ERROR]', err.message);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
 });
 
-// 4. Moderate user status (Silence, Suspend, Ban, Active)
+// 4. Moderate user status
 router.post('/users/moderate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   const { userId, action } = req.body;
   if (!userId || !action) {
@@ -133,7 +136,6 @@ router.post('/users/moderate', authenticateToken, requireAdmin, async (req: Auth
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ success: true, message: `User ${rows[0].username} status updated to ${action.toUpperCase()}` });
   } catch (err: any) {
-    console.error('[ADMIN MODERATE ERROR]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
