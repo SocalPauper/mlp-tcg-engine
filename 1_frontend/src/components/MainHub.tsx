@@ -30,7 +30,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   const { user } = useAuth();
   const isGuest = !user;
 
-  // Age gated and verified non-safemode conditions
+  // Age-gated and verified non-safemode conditions
   const isSafeMode = user?.isSafeMode ?? true;
   const canChat = user && !isSafeMode && (user.isVerified || user.role === 'admin');
 
@@ -55,15 +55,35 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
       user: 'System',
       text: canChat
         ? 'Welcome to the Equestria Clash chat, verified duelist! Share your latest strategies!'
-        : 'Notice: Out of abundance of safety, only non-guest accounts and those verified to be older than 13 participate here. Please explore of our News Feed updates or find a Match!',
+        : 'Notice: Out of abundance of safety, only non-guest accounts and those verified to be older than 13 participate here. Please explore our News Feed updates or find a Match!',
     },
     { user: 'Princess Celestia', text: 'Peace and harmony to all our duelists! ✨ Let your card play shine today!' },
   ]);
   const [inputMsg, setInputMsg] = useState('');
 
-  // Live admin theme and overlay properties
-  const customBgUrl = localStorage.getItem('bg_hub') || '';
-  const bgOpacity = Number(localStorage.getItem('bg_hub_opacity') || '1');
+  // Global theme settings loaded from backend auth.site_settings
+  const [customBgUrl, setCustomBgUrl] = useState<string>('');
+  const [bgOpacity, setBgOpacity] = useState<number>(1);
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/media/settings`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && data.settings) {
+          if (data.settings.bg_hub) setCustomBgUrl(data.settings.bg_hub);
+          if (data.settings.bg_hub_opacity !== undefined) {
+            setBgOpacity(parseFloat(data.settings.bg_hub_opacity));
+          }
+          if (data.settings.site_announcement) {
+            setChatMessages((prev) => [
+              ...prev,
+              { user: 'Royal Decree', text: data.settings.site_announcement },
+            ]);
+          }
+        }
+      })
+      .catch((err) => console.error('Error loading global hub theme:', err));
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('mlp_last_deck_id', selectedDeck);
@@ -166,7 +186,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         backgroundBlendMode: customBgUrl ? 'overlay' : undefined,
       }}
     >
-      {/* Background Opacity Overlay Layer controlled by admin config */}
+      {/* Background Opacity Overlay Layer controlled by global admin settings */}
       {customBgUrl && (
         <div
           style={{
@@ -181,12 +201,11 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
       )}
 
       <div className="hub-wireframe-layout" style={{ position: 'relative', zIndex: 4 }}>
-        
         {/* TOP LEFT CLUSTER: Matchmaking UI */}
         <div className="hub-top-left-cluster">
           <div className="cloud-panel">
             <h3>☁️ Matchmaking Control Center</h3>
-            
+
             <div className="matchmaking-grid">
               {/* Match Type Box (Casual / Ranked) */}
               <div className="match-subbox">
@@ -298,7 +317,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
 
         {/* BOTTOM ROW: Leaderboard & News Feed */}
         <div className="hub-bottom-row">
-          
           {/* Top 10 Player Leaderboard */}
           <div className="cloud-panel bottom-module-card">
             <h3>🏆 Top 10 Player Leaderboard</h3>
@@ -338,9 +356,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
               <p className="news-snippet">Check socalpauper.com for upcoming local tournaments across Southern California!</p>
             </div>
           </div>
-
         </div>
-
       </div>
 
       {/* Quick Play Queue Modal */}
