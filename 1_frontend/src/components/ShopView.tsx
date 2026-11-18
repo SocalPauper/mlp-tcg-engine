@@ -35,11 +35,20 @@ const CARD_BACK_URL = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards
 
 export default function ShopView() {
   const [points, setPoints] = useState<number>(0);
+  const [weekId, setWeekId] = useState<string>('');
   const [deals, setDeals] = useState<WeeklyDeal[]>([]);
   const [tiers, setTiers] = useState<Record<string, any>>({});
+  const [tradeInSummary, setTradeInSummary] = useState<{
+    extraCardsCount: number;
+    totalPointsValue: number;
+  }>({ extraCardsCount: 0, totalPointsValue: 0 });
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  // Global wallpaper & opacity loaded from auth.site_settings
+  const [customBgUrl, setCustomBgUrl] = useState<string>('');
+  const [bgOpacity, setBgOpacity] = useState<number>(1);
 
   // Interactive Pack Rip & 3D Flip States
   const [activePackTier, setActivePackTier] = useState<{ key: string; name: string } | null>(null);
@@ -48,6 +57,20 @@ export default function ShopView() {
   const [flippedIndices, setFlippedIndices] = useState<Record<number, boolean>>({});
   const [previewCard, setPreviewCard] = useState<PreviewableCard | null>(null);
 
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/media/settings`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && data.settings) {
+          if (data.settings.bg_shop) setCustomBgUrl(data.settings.bg_shop);
+          if (data.settings.bg_shop_opacity !== undefined) {
+            setBgOpacity(parseFloat(data.settings.bg_shop_opacity));
+          }
+        }
+      })
+      .catch((err) => console.error('Error loading global shop theme:', err));
+  }, []);
+
   const fetchShopData = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -55,8 +78,12 @@ export default function ShopView() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       setPoints(data.reward_points);
-      setDeals(data.weeklyDeals);
+      setWeekId(data.weekId || '');
+      setDeals(data.weeklyDeals || []);
       setTiers(data.tiers || {});
+      if (data.tradeInSummary) {
+        setTradeInSummary(data.tradeInSummary);
+      }
     } catch (err) {
       console.error('Failed to load shop', err);
     } finally {
@@ -70,7 +97,7 @@ export default function ShopView() {
 
   const handleBuyPack = async (tierKey: string, cost: number, tierName: string) => {
     if (points < cost) {
-      setMessage('Not enough Pony Points! Play more matches to earn points.');
+      setMessage('Not enough Pony Points! Play more matches or trade in extra copies to earn points.');
       return;
     }
     setPurchasing(true);
@@ -83,6 +110,7 @@ export default function ShopView() {
         { headers: token ? { Authorization: `Bearer ${token}` } : {} }
       );
       setPoints(data.remainingPoints);
+      if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
       setPulledCards(data.cards);
       setActivePackTier({ key: tierKey, name: tierName });
       setPackStage('SEALED');
@@ -142,7 +170,8 @@ export default function ShopView() {
         { headers: token ? { Authorization: `Bearer ${token}` } : {} }
       );
       setPoints(data.remainingPoints);
-      setMessage(`Successfully unlocked guaranteed card: ${data.card.name}!`);
+      if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
+      setMessage(`✨ Successfully unlocked featured card: ${data.card.name}!`);
       fetchShopData();
     } catch (err: any) {
       setMessage(err.response?.data?.error || 'Failed to buy deal.');
@@ -151,215 +180,354 @@ export default function ShopView() {
     }
   };
 
-  if (loading) return <div className="shop-loading">Loading Pony Shop... ✨</div>;
+  const handleTradeInExtras = async () => {
+    if (tradeInSummary.extraCardsCount <= 0) return;
+    if (
+      !window.confirm(
+        `Trade in ${tradeInSummary.extraCardsCount} extra card(s) beyond your 3-card playsets for +${tradeInSummary.totalPointsValue} Pony Points?`
+      )
+    ) {
+      return;
+    }
+
+    setPurchasing(true);
+    setMessage(null);
+    try {
+      const token = localStorage.getItem('token');
+      const { data } = await axios.post(
+        `${API_BASE_URL}/api/shop/trade-in-extras`,
+        {},
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      setPoints(data.remainingPoints);
+      setTradeInSummary(data.tradeInSummary || { extraCardsCount: 0, totalPointsValue: 0 });
+      setMessage(
+        `♻️ Traded in ${data.tradedCount} extra copy/copies for +${data.pointsEarned} Pony Points!`
+      );
+    } catch (err: any) {
+      setMessage(err.response?.data?.error || 'Failed to trade in extra cards.');
+    } finally {
+      setPurchasing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="shop-viewport">
+        <div className="shop-loading">Opening the Canterlot Pony Point Shop... ✨</div>
+      </div>
+    );
+  }
 
   const allRevealed =
     pulledCards !== null &&
     pulledCards.length > 0 &&
     pulledCards.every((_, idx) => Boolean(flippedIndices[idx]));
 
+  const formatRate = (prob: number) => {
+    const pct = prob * 100;
+    return Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(1)}%`;
+  };
+
   return (
-    <div className="shop-container">
-      {/* Full-resolution Card Preview Inspector */}
-      <CardPreviewModal card={previewCard} onClose={() => setPreviewCard(null)} />
-
-      <div className="shop-header">
-        <h2>✨ The Pony Point Shop ✨</h2>
-        <div className="shop-points-badge">
-          🪙 Pony Points: <strong>{points}</strong>
-        </div>
-      </div>
-
-      {message && <div className="shop-message-banner">{message}</div>}
-
-      {/* PACK TIERS SECTION */}
-      <div className="shop-section">
-        <h3>🎁 Foil Booster Packs (Guaranteed SR+)</h3>
-        <p className="shop-section-desc">
-          All Commons, Uncommons, and Rares are already unlocked in your Stable! Packs contain exclusively{' '}
-          <strong>SR, SSR, UR, GR, and CR</strong> cards.
-        </p>
-
-        <div className="pack-tiers-grid">
-          {Object.entries(tiers).map(([key, tier]) => (
-            <div key={key} className={`pack-tier-card tier-${key.toLowerCase()}`}>
-              <span className="pack-tier-ribbon">{tier.badge || 'FOIL PACK'}</span>
-              <span className="pack-price-tag">{tier.cost} 🪙</span>
-              <h4>{tier.name}</h4>
-              <p>{tier.description}</p>
-              {tier.rates && (
-                <div className="pack-odds-pills">
-                  {Object.entries(tier.rates).map(([rar, prob]) => (
-                    <span key={rar} className="odds-pill">
-                      {rar}: {Math.round(Number(prob) * 100)}%
-                    </span>
-                  ))}
-                </div>
-              )}
-              <button
-                type="button"
-                className="shop-buy-btn"
-                disabled={purchasing}
-                onClick={() => handleBuyPack(key, tier.cost, tier.name)}
-              >
-                {purchasing ? 'Summoning Pack...' : `Buy Pack (${tier.cost} 🪙)`}
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* WEEKLY FEATURED DEALS SECTION */}
-      <div className="shop-section">
-        <h3>🌟 Weekly Featured Deals</h3>
-        <p className="shop-section-desc">Guaranteed high-rarity cards (click card art to preview). Refreshed weekly!</p>
-
-        <div className="weekly-deals-grid">
-          {deals.map((deal) => (
-            <div key={deal.id} className="deal-card">
-              <span className="deal-rarity-badge">{deal.rarity}</span>
-              <img
-                src={deal.image_url || CARD_BACK_URL}
-                alt={deal.name}
-                className="deal-card-img"
-                style={{ cursor: 'pointer' }}
-                onClick={() =>
-                  setPreviewCard({
-                    id: deal.card_id,
-                    name: deal.name,
-                    card_type: deal.card_type,
-                    element: deal.element,
-                    rarity: deal.rarity,
-                    cost: deal.cost,
-                    power: deal.power,
-                    effect_text: deal.effect_text,
-                    image_url: deal.image_url,
-                  })
-                }
-              />
-              <h4>{deal.name}</h4>
-              <div className="deal-card-meta">
-                {deal.card_type} • {deal.element}
-              </div>
-              <button
-                type="button"
-                className="shop-buy-btn deal-btn"
-                disabled={purchasing}
-                onClick={() => handleBuyDeal(deal.id, deal.price)}
-              >
-                Buy for {deal.price} 🪙
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* INTERACTIVE PACK RIP & 3D CARD FLIP MODAL */}
-      {pulledCards && (
+    <div
+      className="shop-viewport"
+      style={customBgUrl ? { backgroundImage: `url(${customBgUrl})` } : undefined}
+    >
+      {/* Opacity Tint Layer Controlled by Global Admin Settings */}
+      {customBgUrl && (
         <div
-          className="pack-reveal-backdrop"
-          onClick={() => {
-            if (packStage === 'REVEALING' && allRevealed && !previewCard) closePackModal();
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: '#150624',
+            opacity: 1 - bgOpacity,
+            zIndex: 1,
+            pointerEvents: 'none',
           }}
-        >
-          <div className="pack-reveal-modal" onClick={(e) => e.stopPropagation()}>
-            {packStage !== 'REVEALING' ? (
-              <div className="sealed-pack-stage">
-                <h3>✨ {activePackTier?.name || 'Booster Pack'} Ready! ✨</h3>
-                <p>Click the booster pack or tear along the foil strip to rip it open!</p>
+        />
+      )}
 
-                <div
-                  className={`booster-foil-wrapper ${
-                    packStage === 'RIPPING' ? 'ripping-active' : 'sealed-idle'
-                  } tier-${(activePackTier?.key || 'bronze').toLowerCase()}`}
-                  onClick={handleRipPack}
-                >
-                  <div className="booster-foil-top-flap">
-                    <span className="foil-crimp-lines" />
-                    <span className="foil-tear-hint">✂️ TEAR HERE</span>
+      <div className="shop-container">
+        <CardPreviewModal card={previewCard} onClose={() => setPreviewCard(null)} />
+
+        {/* TOP HEADER BAR */}
+        <div className="shop-header">
+          <div>
+            <h2>✨ The Pony Point Shop ✨</h2>
+            <span className="shop-subtitle">
+              Redeem match rewards for guaranteed weekly singles &amp; shiny foil booster packs
+            </span>
+          </div>
+
+          <div className="shop-header-actions">
+            <button
+              type="button"
+              className="trade-in-btn"
+              disabled={purchasing || tradeInSummary.extraCardsCount <= 0}
+              onClick={handleTradeInExtras}
+              title="Convert any cards with more than 3 copies in your collection into Pony Points"
+            >
+              {tradeInSummary.extraCardsCount > 0
+                ? `♻️ Trade-In ${tradeInSummary.extraCardsCount} Extra(s) (+${tradeInSummary.totalPointsValue} 🪙)`
+                : '♻️ No Extras (>3 Copies)'}
+            </button>
+
+            <div className="shop-points-badge">
+              🪙 Pony Points: <strong>{points}</strong>
+            </div>
+          </div>
+        </div>
+
+        {message && <div className="shop-message-banner">{message}</div>}
+
+        {/* ROW 1: CARDS OF THE WEEK ON MINIATURE EASELS WITH SPOTLIGHTS */}
+        <div className="shop-section">
+          <div className="shop-section-header">
+            <h3>🌟 Cards of the Week</h3>
+            {weekId && <span className="week-tag">Auto-Rotating • {weekId}</span>}
+          </div>
+          <p className="shop-section-desc">
+            Spotlighted single cards available for direct unlock. Click any card on its easel to inspect its rules!
+          </p>
+
+          <div className="weekly-easels-grid">
+            {deals.map((deal) => (
+              <div key={deal.id} className="easel-stage">
+                <div className="easel-spotlight-beam" aria-hidden="true" />
+                <span className="easel-rarity-pill">{deal.rarity}</span>
+
+                {/* Miniature Easel Stand */}
+                <div className="mini-easel-assembly">
+                  <div className="easel-top-finial" />
+                  <div
+                    className="easel-card-canvas"
+                    onClick={() =>
+                      setPreviewCard({
+                        id: deal.card_id,
+                        name: deal.name,
+                        card_type: deal.card_type,
+                        element: deal.element,
+                        rarity: deal.rarity,
+                        cost: deal.cost,
+                        power: deal.power,
+                        effect_text: deal.effect_text,
+                        image_url: deal.image_url,
+                      })
+                    }
+                  >
+                    <img src={deal.image_url || CARD_BACK_URL} alt={deal.name} />
                   </div>
-                  <div className="booster-tear-laser" />
-                  <div className="booster-foil-body">
-                    <div className="booster-emblem">EQUESTRIA CLASH</div>
-                    <div className="booster-sub-emblem">{activePackTier?.name}</div>
-                    <div className="booster-sparkle-ring">✦ ✧ ✦</div>
+                  <div className="easel-ledge" />
+                  <div className="easel-legs" aria-hidden="true">
+                    <span className="easel-leg left" />
+                    <span className="easel-leg right" />
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  className="shop-buy-btn rip-trigger-btn"
-                  onClick={handleRipPack}
-                  disabled={packStage === 'RIPPING'}
-                >
-                  {packStage === 'RIPPING' ? '✨ Ripping Foil...' : '✂️ Rip Open Pack!'}
-                </button>
+                <div className="easel-info-plaque">
+                  <h4>{deal.name}</h4>
+                  <div className="easel-card-meta">
+                    {deal.card_type} • {deal.element || 'Unaligned'}
+                  </div>
+                  <button
+                    type="button"
+                    className="shop-buy-btn deal-btn"
+                    disabled={purchasing}
+                    onClick={() => handleBuyDeal(deal.id, deal.price)}
+                  >
+                    Unlock Card ({deal.price} 🪙)
+                  </button>
+                </div>
               </div>
-            ) : (
-              <>
-                <h3>🎉 Tap to Flip — Click Revealed Cards to Preview!</h3>
-                <p>Click a face-down card to flip it, or click an open card to inspect its rules text.</p>
+            ))}
+          </div>
+        </div>
 
-                <div className="pulled-cards-row">
-                  {pulledCards.map((card, idx) => {
-                    const isFlipped = Boolean(flippedIndices[idx]);
-                    const isUltra = ['UR', 'GR', 'CR', 'SPR'].includes(card.rarity);
-                    return (
-                      <div
-                        key={idx}
-                        className={`flip-card-scene ${isFlipped ? 'is-flipped' : ''} ${
-                          isUltra ? 'ultra-foil' : ''
-                        }`}
-                        style={{ animationDelay: `${idx * 0.08}s` }}
-                        onClick={() => handleCardSlotClick(card, idx)}
-                      >
-                        <div className="flip-card-inner">
-                          {/* Back of Card */}
-                          <div className="flip-card-face flip-card-back">
-                            <img src={CARD_BACK_URL} alt="Card Back" />
-                            <span className="tap-to-flip-pill">Tap to Flip ✨</span>
-                          </div>
+        {/* ROW 2: 3 SHINY FOIL BOOSTER PACK OBJECTS + DISTRIBUTION BOXES */}
+        <div className="shop-section">
+          <div className="shop-section-header">
+            <h3>🎁 Shiny Foil Booster Packs (SR &amp; Above Only)</h3>
+          </div>
+          <p className="shop-section-desc">
+            All Commons, Uncommons, and Rares are already unlocked in your Stable. Every pack guarantees{' '}
+            <strong>SR, SSR, UR, GR, CR, or SPR</strong> pulls!
+          </p>
 
-                          {/* Front of Card */}
-                          <div className="flip-card-face flip-card-front">
-                            <span className={`pulled-rarity rarity-${card.rarity.toLowerCase()}`}>
-                              {card.rarity}
-                            </span>
-                            <img src={card.image_url || CARD_BACK_URL} alt={card.name} />
-                            <h5>{card.name}</h5>
-                            <span>🔍 Click to Preview</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+          <div className="packs-showcase-grid">
+            {Object.entries(tiers).map(([key, tier]) => (
+              <div key={key} className="pack-showcase-column">
+                {/* Upright 3D Foil Pack Object */}
+                <div
+                  className={`shiny-foil-pack tier-${key.toLowerCase()}`}
+                  onClick={() => !purchasing && handleBuyPack(key, tier.cost, tier.name)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) =>
+                    e.key === 'Enter' && !purchasing && handleBuyPack(key, tier.cost, tier.name)
+                  }
+                >
+                  <div className="foil-pack-crimp" />
+                  <div className="foil-pack-center">
+                    <div className="foil-pack-logo">EQUESTRIA CLASH</div>
+                    <div className="foil-pack-tier-title">{tier.name}</div>
+                    <div className="foil-pack-count-badge">{tier.badge}</div>
+                    <div className="foil-pack-cost-pill">{tier.cost} 🪙</div>
+                  </div>
+                  <div className="foil-pack-crimp bottom" />
                 </div>
 
-                <div className="pack-modal-actions">
-                  {!allRevealed && (
-                    <button
-                      type="button"
-                      className="shop-buy-btn deal-btn"
-                      style={{ width: 'auto', padding: '10px 22px' }}
-                      onClick={revealAllCards}
-                    >
-                      ✨ Reveal All Cards
-                    </button>
+                {/* Distribution & Cost Text Box Below Pack */}
+                <div className="pack-distribution-box">
+                  <div className="pack-dist-header">
+                    <h4>{tier.name}</h4>
+                    <span className="pack-dist-cost">{tier.cost} 🪙</span>
+                  </div>
+                  <p className="pack-dist-desc">{tier.description}</p>
+
+                  {tier.rates && (
+                    <div className="pack-odds-pills">
+                      {Object.entries(tier.rates).map(([rar, prob]) => (
+                        <span key={rar} className="odds-pill">
+                          {rar}: {formatRate(Number(prob))}
+                        </span>
+                      ))}
+                    </div>
                   )}
+
                   <button
                     type="button"
                     className="shop-buy-btn"
-                    style={{ padding: '10px 26px' }}
-                    onClick={closePackModal}
+                    disabled={purchasing}
+                    onClick={() => handleBuyPack(key, tier.cost, tier.name)}
                   >
-                    {allRevealed ? 'Awesome, Collect! ✨' : 'Collect & Close'}
+                    {purchasing ? 'Summoning Pack...' : `Buy ${tier.name} (${tier.cost} 🪙)`}
                   </button>
                 </div>
-              </>
-            )}
+              </div>
+            ))}
           </div>
         </div>
-      )}
+
+        {/* ROW 3: EVENT SALES (COMING SOON) */}
+        <div className="shop-section">
+          <div className="shop-section-header">
+            <h3>🎪 Event Sales &amp; Seasonal Bundles</h3>
+          </div>
+          <div className="event-sales-alcove">
+            <span className="event-coming-soon-badge">✨ Coming Soon ✨</span>
+            <h4>Grand Galloping Gala &amp; Seasonal Specials</h4>
+            <p>
+              Limited-time holiday booster boxes, themed playmats, and discounted Mane Character collector bundles will appear here during Equestria Clash seasonal events!
+            </p>
+          </div>
+        </div>
+
+        {/* INTERACTIVE PACK RIP & 3D CARD FLIP MODAL */}
+        {pulledCards && (
+          <div
+            className="pack-reveal-backdrop"
+            onClick={() => {
+              if (packStage === 'REVEALING' && allRevealed && !previewCard) closePackModal();
+            }}
+          >
+            <div className="pack-reveal-modal" onClick={(e) => e.stopPropagation()}>
+              {packStage !== 'REVEALING' ? (
+                <div className="sealed-pack-stage">
+                  <h3>✨ {activePackTier?.name || 'Booster Pack'} Ready! ✨</h3>
+                  <p>Click the booster pack or tear along the foil strip to rip it open!</p>
+
+                  <div
+                    className={`booster-foil-wrapper ${
+                      packStage === 'RIPPING' ? 'ripping-active' : 'sealed-idle'
+                    } tier-${(activePackTier?.key || 'sparkle').toLowerCase()}`}
+                    onClick={handleRipPack}
+                  >
+                    <div className="booster-foil-top-flap">
+                      <span className="foil-crimp-lines" />
+                      <span className="foil-tear-hint">✂️ TEAR HERE</span>
+                    </div>
+                    <div className="booster-tear-laser" />
+                    <div className="booster-foil-body">
+                      <div className="booster-emblem">EQUESTRIA CLASH</div>
+                      <div className="booster-sub-emblem">{activePackTier?.name}</div>
+                      <div className="booster-sparkle-ring">✦ ✧ ✦</div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="shop-buy-btn rip-trigger-btn"
+                    onClick={handleRipPack}
+                    disabled={packStage === 'RIPPING'}
+                  >
+                    {packStage === 'RIPPING' ? '✨ Ripping Foil...' : '✂️ Rip Open Pack!'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h3>🎉 Tap to Flip — Click Revealed Cards to Preview!</h3>
+                  <p>Click a face-down card to flip it, or click an open card to inspect its rules text.</p>
+
+                  <div className="pulled-cards-row">
+                    {pulledCards.map((card, idx) => {
+                      const isFlipped = Boolean(flippedIndices[idx]);
+                      const isUltra = ['UR', 'GR', 'CR', 'SPR'].includes(card.rarity);
+                      return (
+                        <div
+                          key={idx}
+                          className={`flip-card-scene ${isFlipped ? 'is-flipped' : ''} ${
+                            isUltra ? 'ultra-foil' : ''
+                          }`}
+                          style={{ animationDelay: `${idx * 0.08}s` }}
+                          onClick={() => handleCardSlotClick(card, idx)}
+                        >
+                          <div className="flip-card-inner">
+                            <div className="flip-card-face flip-card-back">
+                              <img src={CARD_BACK_URL} alt="Card Back" />
+                              <span className="tap-to-flip-pill">Tap to Flip ✨</span>
+                            </div>
+
+                            <div className="flip-card-face flip-card-front">
+                              <span className={`pulled-rarity rarity-${card.rarity.toLowerCase()}`}>
+                                {card.rarity}
+                              </span>
+                              <img src={card.image_url || CARD_BACK_URL} alt={card.name} />
+                              <h5>{card.name}</h5>
+                              <span>🔍 Click to Preview</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="pack-modal-actions">
+                    {!allRevealed && (
+                      <button
+                        type="button"
+                        className="shop-buy-btn deal-btn"
+                        style={{ width: 'auto', padding: '10px 22px' }}
+                        onClick={revealAllCards}
+                      >
+                        ✨ Reveal All Cards
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="shop-buy-btn"
+                      style={{ width: 'auto', padding: '10px 26px' }}
+                      onClick={closePackModal}
+                    >
+                      {allRevealed ? 'Awesome, Collect! ✨' : 'Collect & Close'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
