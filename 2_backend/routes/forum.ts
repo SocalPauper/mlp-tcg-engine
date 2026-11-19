@@ -13,7 +13,6 @@ function extractToken(req: any): string | null {
     if (t && t !== 'null' && t !== 'undefined') return t;
   }
 
-  // Fallback: check cookies if session is stored in an HTTP cookie
   const rawCookie = req.headers?.cookie;
   if (rawCookie) {
     const parts = rawCookie.split(';').map((c: string) => c.trim());
@@ -48,7 +47,6 @@ async function resolveSessionUser(req: any) {
     }
   }
 
-  // Fallback: decode payload & verify user directly against auth.users in PostgreSQL
   if (!decoded) {
     decoded = jwt.decode(token);
   }
@@ -220,15 +218,17 @@ router.post('/posts', requireRegisteredNonSafeUser, async (req: any, res) => {
 
   if (image_url && String(image_url).trim()) {
     let rawImg = String(image_url).trim();
-    if (!/^https?:\/\//i.test(rawImg)) {
-      rawImg = `https://${rawImg}`;
-    }
-    const linkCheck = moderateForumContent(rawImg);
-    if (!linkCheck.allowed) {
-      return res.status(400).json({ success: false, message: linkCheck.reason });
+    if (!rawImg.startsWith('data:image/')) {
+      if (!/^https?:\/\//i.test(rawImg)) {
+        rawImg = `https://${rawImg}`;
+      }
+      const linkCheck = moderateForumContent(rawImg);
+      if (!linkCheck.allowed) {
+        return res.status(400).json({ success: false, message: linkCheck.reason });
+      }
     }
     cleanImageUrl = rawImg;
-    imageStatus = user.is_admin ? 'APPROVED' : 'PENDING';
+    imageStatus = 'PENDING';
   }
 
   const postId = `post-${crypto.randomUUID()}`;
@@ -361,7 +361,7 @@ router.post('/vote', requireRegisteredNonSafeUser, async (req: any, res) => {
 router.get('/admin/pending-images', requireAdmin, async (_req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, author_name, category, title, image_url, created_at
+      `SELECT id, author_name, category, title, body, image_url, image_status, created_at
        FROM auth.forum_posts
        WHERE image_status = 'PENDING'
        ORDER BY created_at ASC;`
@@ -381,7 +381,10 @@ router.post('/admin/moderate-image/:id', requireAdmin, async (req, res) => {
 
   try {
     await pool.query(
-      'UPDATE auth.forum_posts SET image_status = $1 WHERE id = $2;',
+      `UPDATE auth.forum_posts
+       SET image_status = $1,
+           image_url = CASE WHEN $1 = 'REJECTED' THEN NULL ELSE image_url END
+       WHERE id = $2;`,
       [status, id]
     );
     return res.json({ success: true, status });
