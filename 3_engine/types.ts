@@ -97,7 +97,8 @@ export interface PendingTargetSelection {
     | 'APPEAR_EFFECT'
     | 'FAREWELL_EFFECT'
     | 'PRE_PLAN_EFFECT'
-    | 'STORY_PROMOTION';
+    | 'STORY_PROMOTION'
+    | 'DELAYED_TRIGGER';
   sourceLane?: LaneKey;
   effectAction: PendingEffectAction;
   value: number;
@@ -109,6 +110,7 @@ export interface PendingTargetSelection {
   }[];
   selectedFromLane?: LaneKey;
   resumeAttackQueue?: LaneKey[] | null;
+  resumeEndTurnForPlayer?: '0' | '1' | null;
 }
 
 export interface PendingHandChoice {
@@ -118,7 +120,8 @@ export interface PendingHandChoice {
     | 'DISCARD_FROM_HAND'
     | 'DISCARD_THEN_DRAW'
     | 'RECOVER_FROM_RETIREMENT'
-    | 'PICK_REVEALED_TO_HAND';
+    | 'PICK_REVEALED_TO_HAND'
+    | 'END_PHASE_HAND_LIMIT';
   count: number;
   secondaryDrawCount?: number;
   promptText: string;
@@ -126,6 +129,19 @@ export interface PendingHandChoice {
   validIndices?: number[];
   filterLabel?: string;
   resumeAttackQueue?: LaneKey[] | null;
+  resumeEndTurnForPlayer?: '0' | '1' | null;
+}
+
+export interface DelayedTriggerEntry {
+  id: string;
+  ownerId: '0' | '1';
+  ownerName: string;
+  sourceCard: CardDefinition;
+  sourceLane?: LaneKey;
+  timing: 'END_OF_YOUR_TURN' | 'END_OF_ANY_TURN';
+  conditionText?: string;
+  effectClause: string;
+  createdTurn: number;
 }
 
 export interface ActionSpotlightEvent {
@@ -140,7 +156,8 @@ export interface ActionSpotlightEvent {
     | 'ENTER_CONTACT'
     | 'INTERVENE_PLAN'
     | 'PROGRESS_STORY'
-    | 'TRIGGER_KEYWORD';
+    | 'TRIGGER_KEYWORD'
+    | 'DELAYED_TRIGGER';
   comicWord?: string;
   title: string;
   subtitle: string;
@@ -194,6 +211,7 @@ export type GamePhase =
   | 'CLASH_HOLD'
   | 'BREAKTHROUGH_CHOICE'
   | 'REVEAL_HOLD'
+  | 'END_PHASE'
   | 'GAME_OVER';
 
 export type LaneKey = 'left' | 'center' | 'right';
@@ -267,6 +285,7 @@ export interface KayouGameState {
   pendingTarget: PendingTargetSelection | null;
   pendingHandChoice?: PendingHandChoice | null;
   pendingLaneQueueAfterReveal: LaneKey[] | null;
+  delayedTriggers?: DelayedTriggerEntry[];
   lastClashEvent: ClashAnimationEvent | null;
   lastPlanRevealEvent: PlanRevealEvent | null;
   lastStoryRevealEvent: StoryRevealEvent | null;

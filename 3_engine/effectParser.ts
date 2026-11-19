@@ -129,7 +129,7 @@ function doesPassiveTextApplyToCharacter(
   if (!text) return 0;
 
   if (
-    /Inspo Boost|Inspiration Boost|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted|until the end of/i.test(
+    /Inspo Boost|Inspiration Boost|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted|until the end of|at the end of/i.test(
       text
     )
   ) {
@@ -346,6 +346,77 @@ export function calculateLanePowerBreakdown(
   };
 }
 
+export interface DelayedTriggerSpec {
+  timing: 'END_OF_YOUR_TURN' | 'END_OF_ANY_TURN';
+  conditionText?: string;
+  innerEffectClause: string;
+}
+
+export function extractDelayedTiming(clauseText?: string): DelayedTriggerSpec | null {
+  const text = sanitizeCardText(clauseText);
+  if (!text) return null;
+
+  const endYourTurnMatch = text.match(/^at\s+the\s+end\s+of\s+your\s+turn[,:\s]+([\s\S]+)$/i);
+  if (endYourTurnMatch) {
+    const rest = endYourTurnMatch[1].trim();
+    const condMatch = rest.match(/^if\s+([^,]+),\s*([\s\S]+)$/i);
+    return {
+      timing: 'END_OF_YOUR_TURN',
+      conditionText: condMatch ? condMatch[1].trim() : undefined,
+      innerEffectClause: condMatch ? condMatch[2].trim() : rest,
+    };
+  }
+
+  const endTurnMatch = text.match(/^at\s+the\s+end\s+of\s+(?:the\s+)?turn[,:\s]+([\s\S]+)$/i);
+  if (endTurnMatch) {
+    const rest = endTurnMatch[1].trim();
+    const condMatch = rest.match(/^if\s+([^,]+),\s*([\s\S]+)$/i);
+    return {
+      timing: 'END_OF_ANY_TURN',
+      conditionText: condMatch ? condMatch[1].trim() : undefined,
+      innerEffectClause: condMatch ? condMatch[2].trim() : rest,
+    };
+  }
+
+  return null;
+}
+
+export function evaluateBoardCondition(
+  state: KayouGameState,
+  ownerId: '0' | '1',
+  conditionText?: string
+): boolean {
+  if (!conditionText) return true;
+  const cond = sanitizeCardText(conditionText);
+  const player = state.players[ownerId];
+  const allLanes: LaneKey[] = ['left', 'center', 'right'];
+
+  // "if there is any 「Gummy」 in your Adventure Area"
+  const bracketInAdv = cond.match(/there\s+is\s+(?:any|a|an)\s+[｢\[「]([^｣\]」]+)[｣\]」]\s+in\s+your\s+adventure\s+area/i);
+  if (bracketInAdv) {
+    const required = bracketInAdv[1].trim();
+    return allLanes.some((l) => {
+      const char = player.adventureArea[l].character;
+      return char !== null && matchesCharacterFilter(char, required);
+    });
+  }
+
+  // "if there is any Item in your Retirement Area"
+  if (/there\s+is\s+(?:any|an)\s+item\s+in\s+your\s+retirement/i.test(cond)) {
+    return player.retirement.some((c) => String(c.type || '').toLowerCase() === 'item');
+  }
+
+  // "if you have X or more Characters in your Adventure Area"
+  const countCharsMatch = cond.match(/you\s+have\s+(\d+)\s+or\s+more\s+characters?/i);
+  if (countCharsMatch) {
+    const minCount = parseInt(countCharsMatch[1], 10) || 1;
+    const currentCount = allLanes.filter((l) => player.adventureArea[l].character !== null).length;
+    return currentCount >= minCount;
+  }
+
+  return true;
+}
+
 export interface ParsedActivatedEffect {
   kind:
     | 'DRAW'
@@ -400,8 +471,14 @@ export function extractTriggerClause(
 }
 
 export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | null {
-  const text = sanitizeCardText(clauseText);
+  let text = sanitizeCardText(clauseText);
   if (!text) return null;
+
+  // Strip leading "If <condition>, " so the inner action parses cleanly after condition evaluation
+  const leadingIf = text.match(/^if\s+[^,]+,\s*([\s\S]+)$/i);
+  if (leadingIf) {
+    text = leadingIf[1].trim();
+  }
 
   const nameBracket = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
   const nameFilter = nameBracket ? nameBracket[1].trim() : undefined;
@@ -411,7 +488,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   );
   const parsedMaxLimit = limitMatch ? parseInt(limitMatch[1], 10) : undefined;
 
-  // 0A. Prevent Retire in Contact (e.g., Tailor-made: "Choose 1 「Rarity」 with Inspiration 3 or less in your Adventure Area, it won't Retire in Contact until the end of turn.")
+  // 0A. Prevent Retire in Contact
   if (/won'?t\s+retire\s+in\s+contact|cannot\s+retire\s+in\s+contact/i.test(text)) {
     return {
       kind: 'PREVENT_RETIRE_IN_CONTACT',
@@ -553,7 +630,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 5. Negative Inspiration debuff on Rival character (e.g., Mrs. Cake: "Choose 1 Character in Rival's Adventure Area, it gets -2 Inspiration until the end of turn.")
+  // 5. Negative Inspiration debuff on Rival character
   const debuffMatch = text.match(/(?:–|-)\s*(\d+)\s*(?:Inspiration|Power)/i);
   if (debuffMatch && /rival|opponent/i.test(text)) {
     return {
@@ -585,7 +662,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     return { kind: 'TARGET_READY_FRIENDLY', amount: 1 };
   }
 
-  // 9. Recover from Retirement Area (Handles Steam Therapy: "Choose 1 Event with Cost ... in your Retirement Area, add it to Hand" AND Story Stage 3: "choose 1 「Rarity」 in your Retirement Area, add it to Hand")
+  // 9. Recover from Retirement Area
   if (/retirement\s+(?:area|pile)/i.test(text) && /add\s+(?:it|them)\s+to\s+(?:your\s+)?hand/i.test(text)) {
     const typeMatch = text.match(/choose\s+1\s+(Item|Event|Character|Scene)/i);
     return {

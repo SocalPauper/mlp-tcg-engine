@@ -51,7 +51,8 @@ interface PendingTargetSelection {
     | 'APPEAR_EFFECT'
     | 'FAREWELL_EFFECT'
     | 'PRE_PLAN_EFFECT'
-    | 'STORY_PROMOTION';
+    | 'STORY_PROMOTION'
+    | 'DELAYED_TRIGGER';
   sourceLane?: 'left' | 'center' | 'right';
   effectAction: string;
   value: number;
@@ -69,13 +70,26 @@ interface PendingHandChoice {
     | 'DISCARD_FROM_HAND'
     | 'DISCARD_THEN_DRAW'
     | 'RECOVER_FROM_RETIREMENT'
-    | 'PICK_REVEALED_TO_HAND';
+    | 'PICK_REVEALED_TO_HAND'
+    | 'END_PHASE_HAND_LIMIT';
   count: number;
   secondaryDrawCount?: number;
   promptText: string;
   candidateCards: CardDefinition[];
   validIndices?: number[];
   filterLabel?: string;
+}
+
+interface DelayedTriggerEntry {
+  id: string;
+  ownerId: '0' | '1';
+  ownerName: string;
+  sourceCard: CardDefinition;
+  sourceLane?: 'left' | 'center' | 'right';
+  timing: 'END_OF_YOUR_TURN' | 'END_OF_ANY_TURN';
+  conditionText?: string;
+  effectClause: string;
+  createdTurn: number;
 }
 
 interface ActionSpotlightEvent {
@@ -138,6 +152,7 @@ export interface LiveGameState {
     | 'CLASH_HOLD'
     | 'BREAKTHROUGH_CHOICE'
     | 'REVEAL_HOLD'
+    | 'END_PHASE'
     | 'GAME_OVER';
   firstPlayerId: '0' | '1';
   turnPlayerId: '0' | '1';
@@ -156,6 +171,7 @@ export interface LiveGameState {
   } | null;
   pendingTarget?: PendingTargetSelection | null;
   pendingHandChoice?: PendingHandChoice | null;
+  delayedTriggers?: DelayedTriggerEntry[];
   lastClashEvent: {
     id: number;
     lane: 'left' | 'center' | 'right';
@@ -257,7 +273,12 @@ function computeClientPowerDetails(
 
   const checkPassive = (rawText?: string): number => {
     const text = cleanCardText(rawText);
-    if (!text || /Inspo Boost|Inspiration Boost|Adventure\s*:|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted/i.test(text)) {
+    if (
+      !text ||
+      /Inspo Boost|Inspiration Boost|Adventure\s*:|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted|at the end of/i.test(
+        text
+      )
+    ) {
       return 0;
     }
     const m = text.match(/get[s]?\s*\+(\d+)\s*(?:Inspiration|Power)/i);
@@ -541,6 +562,12 @@ export default function GameBoard({
     }
 
     if (ownerSide === 'SELF' && gameState.phase === 'MAIN_PHASE' && selectedHandCard) {
+      const slot = me.adventureArea[lane];
+      const normType = String(selectedHandCard.type || '').toLowerCase();
+      // Rules v1.3.0 (503.2.1): Character cards only deploy to empty slots; Items only adorn occupied slots
+      if (normType.includes('character') && slot.character !== null) return;
+      if (normType === 'item' && slot.character === null) return;
+
       sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane });
       setSelectedHandCardId(null);
     }
@@ -587,6 +614,28 @@ export default function GameBoard({
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
+  // Map current GamePhase to the 4-step Rules v1.3.0 Phase Stepper
+  const activeStepIndex = (() => {
+    if (gameState.phase === 'VS_INTRO' || gameState.phase === 'MULLIGAN') return 0;
+    if (
+      gameState.phase === 'CONTACT_INSPIRE' ||
+      gameState.phase === 'CONTACT_RESOLUTION' ||
+      gameState.phase === 'CLASH_HOLD' ||
+      gameState.phase === 'BREAKTHROUGH_CHOICE' ||
+      gameState.phase === 'REVEAL_HOLD'
+    ) {
+      return 2;
+    }
+    if (
+      gameState.phase === 'END_PHASE' ||
+      gameState.pendingHandChoice?.choiceType === 'END_PHASE_HAND_LIMIT' ||
+      gameState.pendingTarget?.sourceOrigin === 'DELAYED_TRIGGER'
+    ) {
+      return 3;
+    }
+    return 1; // MAIN_PHASE / PENDING_TARGET / PENDING_HAND_CHOICE
+  })();
+
   const renderLaneStrip = (player: PlayerState, isOpponent: boolean) => {
     const ownerSide: 'SELF' | 'OPPONENT' = isOpponent ? 'OPPONENT' : 'SELF';
 
@@ -615,12 +664,14 @@ export default function GameBoard({
                 (t) => t.owner === ownerSide && t.lane === laneKey
               );
 
+            const selectedType = String(selectedHandCard?.type || '').toLowerCase();
             const isDeployTarget =
               !isOpponent &&
               isMyTurn &&
               gameState.phase === 'MAIN_PHASE' &&
               selectedHandCard &&
-              (selectedHandCard.type.toLowerCase() !== 'item' || slot.character !== null);
+              ((selectedType.includes('character') && slot.character === null) ||
+                (selectedType === 'item' && slot.character !== null));
 
             const isTargetable = Boolean(isPendingAbilityTarget || isDeployTarget);
 
@@ -736,7 +787,7 @@ export default function GameBoard({
                   </>
                 ) : (
                   <span className="slot-empty-label">
-                    {isTargetable ? 'Click to Select' : `${laneKey.toUpperCase()}`}
+                    {isTargetable ? 'Click to Deploy' : `${laneKey.toUpperCase()}`}
                   </span>
                 )}
               </div>
@@ -961,6 +1012,7 @@ export default function GameBoard({
 
   const winnerPlayer = gameState.winnerId ? gameState.players[gameState.winnerId] : null;
   const actionLogs = gameState.actionLog || [];
+  const delayedTriggers = gameState.delayedTriggers || [];
 
   return (
     <div className="kayou-playmat-wrapper">
@@ -1371,7 +1423,9 @@ export default function GameBoard({
               )}
 
               <div style={{ fontSize: '13px', color: '#34d399', fontWeight: 800 }}>
-                🃏 Card placed into {gameState.lastPlanRevealEvent.defenderName}&apos;s Hand!
+                {gameState.lastPlanRevealEvent.hasPrePlanTrigger
+                  ? `🪦 Pre-Plan resolved — ${gameState.lastPlanRevealEvent.revealedCard.name} moved to ${gameState.lastPlanRevealEvent.defenderName}'s Retirement Area!`
+                  : `🃏 Card placed into ${gameState.lastPlanRevealEvent.defenderName}'s Hand!`}
               </div>
 
               <div className="ack-status-row">
@@ -1667,7 +1721,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Dedicated Top Action Bar */}
+      {/* Dedicated Top Action Bar with 4-Step Rules v1.3.0 Turn-Phase Indicator */}
       <div
         className={`center-action-bar ${
           isMyTurn ? 'my-turn-bar' : isOppTurn ? 'opp-turn-bar' : ''
@@ -1679,7 +1733,22 @@ export default function GameBoard({
             {isMyTurn ? '🔵 YOUR TURN: ' : '🔴 OPPONENT TURN: '}
             <strong>{gameState.players[gameState.turnPlayerId].displayName}</strong>
           </span>
-          <span>• {gameState.phase.replace('_', ' ')}</span>
+
+          <div className="phase-stepper-bar" title="Rules v1.3.0 Turn Phases">
+            <span className={`phase-step-pill ${activeStepIndex === 0 ? 'active' : ''}`}>
+              1. Start
+            </span>
+            <span className={`phase-step-pill ${activeStepIndex === 1 ? 'active' : ''}`}>
+              2. Main
+            </span>
+            <span className={`phase-step-pill ${activeStepIndex === 2 ? 'active' : ''}`}>
+              3. Contact
+            </span>
+            <span className={`phase-step-pill ${activeStepIndex === 3 ? 'active' : ''}`}>
+              4. End
+            </span>
+          </div>
+
           <span style={{ fontSize: '11px', color: secondsLeft <= 30 ? '#fca5a5' : '#fde047' }}>
             ⏱️ {formatTimer(secondsLeft)}
           </span>
@@ -1764,6 +1833,30 @@ export default function GameBoard({
           </button>
         </div>
       </div>
+
+      {/* Delayed Triggers Queue Dock (Shows End-of-Turn Scheduled Effects) */}
+      {delayedTriggers.length > 0 && (
+        <div className="delayed-triggers-strip">
+          <strong style={{ color: '#fde047' }}>⏳ Queued End-of-Turn Triggers ({delayedTriggers.length}):</strong>
+          {delayedTriggers.map((trig) => (
+            <div
+              key={trig.id}
+              className="delayed-trigger-chip"
+              title="Click to inspect source card"
+              onClick={() => setInspectedCard(trig.sourceCard)}
+            >
+              {trig.sourceCard.imageUrl && (
+                <img src={trig.sourceCard.imageUrl} alt={trig.sourceCard.name} />
+              )}
+              <span>
+                <strong>{trig.ownerName}</strong> • {trig.sourceCard.name}:{' '}
+                {trig.conditionText ? `If ${trig.conditionText}, ` : ''}
+                {trig.effectClause}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* FULL-SCREEN DUAL-LANE ADVENTURE ARENA */}
       <div className="dual-adventure-arena">
