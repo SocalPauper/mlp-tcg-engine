@@ -66,7 +66,8 @@ function setActionSpotlight(
   title: string,
   subtitle: string,
   card?: CardDefinition | null,
-  lane?: LaneKey
+  lane?: LaneKey,
+  comicWord?: string
 ): KayouGameState {
   return {
     ...state,
@@ -75,6 +76,7 @@ function setActionSpotlight(
       actorId,
       actorName: state.players[actorId].displayName,
       actionType,
+      comicWord,
       title,
       subtitle,
       card: card || null,
@@ -94,6 +96,7 @@ function createEmptySlot(): AdventureSlot {
     hadTreat: false,
     presents: [],
     hadPresent: false,
+    preventRetireInContact: false,
   };
 }
 
@@ -396,7 +399,15 @@ export function resolveMulligan(
   return workingState;
 }
 
-function matchesFilter(card: CardDefinition, filter?: string, typeFilter?: string): boolean {
+function matchesFilter(
+  card: CardDefinition,
+  filter?: string,
+  typeFilter?: string,
+  maxCost?: number
+): boolean {
+  if (maxCost !== undefined && (Number(card.cost) || 0) > maxCost) {
+    return false;
+  }
   if (typeFilter) {
     const t = String(card.type || '').toLowerCase();
     const ft = typeFilter.trim().toLowerCase();
@@ -470,6 +481,33 @@ function buildPendingTargetFromParsed(
   const me = state.players[playerId];
   const opp = state.players[oppId];
   const allLanes: LaneKey[] = ['left', 'center', 'right'];
+
+  if (parsed.kind === 'PREVENT_RETIRE_IN_CONTACT') {
+    const validTargets = allLanes
+      .filter((l) => {
+        const c = me.adventureArea[l].character;
+        if (!c) return false;
+        if (!matchesFilter(c, parsed.requiredNameFilter)) return false;
+        if (parsed.maxLimit !== undefined) {
+          const totalPwr = calculateLanePowerBreakdown(state, playerId, l).totalPower;
+          return totalPwr <= parsed.maxLimit;
+        }
+        return true;
+      })
+      .map((l) => ({ owner: 'SELF' as const, lane: l }));
+    if (validTargets.length === 0) return null;
+    return {
+      sourceCard,
+      sourceOrigin,
+      sourceLane,
+      effectAction: 'PREVENT_RETIRE_IN_CONTACT',
+      value: 1,
+      maxTargetCostOrPower: parsed.maxLimit,
+      promptText: `${sourceCard.name}: Select a matching Character to protect from retiring in Contact:`,
+      validTargets,
+      resumeAttackQueue,
+    };
+  }
 
   if (parsed.kind === 'TARGET_BUFF_POWER' && !parsed.isSelfOnly) {
     const validTargets = allLanes
@@ -742,7 +780,7 @@ function buildPendingHandChoiceFromParsed(
 
   if (parsed.kind === 'RECOVER_RETIREMENT') {
     const matching = player.retirement.filter((c) =>
-      matchesFilter(c, parsed.requiredNameFilter, parsed.requiredTypeFilter)
+      matchesFilter(c, parsed.requiredNameFilter, parsed.requiredTypeFilter, parsed.maxLimit)
     );
     if (matching.length === 0) return null;
     return {
@@ -765,7 +803,9 @@ function buildPendingHandChoiceFromParsed(
     if (revealed.length === 0) return null;
     const validIndices = revealed
       .map((c, idx) =>
-        matchesFilter(c, parsed.requiredNameFilter, parsed.requiredTypeFilter) ? idx : -1
+        matchesFilter(c, parsed.requiredNameFilter, parsed.requiredTypeFilter, parsed.maxLimit)
+          ? idx
+          : -1
       )
       .filter((idx) => idx !== -1);
 
@@ -990,6 +1030,17 @@ function executeAppearOrFarewellEffect(
     card.name
   );
 
+  workingState = setActionSpotlight(
+    workingState,
+    playerId,
+    'TRIGGER_KEYWORD',
+    `${card.name} — ${type.toUpperCase()}!`,
+    subText,
+    card,
+    lane,
+    `${type.toUpperCase()}!`
+  );
+
   workingState = executeParsedImmediateEffect(workingState, playerId, card, parsed, lane);
   if (workingState.phase === 'GAME_OVER') return workingState;
 
@@ -1196,7 +1247,8 @@ export function playCardFromHand(
       `${player.displayName} played ${card.name}`,
       `Placed in ${lane.toUpperCase()} Adventure Lane`,
       card,
-      lane
+      lane,
+      'SUMMON!'
     );
 
     workingState = executeAppearOrFarewellEffect(workingState, playerId, card, lane, 'Appear');
@@ -1245,7 +1297,8 @@ export function playCardFromHand(
       `${player.displayName} adorned ${card.name}`,
       `Equipped onto ${currentSlot.character.name} (${lane.toUpperCase()} Lane)`,
       card,
-      lane
+      lane,
+      'ADORN!'
     );
   }
 
@@ -1276,7 +1329,9 @@ export function playCardFromHand(
     'PLAY_EVENT',
     `${player.displayName} played Event: ${card.name}`,
     sanitizeCardText(card.effectText) || 'Event activated',
-    card
+    card,
+    undefined,
+    'EVENT!'
   );
 
   const parsed = parseActivatedCardEffect(card);
@@ -1460,6 +1515,38 @@ export function resolveTargetSelection(
     }
     return nextState;
   };
+
+  if (pending.effectAction === 'PREVENT_RETIRE_IN_CONTACT' && targetOwner === 'SELF') {
+    const me = state.players[playerId];
+    const slot = me.adventureArea[targetLane];
+    if (!slot.character) return state;
+
+    const next = appendActionLog(
+      {
+        ...state,
+        phase: 'MAIN_PHASE',
+        pendingTarget: null,
+        players: {
+          ...state.players,
+          [playerId]: {
+            ...me,
+            adventureArea: {
+              ...me.adventureArea,
+              [targetLane]: {
+                ...slot,
+                preventRetireInContact: true,
+              },
+            },
+          },
+        },
+      },
+      me.displayName,
+      `protected ${slot.character.name} (${targetLane.toUpperCase()} lane) from retiring in Contact this turn!`,
+      'EFFECT',
+      pending.sourceCard.name
+    );
+    return finishAndResume(next);
+  }
 
   if (pending.effectAction === 'MOVE_FRIENDLY' && !pending.selectedFromLane) {
     if (targetOwner !== 'SELF' || !state.players[playerId].adventureArea[targetLane].character) {
@@ -1874,7 +1961,8 @@ export function activateCharacterAdventureAbility(
     `${player.displayName} activated Adventure!`,
     `${slot.character.name} (${lane.toUpperCase()} Lane)`,
     slot.character,
-    lane
+    lane,
+    'ADVENTURE!'
   );
 
   const parsed = parseActivatedCardEffect(slot.character);
@@ -1944,7 +2032,9 @@ export function activateManeLeaderAbility(
     'ACTIVATE_ABILITY',
     `${player.displayName} activated Mane Ability!`,
     player.leader.name,
-    player.leader
+    player.leader,
+    undefined,
+    'HARMONY!'
   );
 
   const parsed = parseActivatedCardEffect(player.leader);
@@ -2094,7 +2184,10 @@ export function startContactPhase(state: KayouGameState, playerId: '0' | '1'): K
     playerId,
     'ENTER_CONTACT',
     `${attacker.displayName} entered Encounter Phase!`,
-    `Resolving Left → Right: ${activeAttackLanes.map((l) => l.toUpperCase()).join(' → ')}`
+    `Resolving Left → Right: ${activeAttackLanes.map((l) => l.toUpperCase()).join(' → ')}`,
+    undefined,
+    undefined,
+    'CONTACT!'
   );
 
   return advanceToNextAttackLane(loggedState, playerId, activeAttackLanes);
@@ -2288,12 +2381,36 @@ export function passInspireInContact(
   );
 
   if (outcome === 'ATTACKER_WINS') {
-    workingState = retireCharacterWithFarewell(workingState, defenderId, lane);
+    if (!defSlot.preventRetireInContact) {
+      workingState = retireCharacterWithFarewell(workingState, defenderId, lane);
+    } else {
+      workingState = appendActionLog(
+        workingState,
+        defPlayer.displayName,
+        `${defSlot.character.name} was protected from retiring in Contact!`,
+        'EFFECT',
+        defSlot.character.name
+      );
+    }
   } else if (outcome === 'DEFENDER_WINS') {
-    workingState = retireCharacterWithFarewell(workingState, attackerId, lane);
+    if (!atkSlot.preventRetireInContact) {
+      workingState = retireCharacterWithFarewell(workingState, attackerId, lane);
+    } else {
+      workingState = appendActionLog(
+        workingState,
+        atkPlayer.displayName,
+        `${atkSlot.character.name} was protected from retiring in Contact!`,
+        'EFFECT',
+        atkSlot.character.name
+      );
+    }
   } else {
-    workingState = retireCharacterWithFarewell(workingState, attackerId, lane);
-    workingState = retireCharacterWithFarewell(workingState, defenderId, lane);
+    if (!atkSlot.preventRetireInContact) {
+      workingState = retireCharacterWithFarewell(workingState, attackerId, lane);
+    }
+    if (!defSlot.preventRetireInContact) {
+      workingState = retireCharacterWithFarewell(workingState, defenderId, lane);
+    }
   }
 
   const atkAfter = workingState.players[attackerId];
@@ -2467,9 +2584,9 @@ function executeStoryPromotionEffect(
     } else if (parsedPromotion.kind === 'DRAW_THEN_DISCARD') {
       effectSummary = `Story Promotion Effect: Drew ${parsedPromotion.amount} card(s) — select ${parsedPromotion.secondaryAmount} card to discard after acknowledging!`;
     } else if (parsedPromotion.kind === 'RECOVER_RETIREMENT') {
-      effectSummary = `Story Promotion Effect: Recover a ${
-        parsedPromotion.requiredNameFilter || 'card'
-      } from your Retirement Area!`;
+      effectSummary = `Story Promotion Effect: Select a ${
+        parsedPromotion.requiredNameFilter || parsedPromotion.requiredTypeFilter || 'card'
+      } from your Retirement Area after acknowledging!`;
     } else if (parsedPromotion.kind === 'TARGET_RETIRE_OPPONENT') {
       effectSummary = `Story Promotion Effect: Choose an opponent's Character to move to Retirement Area!`;
     } else if (parsedPromotion.kind === 'TARGET_BUFF_POWER') {
@@ -2568,7 +2685,8 @@ export function resolveBreakthroughChoice(
       `${attacker.displayName} Progressed Story!`,
       `Reached Story Stage ${nextProgress} / 4 (${activeLane.toUpperCase()} Lane)`,
       attacker.storyStages[nextProgress - 1]?.storyCard,
-      activeLane
+      activeLane,
+      'STORY UP!'
     );
 
     if (nextProgress >= 4) {
@@ -2666,7 +2784,8 @@ export function resolveBreakthroughChoice(
       `${attacker.displayName} Intervened!`,
       `Revealed ${defender.displayName}'s Stage ${targetStage.stage} Plan: ${revealedCard.name}`,
       revealedCard,
-      activeLane
+      activeLane,
+      'INTERVENE!'
     );
 
     const { nextState, hasPrePlanTrigger, effectSummary } = executePrePlanEffectAndReturnToHand(
@@ -2877,9 +2996,9 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     ...endingPlayer,
     actedLanesThisTurn: [],
     adventureArea: {
-      left: { ...endingPlayer.adventureArea.left, inspoBoost: 0 },
-      center: { ...endingPlayer.adventureArea.center, inspoBoost: 0 },
-      right: { ...endingPlayer.adventureArea.right, inspoBoost: 0 },
+      left: { ...endingPlayer.adventureArea.left, inspoBoost: 0, preventRetireInContact: false },
+      center: { ...endingPlayer.adventureArea.center, inspoBoost: 0, preventRetireInContact: false },
+      right: { ...endingPlayer.adventureArea.right, inspoBoost: 0, preventRetireInContact: false },
     },
   };
 
@@ -2930,9 +3049,9 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     sceneDeck: restScene,
     sceneArea: [...readiedExistingScenes, ...addedScenes],
     adventureArea: {
-      left: { ...startingPlayer.adventureArea.left, isExhausted: false },
-      center: { ...startingPlayer.adventureArea.center, isExhausted: false },
-      right: { ...startingPlayer.adventureArea.right, isExhausted: false },
+      left: { ...startingPlayer.adventureArea.left, isExhausted: false, preventRetireInContact: false },
+      center: { ...startingPlayer.adventureArea.center, isExhausted: false, preventRetireInContact: false },
+      right: { ...startingPlayer.adventureArea.right, isExhausted: false, preventRetireInContact: false },
     },
   };
 

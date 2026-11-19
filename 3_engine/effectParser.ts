@@ -358,6 +358,7 @@ export interface ParsedActivatedEffect {
     | 'TARGET_BUFF_POWER'
     | 'TARGET_DEBUFF_OPPONENT'
     | 'TARGET_RETIRE_OPPONENT'
+    | 'PREVENT_RETIRE_IN_CONTACT'
     | 'TARGET_MOVE_FRIENDLY'
     | 'SWITCH_POSITIONS'
     | 'TARGET_READY_FRIENDLY'
@@ -405,7 +406,22 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   const nameBracket = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
   const nameFilter = nameBracket ? nameBracket[1].trim() : undefined;
 
-  // 0A. Draw X, then discard Y
+  const limitMatch = text.match(
+    /(?:cost(?:\s+of\s+Force\s+of\s+Harmony)?|power|inspiration)\s*(\d+)\s*or\s*less/i
+  );
+  const parsedMaxLimit = limitMatch ? parseInt(limitMatch[1], 10) : undefined;
+
+  // 0A. Prevent Retire in Contact (e.g., Tailor-made: "Choose 1 「Rarity」 with Inspiration 3 or less in your Adventure Area, it won't Retire in Contact until the end of turn.")
+  if (/won'?t\s+retire\s+in\s+contact|cannot\s+retire\s+in\s+contact/i.test(text)) {
+    return {
+      kind: 'PREVENT_RETIRE_IN_CONTACT',
+      amount: 1,
+      maxLimit: parsedMaxLimit,
+      requiredNameFilter: nameFilter,
+    };
+  }
+
+  // 0B. Draw X, then discard Y
   const drawDiscardMatch = text.match(
     /draw\s+(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?discard\s+(\d+|a|an)\s+cards?/i
   );
@@ -419,7 +435,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 0B. Discard X, then draw Y
+  // 0C. Discard X, then draw Y
   const discardDrawMatch = text.match(
     /discard\s+(?:up\s+to\s+)?(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?draw\s+(\d+|a|an)\s+cards?/i
   );
@@ -434,7 +450,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 0C. Standalone Discard from Hand
+  // 0D. Standalone Discard from Hand
   const soloDiscardMatch = text.match(/discard\s+(\d+|a|an)\s+cards?\s+from\s+(?:your\s+)?hand/i);
   if (soloDiscardMatch) {
     const discRaw = soloDiscardMatch[1].toLowerCase();
@@ -444,7 +460,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 0D. Untap / Ready Scenes in Scene Area
+  // 0E. Untap / Ready Scenes in Scene Area
   const untapSceneMatch = text.match(
     /(?:choose|ready|untap)\s+(\d+|a|an)\s+(?:face-down\s+|exhausted\s+|tapped\s+)?scenes?\s+in\s+your\s+scene\s+area/i
   );
@@ -456,7 +472,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 0E. Reveal top X cards of Deck, choose 1 matching card to add to Hand
+  // 0F. Reveal top X cards of Deck, choose 1 matching card to add to Hand
   const revealPickMatch = text.match(
     /reveal\s+the\s+top\s+(\d+)\s+cards?\s+of\s+(?:your|the)\s+deck.*?choose\s+1\s+(Item|Event|Character|Scene|card|[｢\[「][^｣\]」]+[｣\]」])/i
   );
@@ -537,8 +553,8 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 5. Negative Inspiration debuff on Rival character
-  const debuffMatch = text.match(/[–-]\s*(\d+)\s*(?:Inspiration|Power)/i);
+  // 5. Negative Inspiration debuff on Rival character (e.g., Mrs. Cake: "Choose 1 Character in Rival's Adventure Area, it gets -2 Inspiration until the end of turn.")
+  const debuffMatch = text.match(/(?:–|-)\s*(\d+)\s*(?:Inspiration|Power)/i);
   if (debuffMatch && /rival|opponent/i.test(text)) {
     return {
       kind: 'TARGET_DEBUFF_OPPONENT',
@@ -557,13 +573,10 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       text
     )
   ) {
-    const limitMatch = text.match(
-      /(?:cost(?:\s+of\s+Force\s+of\s+Harmony)?|power|inspiration)\s*(\d+)\s*or\s*less/i
-    );
     return {
       kind: 'TARGET_RETIRE_OPPONENT',
       amount: 1,
-      maxLimit: limitMatch ? parseInt(limitMatch[1], 10) : undefined,
+      maxLimit: parsedMaxLimit,
     };
   }
 
@@ -572,16 +585,13 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     return { kind: 'TARGET_READY_FRIENDLY', amount: 1 };
   }
 
-  // 9. Recover from Retirement Area
-  if (
-    /in\s+your\s+retirement\s+(?:area\s+|pile\s+)?(?:,|\s)*add\s+(?:it|them)\s+to\s+(?:your\s+)?hand|from\s+your\s+retirement\s+(?:area\s+|pile\s+)?to\s+(?:your\s+)?hand/i.test(
-      text
-    )
-  ) {
+  // 9. Recover from Retirement Area (Handles Steam Therapy: "Choose 1 Event with Cost ... in your Retirement Area, add it to Hand" AND Story Stage 3: "choose 1 「Rarity」 in your Retirement Area, add it to Hand")
+  if (/retirement\s+(?:area|pile)/i.test(text) && /add\s+(?:it|them)\s+to\s+(?:your\s+)?hand/i.test(text)) {
     const typeMatch = text.match(/choose\s+1\s+(Item|Event|Character|Scene)/i);
     return {
       kind: 'RECOVER_RETIREMENT',
       amount: 1,
+      maxLimit: parsedMaxLimit,
       requiredTypeFilter: typeMatch ? typeMatch[1] : undefined,
       requiredNameFilter: nameFilter,
     };

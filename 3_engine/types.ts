@@ -1,455 +1,276 @@
-import { WebSocket, WebSocketServer } from 'ws';
-import crypto from 'crypto';
-import { KayouGameState, DeckId, HydratedDeckPayload, CardDefinition } from './types.js';
-import {
-  createWaitingMatch,
-  startSeatedMatch,
-  acknowledgeVsIntro,
-  resolveMulligan,
-  playCardFromHand,
-  resolveTargetSelection,
-  cancelTargetSelection,
-  resolveHandChoice,
-  activateCharacterAdventureAbility,
-  activateManeLeaderAbility,
-  startContactPhase,
-  inspireInContact,
-  passInspireInContact,
-  acknowledgeClashAnimation,
-  resolveBreakthroughChoice,
-  acknowledgePlanReveal,
-  acknowledgeStoryReveal,
-  forfeitMatch,
-  endTurn,
-} from './gameRules.js';
-import { pool } from '../../4_data/db.js';
-import { recordRankedMatchResult } from '../routes/ranked.js';
+export type DeckId = string;
 
-interface RoomClient {
-  ws: WebSocket;
-  seat: '0' | '1' | 'spectator';
-  roomCode: string;
-  selectedDeck: DeckId;
-  userId?: string;
-  displayName?: string;
-  sessionToken: string;
+export type CardType =
+  | 'Mane Character'
+  | 'MainCharacter'
+  | 'Character'
+  | 'Friend Character'
+  | 'Item'
+  | 'Event'
+  | 'Scene'
+  | 'Story'
+  | 'Plan';
+
+export type HarmonyColor =
+  | 'Magic'
+  | 'Honesty'
+  | 'Loyalty'
+  | 'Laughter'
+  | 'Generosity'
+  | 'Kindness'
+  | 'Everyday'
+  | 'None';
+
+export interface CardDefinition {
+  id: string;
+  cardNumber: string;
+  name: string;
+  type: CardType | string;
+  element: HarmonyColor | string;
+  cost: number;
+  power: number;
+  defense: number;
+  traits?: string;
+  effectText?: string;
+  imageUrl?: string;
+  rarity?: string;
+  setCode?: string;
 }
 
-interface Room {
-  code: string;
-  state: KayouGameState;
-  clients: RoomClient[];
-  deckP0: DeckId;
-  deckP1: DeckId;
-  userIdP0?: string;
-  userIdP1?: string;
-  nameP0: string;
-  nameP1: string;
-  isRanked: boolean;
-  rankedRecorded: boolean;
+export interface SceneCardInPlay {
+  card: CardDefinition;
+  isFaceUp: boolean;
+  isExhausted: boolean;
+  isLockedFaceDown: boolean;
 }
 
-async function loadHydratedDeck(deckId: string): Promise<HydratedDeckPayload> {
-  const cardsRes = await pool.query(`SELECT * FROM game.cards;`);
-  const cardMap = new Map<string, CardDefinition>();
-  for (const row of cardsRes.rows) {
-    cardMap.set(String(row.id).toLowerCase(), {
-      id: row.id,
-      cardNumber: row.card_number || row.id,
-      name: row.name,
-      type: row.card_type,
-      element: row.element || 'Everyday',
-      cost: Number(row.cost) || 0,
-      power: Number(row.power) || 0,
-      defense: Number(row.defense) || 0,
-      traits: row.traits || '',
-      effectText: row.effect_text || '',
-      imageUrl: row.image_url || '',
-      rarity: row.rarity || 'C',
-      setCode: row.set_code || '',
-    });
-  }
+export interface StoryStageSlot {
+  stage: 1 | 2 | 3 | 4;
+  storyCard: CardDefinition | null;
+  isStoryCompleted: boolean;
+  planCard: CardDefinition | null;
+  isPlanRevealed: boolean;
+}
 
-  let rawDeck: any = null;
-  if (deckId && !deckId.startsWith('starter-')) {
-    const deckRes = await pool.query(`SELECT * FROM auth.decks WHERE id = $1 LIMIT 1;`, [deckId]);
-    rawDeck = deckRes.rows[0] || null;
-  }
+export interface AdventureSlot {
+  character: CardDefinition | null;
+  items: CardDefinition[];
+  inspoBoost: number;
+  isExhausted: boolean;
+  treats: number;
+  hadTreat: boolean;
+  presents: CardDefinition[];
+  hadPresent: boolean;
+  preventRetireInContact?: boolean;
+}
 
-  const parsedCards =
-    rawDeck?.cards && typeof rawDeck.cards === 'string'
-      ? JSON.parse(rawDeck.cards)
-      : rawDeck?.cards || {};
+export interface PowerModifierLine {
+  sourceName: string;
+  sourceType: 'BASE' | 'ITEM' | 'MANE_PASSIVE' | 'SCENE_PASSIVE' | 'STORY_PASSIVE' | 'INSPO_BOOST';
+  amount: number;
+}
 
-  let maneId = rawDeck?.mane_character;
-  if (maneId && typeof maneId === 'object') maneId = maneId.id || maneId.card_id;
-  if (typeof maneId === 'string' && maneId.startsWith('{')) {
-    try {
-      maneId = JSON.parse(maneId).id;
-    } catch {
-      // keep raw
-    }
-  }
+export interface LanePowerBreakdown {
+  basePower: number;
+  modifiers: PowerModifierLine[];
+  totalPower: number;
+}
 
-  const resolveList = (ids: any[]): CardDefinition[] => {
-    const out: CardDefinition[] = [];
-    for (const entry of Array.isArray(ids) ? ids : []) {
-      const id = typeof entry === 'string' ? entry : entry?.id || entry?.card_id;
-      const qty = typeof entry === 'object' && entry?.quantity ? Number(entry.quantity) : 1;
-      const found = id ? cardMap.get(String(id).toLowerCase()) : undefined;
-      if (found) {
-        for (let i = 0; i < qty; i++) out.push(found);
-      }
-    }
-    return out;
+export type PendingEffectAction =
+  | 'BUFF_POWER'
+  | 'DEBUFF_OPPONENT'
+  | 'RETIRE_OPPONENT'
+  | 'PREVENT_RETIRE_IN_CONTACT'
+  | 'MOVE_FRIENDLY'
+  | 'SWITCH_POSITIONS'
+  | 'READY_FRIENDLY'
+  | 'TREAT_CHARACTER'
+  | 'DELIVER_PRESENT'
+  | 'UNWRAP_PRESENT';
+
+export interface PendingTargetSelection {
+  sourceCard: CardDefinition;
+  sourceOrigin:
+    | 'HAND_EVENT'
+    | 'ADVENTURE_TAP'
+    | 'MANE_ABILITY'
+    | 'APPEAR_EFFECT'
+    | 'FAREWELL_EFFECT'
+    | 'PRE_PLAN_EFFECT'
+    | 'STORY_PROMOTION';
+  sourceLane?: LaneKey;
+  effectAction: PendingEffectAction;
+  value: number;
+  maxTargetCostOrPower?: number;
+  promptText: string;
+  validTargets: {
+    owner: 'SELF' | 'OPPONENT';
+    lane: LaneKey;
+  }[];
+  selectedFromLane?: LaneKey;
+  resumeAttackQueue?: LaneKey[] | null;
+}
+
+export interface PendingHandChoice {
+  sourceCard: CardDefinition;
+  playerId?: '0' | '1';
+  choiceType:
+    | 'DISCARD_FROM_HAND'
+    | 'DISCARD_THEN_DRAW'
+    | 'RECOVER_FROM_RETIREMENT'
+    | 'PICK_REVEALED_TO_HAND';
+  count: number;
+  secondaryDrawCount?: number;
+  promptText: string;
+  candidateCards: CardDefinition[];
+  validIndices?: number[];
+  filterLabel?: string;
+  resumeAttackQueue?: LaneKey[] | null;
+}
+
+export interface ActionSpotlightEvent {
+  id: string;
+  actorId: '0' | '1';
+  actorName: string;
+  actionType:
+    | 'PLAY_CHARACTER'
+    | 'ADORN_ITEM'
+    | 'PLAY_EVENT'
+    | 'ACTIVATE_ABILITY'
+    | 'ENTER_CONTACT'
+    | 'INTERVENE_PLAN'
+    | 'PROGRESS_STORY'
+    | 'TRIGGER_KEYWORD';
+  comicWord?: string;
+  title: string;
+  subtitle: string;
+  card?: CardDefinition | null;
+  lane?: LaneKey;
+  timestamp: number;
+}
+
+export interface ActionLogEntry {
+  id: string;
+  turn: number;
+  actor: string;
+  sourceCard?: string;
+  text: string;
+  category: 'PLAY' | 'EFFECT' | 'CLASH' | 'STORY' | 'SYSTEM';
+  timestamp: number;
+}
+
+export interface PlayerState {
+  id: '0' | '1';
+  displayName: string;
+  leader: CardDefinition | null;
+  leaderAbilityUsedThisTurn: boolean;
+  mainDeck: CardDefinition[];
+  sceneDeck: CardDefinition[];
+  hand: CardDefinition[];
+  retirement: CardDefinition[];
+  sceneArea: SceneCardInPlay[];
+  storyStages: StoryStageSlot[];
+  storyProgress: number;
+  adventureArea: {
+    left: AdventureSlot;
+    center: AdventureSlot;
+    right: AdventureSlot;
   };
-
-  const allCards = Array.from(cardMap.values());
-  const defaultLeader =
-    (maneId && cardMap.get(String(maneId).toLowerCase())) ||
-    allCards.find((c) => String(c.type).toLowerCase().includes('mane')) ||
-    allCards[0];
-
-  const storyDeck = resolveList(parsedCards.story_deck || parsedCards.stories);
-  const sceneDeck = resolveList(parsedCards.scene_deck || parsedCards.scenes);
-  const mainDeck = resolveList(parsedCards.main_deck || parsedCards.main);
-
-  return {
-    leader: defaultLeader,
-    storyDeck:
-      storyDeck.length >= 4
-        ? storyDeck.slice(0, 4)
-        : allCards.filter((c) => String(c.type).toLowerCase() === 'story').slice(0, 4),
-    sceneDeck:
-      sceneDeck.length >= 10
-        ? sceneDeck
-        : allCards.filter((c) => String(c.type).toLowerCase() === 'scene').slice(0, 15),
-    mainDeck:
-      mainDeck.length >= 30
-        ? mainDeck
-        : allCards.filter((c) => String(c.type).toLowerCase().includes('character')).slice(0, 50),
-  };
+  mulliganStatus: 'PENDING' | 'KEPT' | 'MULLIGANED';
+  turnsTaken: number;
+  actedLanesThisTurn: LaneKey[];
+  isConnected?: boolean;
 }
 
-export class GameManager {
-  private rooms = new Map<string, Room>();
-  private wss: WebSocketServer;
+export type GamePhase =
+  | 'WAITING_FOR_PLAYERS'
+  | 'VS_INTRO'
+  | 'MULLIGAN'
+  | 'MAIN_PHASE'
+  | 'PENDING_TARGET'
+  | 'PENDING_HAND_CHOICE'
+  | 'CONTACT_INSPIRE'
+  | 'CONTACT_RESOLUTION'
+  | 'CLASH_HOLD'
+  | 'BREAKTHROUGH_CHOICE'
+  | 'REVEAL_HOLD'
+  | 'GAME_OVER';
 
-  constructor(server: any) {
-    this.wss = new WebSocketServer({ server });
-    this.initListeners();
-  }
+export type LaneKey = 'left' | 'center' | 'right';
 
-  private initListeners() {
-    this.wss.on('connection', (ws: WebSocket) => {
-      let userSession: RoomClient | null = null;
+export interface ContactCombatState {
+  activeLane: LaneKey;
+  laneQueue: LaneKey[];
+  promptPlayerId: '0' | '1';
+  consecutivePasses: number;
+  attackerPower: number;
+  defenderPower: number;
+}
 
-      const handleClientLeave = () => {
-        if (!userSession) return;
-        const room = this.rooms.get(userSession.roomCode);
-        if (room) {
-          room.clients = room.clients.filter((c) => c.ws !== ws);
-          if (userSession.seat === '0' || userSession.seat === '1') {
-            room.state = {
-              ...room.state,
-              players: {
-                ...room.state.players,
-                [userSession.seat]: {
-                  ...room.state.players[userSession.seat],
-                  isConnected: false,
-                },
-              },
-            };
-          }
-          if (room.clients.length === 0) {
-            this.rooms.delete(room.code);
-          } else {
-            this.broadcastRoomState(room);
-          }
-        }
-        userSession = null;
-        this.broadcastLobbyRooms();
-      };
+export interface ClashAnimationEvent {
+  id: number;
+  lane: LaneKey;
+  attackerCard: CardDefinition;
+  defenderCard: CardDefinition;
+  attackerTotalPower: number;
+  defenderTotalPower: number;
+  outcome: 'ATTACKER_WINS' | 'DEFENDER_WINS' | 'TIE';
+  acknowledgedBy: ('0' | '1')[];
+}
 
-      ws.on('message', async (rawMessage: string) => {
-        try {
-          const message = JSON.parse(rawMessage);
+export interface PlanRevealEvent {
+  id: number;
+  stage: 1 | 2 | 3 | 4;
+  defenderId: '0' | '1';
+  defenderName: string;
+  revealedCard: CardDefinition;
+  hasPrePlanTrigger: boolean;
+  triggeredEffectSummary: string | null;
+  acknowledgedBy: ('0' | '1')[];
+}
 
-          if (message.type === 'PING') {
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'PONG' }));
-            }
-            return;
-          }
+export interface StoryRevealEvent {
+  id: number;
+  stage: 1 | 2 | 3 | 4;
+  attackerId: '0' | '1';
+  attackerName: string;
+  storyCard: CardDefinition;
+  triggeredEffectSummary: string | null;
+  acknowledgedBy: ('0' | '1')[];
+  isGameWinningStage: boolean;
+}
 
-          if (message.type === 'GET_ROOMS') {
-            this.broadcastLobbyRooms();
-            return;
-          }
+export interface PublicAnnouncement {
+  type: string;
+  message: string;
+  timestamp: number;
+}
 
-          if (message.type === 'CREATE_ROOM') {
-            if (userSession) handleClientLeave();
-            const roomCode = (
-              message.roomCode || `pony-${Math.floor(1000 + Math.random() * 9000)}`
-            )
-              .trim()
-              .toLowerCase();
-            const p0DeckId: DeckId = message.deckId || 'starter-twilight';
-            const p0Name = message.displayName || 'Player 1';
-            const sessionToken = crypto.randomUUID();
+export interface HydratedDeckPayload {
+  leader: CardDefinition;
+  storyDeck: CardDefinition[];
+  sceneDeck: CardDefinition[];
+  mainDeck: CardDefinition[];
+}
 
-            const room: Room = {
-              code: roomCode,
-              state: createWaitingMatch(),
-              clients: [],
-              deckP0: p0DeckId,
-              deckP1: 'starter-rainbow',
-              userIdP0: message.userId ? String(message.userId) : undefined,
-              nameP0: p0Name,
-              nameP1: 'Player 2',
-              isRanked: Boolean(message.isRanked),
-              rankedRecorded: false,
-            };
-            room.state.roomId = roomCode;
-            this.rooms.set(roomCode, room);
-
-            userSession = {
-              ws,
-              seat: '0',
-              roomCode,
-              selectedDeck: p0DeckId,
-              userId: message.userId ? String(message.userId) : undefined,
-              displayName: p0Name,
-              sessionToken,
-            };
-            room.clients.push(userSession);
-            this.broadcastRoomState(room);
-            this.broadcastLobbyRooms();
-            return;
-          }
-
-          if (message.type === 'JOIN_ROOM') {
-            if (userSession && userSession.roomCode !== message.roomCode) handleClientLeave();
-            const roomCode = (message.roomCode || '').trim().toLowerCase();
-            const chosenDeckId: DeckId = message.deckId || 'starter-rainbow';
-            const joinerName = message.displayName || 'Player 2';
-            const sessionToken = crypto.randomUUID();
-            let room = this.rooms.get(roomCode);
-
-            if (!room) {
-              room = {
-                code: roomCode,
-                state: createWaitingMatch(),
-                clients: [],
-                deckP0: 'starter-twilight',
-                deckP1: chosenDeckId,
-                nameP0: 'Player 1',
-                nameP1: joinerName,
-                isRanked: Boolean(message.isRanked),
-                rankedRecorded: false,
-              };
-              room.state.roomId = roomCode;
-              this.rooms.set(roomCode, room);
-            }
-
-            room.clients = room.clients.filter(
-              (c) => c.ws.readyState === WebSocket.OPEN && c.ws !== ws
-            );
-            const assignedSeat = room.clients.some((c) => c.seat === '0') ? '1' : '0';
-
-            if (assignedSeat === '0') {
-              room.deckP0 = chosenDeckId;
-              room.nameP0 = joinerName;
-              if (message.userId) room.userIdP0 = String(message.userId);
-            } else {
-              room.deckP1 = chosenDeckId;
-              room.nameP1 = joinerName;
-              if (message.userId) room.userIdP1 = String(message.userId);
-            }
-
-            userSession = {
-              ws,
-              seat: assignedSeat,
-              roomCode,
-              selectedDeck: chosenDeckId,
-              userId: message.userId ? String(message.userId) : undefined,
-              displayName: joinerName,
-              sessionToken,
-            };
-            room.clients.push(userSession);
-
-            await this.checkAndStartMatch(room);
-            this.broadcastRoomState(room);
-            this.broadcastLobbyRooms();
-            return;
-          }
-
-          if (message.type === 'RECONNECT_MATCH') {
-            const roomCode = String(message.roomCode || '').trim().toLowerCase();
-            const seat = message.seat as '0' | '1';
-            const room = this.rooms.get(roomCode);
-            if (!room || (seat !== '0' && seat !== '1')) {
-              ws.send(JSON.stringify({ type: 'RECONNECT_FAILED' }));
-              return;
-            }
-            userSession = {
-              ws,
-              seat,
-              roomCode,
-              selectedDeck: seat === '0' ? room.deckP0 : room.deckP1,
-              sessionToken: message.sessionToken || crypto.randomUUID(),
-            };
-            room.clients = room.clients.filter((c) => c.seat !== seat);
-            room.clients.push(userSession);
-            room.state = {
-              ...room.state,
-              players: {
-                ...room.state.players,
-                [seat]: {
-                  ...room.state.players[seat],
-                  isConnected: true,
-                },
-              },
-            };
-            this.broadcastRoomState(room);
-            return;
-          }
-
-          if (message.type === 'GAME_ACTION' && userSession) {
-            const room = this.rooms.get(userSession.roomCode);
-            if (!room) return;
-
-            const { action, payload } = message;
-            if (userSession.seat === '0' || userSession.seat === '1') {
-              room.state = this.processGameAction(room.state, userSession.seat, action, payload);
-
-              if (
-                room.state.phase === 'GAME_OVER' &&
-                room.state.winnerId &&
-                !room.rankedRecorded &&
-                room.userIdP0 &&
-                room.userIdP1
-              ) {
-                room.rankedRecorded = true;
-                const winnerId = room.state.winnerId === '0' ? room.userIdP0 : room.userIdP1;
-                const loserId = room.state.winnerId === '0' ? room.userIdP1 : room.userIdP0;
-                recordRankedMatchResult(winnerId, loserId).catch((err) =>
-                  console.error('[RANKED RECORD ERROR]', err)
-                );
-              }
-
-              this.broadcastRoomState(room);
-            }
-            return;
-          }
-
-          if (message.type === 'LEAVE_ROOM') {
-            handleClientLeave();
-            return;
-          }
-        } catch (err) {
-          console.error('[WS ERROR]', err);
-        }
-      });
-
-      ws.on('close', () => {
-        handleClientLeave();
-      });
-    });
-  }
-
-  private broadcastLobbyRooms() {
-    const roomList = Array.from(this.rooms.values()).map((r) => ({
-      code: r.code,
-      playerCount: r.clients.filter((c) => c.seat === '0' || c.seat === '1').length,
-      isRanked: r.isRanked,
-    }));
-    const payload = JSON.stringify({ type: 'ROOMS_LIST', rooms: roomList });
-    for (const client of this.wss.clients) {
-      if (client.readyState === WebSocket.OPEN) client.send(payload);
-    }
-  }
-
-  private broadcastRoomState(room: Room) {
-    for (const client of room.clients) {
-      if (client.ws.readyState === WebSocket.OPEN) {
-        client.ws.send(
-          JSON.stringify({
-            type: 'STATE_UPDATE',
-            roomCode: room.code,
-            sessionToken: client.sessionToken,
-            state: room.state,
-            seat: client.seat,
-            clientCount: room.clients.length,
-          })
-        );
-      }
-    }
-  }
-
-  private async checkAndStartMatch(room: Room) {
-    const client0 = room.clients.find((c) => c.seat === '0');
-    const client1 = room.clients.find((c) => c.seat === '1');
-
-    if (client0 && client1 && room.state.phase === 'WAITING_FOR_PLAYERS') {
-      const [deck0, deck1] = await Promise.all([
-        loadHydratedDeck(room.deckP0),
-        loadHydratedDeck(room.deckP1),
-      ]);
-      room.state = startSeatedMatch(deck0, deck1, room.nameP0, room.nameP1);
-      room.state.roomId = room.code;
-    }
-  }
-
-  private processGameAction(
-    state: KayouGameState,
-    playerId: '0' | '1',
-    action: string,
-    payload: any
-  ): KayouGameState {
-    switch (action) {
-      case 'ACK_VS_INTRO':
-        return acknowledgeVsIntro(state);
-      case 'RESOLVE_MULLIGAN':
-        return resolveMulligan(state, playerId, Boolean(payload?.doMulligan));
-      case 'PLAY_CARD':
-      case 'PLAY_CHARACTER':
-        return playCardFromHand(state, playerId, payload?.cardId, payload?.lane || payload?.laneIndex);
-      case 'RESOLVE_TARGET':
-        return resolveTargetSelection(state, playerId, payload?.owner, payload?.lane);
-      case 'CANCEL_TARGET':
-        return cancelTargetSelection(state, playerId);
-      case 'RESOLVE_HAND_CHOICE':
-        return resolveHandChoice(state, playerId, payload?.selectedIndices || []);
-      case 'ACTIVATE_ADVENTURE':
-        return activateCharacterAdventureAbility(state, playerId, payload?.lane);
-      case 'ACTIVATE_MANE':
-        return activateManeLeaderAbility(state, playerId);
-      case 'START_CONTACT':
-        return startContactPhase(state, playerId);
-      case 'INSPIRE_CONTACT':
-        return inspireInContact(state, playerId, Number(payload?.sceneIndex));
-      case 'PASS_INSPIRE':
-        return passInspireInContact(state, playerId);
-      case 'ACK_CLASH':
-        return acknowledgeClashAnimation(state, playerId);
-      case 'BREAKTHROUGH_CHOICE':
-        return resolveBreakthroughChoice(state, playerId, payload?.choice);
-      case 'ACK_PLAN_REVEAL':
-        return acknowledgePlanReveal(state, playerId);
-      case 'ACK_STORY_REVEAL':
-        return acknowledgeStoryReveal(state, playerId);
-      case 'FORFEIT':
-        return forfeitMatch(
-          state,
-          playerId,
-          `${state.players[playerId].displayName} forfeited the match.`
-        );
-      case 'END_TURN':
-      case 'ADVANCE_PHASE':
-        return endTurn(state, playerId);
-      default:
-        return state;
-    }
-  }
+export interface KayouGameState {
+  roomId: string;
+  phase: GamePhase;
+  firstPlayerId: '0' | '1';
+  turnPlayerId: '0' | '1';
+  turnNumber: number;
+  winnerId: '0' | '1' | null;
+  winReason?: string | null;
+  turnDeadlineMs?: number;
+  players: Record<'0' | '1', PlayerState>;
+  contactState: ContactCombatState | null;
+  pendingTarget: PendingTargetSelection | null;
+  pendingHandChoice?: PendingHandChoice | null;
+  pendingLaneQueueAfterReveal: LaneKey[] | null;
+  lastClashEvent: ClashAnimationEvent | null;
+  lastPlanRevealEvent: PlanRevealEvent | null;
+  lastStoryRevealEvent: StoryRevealEvent | null;
+  lastActionBanner?: ActionSpotlightEvent | null;
+  announcements: PublicAnnouncement[];
+  actionLog: ActionLogEntry[];
 }

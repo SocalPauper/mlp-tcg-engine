@@ -39,6 +39,7 @@ interface AdventureSlot {
   isExhausted?: boolean;
   treats?: number;
   presents?: CardDefinition[];
+  preventRetireInContact?: boolean;
 }
 
 interface PendingTargetSelection {
@@ -82,6 +83,7 @@ interface ActionSpotlightEvent {
   actorId: '0' | '1';
   actorName: string;
   actionType: string;
+  comicWord?: string;
   title: string;
   subtitle: string;
   card?: CardDefinition | null;
@@ -430,7 +432,7 @@ export default function GameBoard({
     return () => clearTimeout(timer);
   }, []);
 
-  // Trigger prominent visual Action Spotlight Banner & Lane Pulse whenever a major game action occurs
+  // Trigger prominent visual Action Spotlight Banner & Comic Lane Burst whenever a major game action occurs
   useEffect(() => {
     const banner = gameState.lastActionBanner;
     if (!banner) return;
@@ -649,6 +651,12 @@ export default function GameBoard({
                 onTouchStart={() => handleTouchStartInspect(slot.character)}
                 onTouchEnd={handleTouchEndInspect}
               >
+                {isSpotlightLane && spotlightBanner?.comicWord && (
+                  <div key={spotlightBanner.id} className="comic-burst-badge">
+                    {spotlightBanner.comicWord}
+                  </div>
+                )}
+
                 {slot.character && details ? (
                   <>
                     <div
@@ -668,12 +676,34 @@ export default function GameBoard({
                     <div className={`deployed-char-card ${slot.isExhausted ? 'exhausted' : ''}`}>
                       <img src={slot.character.imageUrl} alt={slot.character.name} />
                       {slot.items.length > 0 && (
-                        <div className="item-count-tag">Item: {slot.items[0].name}</div>
+                        <div
+                          className="item-count-tag"
+                          title="Click to inspect adorned Item card"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInspectedCard(slot.items[0]);
+                          }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setInspectedCard(slot.items[0]);
+                          }}
+                        >
+                          🗡️ {slot.items[0].name}
+                        </div>
+                      )}
+                      {slot.preventRetireInContact && (
+                        <div
+                          className="item-count-tag"
+                          style={{ top: slot.items.length > 0 ? '26px' : '4px', borderColor: '#fde047' }}
+                        >
+                          🛡️ Contact Shield
+                        </div>
                       )}
                       {(hasActedThisTurn || slot.isExhausted) && (
                         <div
                           className="item-count-tag"
-                          style={{ top: 'auto', bottom: '4px', left: '4px', color: '#fde047' }}
+                          style={{ top: 'auto', bottom: '4px', left: '4px', right: 'auto', color: '#fde047' }}
                         >
                           {slot.isExhausted ? 'Tapped ↷' : 'Acted ✓'}
                         </div>
@@ -940,7 +970,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Visual Action Spotlight Banner (Opponent & Self Move Alert) */}
+      {/* Visual Action Spotlight Banner with Comic Callout */}
       {spotlightBanner && (
         <div className="action-spotlight-banner">
           {spotlightBanner.card?.imageUrl && (
@@ -948,9 +978,12 @@ export default function GameBoard({
           )}
           <div>
             <div style={{ fontSize: '12px', fontWeight: 900, color: '#fde047', textTransform: 'uppercase' }}>
-              ✨ {spotlightBanner.title}
+              {spotlightBanner.comicWord && (
+                <span className="spotlight-comic-tag">{spotlightBanner.comicWord}</span>
+              )}
+              {spotlightBanner.title}
             </div>
-            <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#fce7f3', marginTop: '2px' }}>
+            <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#fce7f3', marginTop: '3px' }}>
               {spotlightBanner.subtitle}
             </div>
           </div>
@@ -1110,10 +1143,10 @@ export default function GameBoard({
       {showHandChoiceModalForMe && gameState.pendingHandChoice && (
         <div className="inspector-backdrop">
           <div className="hand-choice-modal">
-            <h3 style={{ margin: 0, color: '#fde047', fontSize: '20px' }}>
+            <h3 style={{ margin: 0, color: '#fde047', fontSize: '21px' }}>
               ✨ {gameState.pendingHandChoice.sourceCard.name} — Decision Required
             </h3>
-            <p style={{ margin: 0, fontSize: '13.5px', color: '#fbcfe8', textAlign: 'center' }}>
+            <p style={{ margin: 0, fontSize: '14.5px', color: '#fbcfe8', textAlign: 'center' }}>
               {gameState.pendingHandChoice.promptText}
             </p>
 
@@ -1143,7 +1176,7 @@ export default function GameBoard({
                     onContextMenu={(e) => handleContextMenu(e, card)}
                   >
                     <img src={card.imageUrl || CARD_BACK_URL} alt={card.name} />
-                    <span style={{ fontSize: '10px', fontWeight: 800, textAlign: 'center' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, textAlign: 'center' }}>
                       {isPicked ? '✅ Selected' : isValidChoice ? card.name : 'Not Eligible'}
                     </span>
                   </div>
@@ -1154,7 +1187,7 @@ export default function GameBoard({
             <button
               type="button"
               className="action-bar-btn gold"
-              style={{ fontSize: '14px', padding: '10px 28px' }}
+              style={{ fontSize: '15px', padding: '12px 32px' }}
               disabled={pickedChoiceIndices.length < gameState.pendingHandChoice.count}
               onClick={() =>
                 sendAction('RESOLVE_HAND_CHOICE', { selectedIndices: pickedChoiceIndices })
@@ -1173,7 +1206,7 @@ export default function GameBoard({
             <h3 style={{ margin: 0, color: '#fde047', fontSize: '20px' }}>
               ✨ Inspiration Boost Step — {gameState.contactState.activeLane.toUpperCase()} Lane Contact
             </h3>
-            <div style={{ fontSize: '13px', color: '#fbcfe8', textAlign: 'center' }}>
+            <div style={{ fontSize: '13.5px', color: '#fbcfe8', textAlign: 'center' }}>
               Active Character: <strong>{myCharacterInClashLane?.name || 'None'}</strong>
               <br />
               Current Inspiration: <strong>⚡ {gameState.contactState.attackerPower}</strong> (Attacker) vs{' '}
@@ -1204,7 +1237,7 @@ export default function GameBoard({
                     />
                     <span
                       style={{
-                        fontSize: '10px',
+                        fontSize: '10.5px',
                         fontWeight: 800,
                         textAlign: 'center',
                         color: eligibility.eligible ? '#fde047' : '#d1d5db',
@@ -1232,7 +1265,7 @@ export default function GameBoard({
       {/* 4. Clash Slam Showdown Animation Overlay */}
       {gameState.phase === 'CLASH_HOLD' && gameState.lastClashEvent && (
         <div className="clash-showdown-overlay">
-          <h2 style={{ color: '#fde047', fontSize: '24px', marginBottom: '18px' }}>
+          <h2 style={{ color: '#fde047', fontSize: '26px', marginBottom: '18px' }}>
             ⚔️ {gameState.lastClashEvent.lane.toUpperCase()} LANE CONTACT!
           </h2>
           <div className="clash-cards-arena">
@@ -1249,12 +1282,12 @@ export default function GameBoard({
                 src={gameState.lastClashEvent.attackerCard.imageUrl}
                 alt={gameState.lastClashEvent.attackerCard.name}
               />
-              <strong style={{ fontSize: '18px', color: '#fde047' }}>
+              <strong style={{ fontSize: '20px', color: '#fde047' }}>
                 ⚡ {gameState.lastClashEvent.attackerTotalPower}
               </strong>
             </div>
 
-            <div style={{ fontSize: '34px', fontWeight: 900, color: '#f472b6' }}>VS</div>
+            <div style={{ fontSize: '36px', fontWeight: 900, color: '#f472b6' }}>VS</div>
 
             <div
               className={`clash-combatant ${
@@ -1269,7 +1302,7 @@ export default function GameBoard({
                 src={gameState.lastClashEvent.defenderCard.imageUrl}
                 alt={gameState.lastClashEvent.defenderCard.name}
               />
-              <strong style={{ fontSize: '18px', color: '#fde047' }}>
+              <strong style={{ fontSize: '20px', color: '#fde047' }}>
                 ⚡ {gameState.lastClashEvent.defenderTotalPower}
               </strong>
             </div>
@@ -1297,14 +1330,14 @@ export default function GameBoard({
               }`}
             />
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
               <div
                 style={{
                   background: gameState.lastPlanRevealEvent.hasPrePlanTrigger ? '#f59e0b' : '#ec4899',
                   color: gameState.lastPlanRevealEvent.hasPrePlanTrigger ? '#4a148c' : '#fff',
-                  fontSize: '11px',
+                  fontSize: '12px',
                   fontWeight: 900,
-                  padding: '2px 10px',
+                  padding: '3px 12px',
                   borderRadius: '10px',
                   alignSelf: 'flex-start',
                 }}
@@ -1312,11 +1345,11 @@ export default function GameBoard({
                 📖 PLAN INTERVENED — STORY STAGE {gameState.lastPlanRevealEvent.stage}
               </div>
 
-              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '18px' }}>
+              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '21px' }}>
                 {gameState.lastPlanRevealEvent.revealedCard.name}
               </h3>
 
-              <p style={{ fontSize: '13px', lineHeight: 1.45, color: '#f3e8ff', margin: 0 }}>
+              <p style={{ fontSize: '15px', lineHeight: 1.5, color: '#f3e8ff', margin: 0 }}>
                 {cleanCardText(gameState.lastPlanRevealEvent.revealedCard.effectText) ||
                   'No Pre-Plan trigger.'}
               </p>
@@ -1326,9 +1359,9 @@ export default function GameBoard({
                   style={{
                     background: 'rgba(253, 224, 71, 0.16)',
                     border: '1.5px solid #fde047',
-                    borderRadius: '8px',
-                    padding: '6px 10px',
-                    fontSize: '12px',
+                    borderRadius: '10px',
+                    padding: '8px 12px',
+                    fontSize: '13.5px',
                     color: '#fde047',
                     fontWeight: 800,
                   }}
@@ -1337,24 +1370,25 @@ export default function GameBoard({
                 </div>
               )}
 
-              <div style={{ fontSize: '12px', color: '#34d399', fontWeight: 800 }}>
+              <div style={{ fontSize: '13px', color: '#34d399', fontWeight: 800 }}>
                 🃏 Card placed into {gameState.lastPlanRevealEvent.defenderName}&apos;s Hand!
               </div>
 
               <div className="ack-status-row">
-                <span style={{ fontSize: '11px', color: '#d8b4fe' }}>
+                <span style={{ fontSize: '12px', color: '#d8b4fe' }}>
                   Confirmed: {gameState.lastPlanRevealEvent.acknowledgedBy.length} / 2 Players
                 </span>
 
                 {!isSpectator &&
                   (gameState.lastPlanRevealEvent.acknowledgedBy.includes(mySeat) ? (
-                    <span style={{ fontSize: '12px', color: '#fde047', fontWeight: 800 }}>
+                    <span style={{ fontSize: '13px', color: '#fde047', fontWeight: 800 }}>
                       ✅ Waiting for {opp.displayName}...
                     </span>
                   ) : (
                     <button
                       type="button"
                       className="action-bar-btn primary"
+                      style={{ fontSize: '13.5px', padding: '9px 20px' }}
                       onClick={() => sendAction('ACK_PLAN_REVEAL')}
                     >
                       ✅ Acknowledge &amp; Continue
@@ -1380,14 +1414,14 @@ export default function GameBoard({
               className="plan-reveal-card-flip story-landscape"
             />
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
               <div
                 style={{
                   background: '#ec4899',
                   color: '#fff',
-                  fontSize: '11px',
+                  fontSize: '12px',
                   fontWeight: 900,
-                  padding: '2px 10px',
+                  padding: '3px 12px',
                   borderRadius: '10px',
                   alignSelf: 'flex-start',
                 }}
@@ -1395,11 +1429,11 @@ export default function GameBoard({
                 ✨ {gameState.lastStoryRevealEvent.attackerName} PROGRESSED STORY ({gameState.lastStoryRevealEvent.stage}/4)
               </div>
 
-              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '18px' }}>
+              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '21px' }}>
                 {gameState.lastStoryRevealEvent.storyCard.name}
               </h3>
 
-              <p style={{ fontSize: '13px', lineHeight: 1.45, color: '#f3e8ff', margin: 0 }}>
+              <p style={{ fontSize: '15px', lineHeight: 1.5, color: '#f3e8ff', margin: 0 }}>
                 {cleanCardText(gameState.lastStoryRevealEvent.storyCard.effectText) ||
                   'No printed promotion effect.'}
               </p>
@@ -1409,9 +1443,9 @@ export default function GameBoard({
                   style={{
                     background: 'rgba(52, 211, 153, 0.16)',
                     border: '1.5px solid #34d399',
-                    borderRadius: '8px',
-                    padding: '6px 10px',
-                    fontSize: '12px',
+                    borderRadius: '10px',
+                    padding: '8px 12px',
+                    fontSize: '13.5px',
                     color: '#34d399',
                     fontWeight: 800,
                   }}
@@ -1421,19 +1455,20 @@ export default function GameBoard({
               )}
 
               <div className="ack-status-row">
-                <span style={{ fontSize: '11px', color: '#d8b4fe' }}>
+                <span style={{ fontSize: '12px', color: '#d8b4fe' }}>
                   Confirmed: {gameState.lastStoryRevealEvent.acknowledgedBy.length} / 2 Players
                 </span>
 
                 {!isSpectator &&
                   (gameState.lastStoryRevealEvent.acknowledgedBy.includes(mySeat) ? (
-                    <span style={{ fontSize: '12px', color: '#fde047', fontWeight: 800 }}>
+                    <span style={{ fontSize: '13px', color: '#fde047', fontWeight: 800 }}>
                       ✅ Waiting for {opp.displayName}...
                     </span>
                   ) : (
                     <button
                       type="button"
                       className="action-bar-btn primary"
+                      style={{ fontSize: '13.5px', padding: '9px 20px' }}
                       onClick={() => sendAction('ACK_STORY_REVEAL')}
                     >
                       ✅ Acknowledge &amp; Continue
@@ -1495,24 +1530,24 @@ export default function GameBoard({
         <div className="inspector-backdrop" onClick={() => setPowerBreakdown(null)}>
           <div
             className="inspector-card-box"
-            style={{ flexDirection: 'column', maxWidth: '400px', gap: '10px' }}
+            style={{ flexDirection: 'column', maxWidth: '460px', gap: '12px' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ margin: 0, color: '#fde047', fontSize: '18px' }}>
+            <h3 style={{ margin: 0, color: '#fde047', fontSize: '20px' }}>
               ⚡ Total Inspiration Breakdown ({powerBreakdown.laneName} Lane)
             </h3>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: '#fbcfe8' }}>
+            <div style={{ fontSize: '15px', fontWeight: 800, color: '#fbcfe8' }}>
               {powerBreakdown.cardName}
             </div>
             <div
               style={{
                 background: 'rgba(255, 255, 255, 0.08)',
-                borderRadius: '10px',
-                padding: '10px 14px',
+                borderRadius: '12px',
+                padding: '12px 16px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '6px',
-                fontSize: '13px',
+                gap: '8px',
+                fontSize: '14px',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1531,12 +1566,12 @@ export default function GameBoard({
               <div
                 style={{
                   borderTop: '1px solid rgba(255,255,255,0.2)',
-                  paddingTop: '6px',
-                  marginTop: '2px',
+                  paddingTop: '8px',
+                  marginTop: '4px',
                   display: 'flex',
                   justifyContent: 'space-between',
                   color: '#fde047',
-                  fontSize: '15px',
+                  fontSize: '16px',
                 }}
               >
                 <span>Total Current Inspiration:</span>
@@ -1563,10 +1598,10 @@ export default function GameBoard({
           >
             <div className="retirement-viewer-header">
               <div>
-                <h3 style={{ margin: 0, color: '#fde047', fontSize: '19px' }}>
+                <h3 style={{ margin: 0, color: '#fde047', fontSize: '20px' }}>
                   🪦 {viewedRetirement.ownerName}&apos;s Retirement Area ({viewedRetirement.cards.length})
                 </h3>
-                <span style={{ fontSize: '12px', color: '#e9d5ff' }}>
+                <span style={{ fontSize: '13px', color: '#e9d5ff' }}>
                   Ordered newest (top of pile) to oldest • Click any card to inspect rules text
                 </span>
               </div>
@@ -1580,7 +1615,7 @@ export default function GameBoard({
             </div>
 
             {viewedRetirement.cards.length === 0 ? (
-              <div style={{ padding: '36px', textAlign: 'center', color: '#d8b4fe', fontSize: '14px' }}>
+              <div style={{ padding: '36px', textAlign: 'center', color: '#d8b4fe', fontSize: '15px' }}>
                 No cards in this Retirement Area yet.
               </div>
             ) : (
@@ -1603,7 +1638,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Card Inspector Modal */}
+      {/* Enlarged Card Inspector Modal */}
       {inspectedCard && (
         <div className="inspector-backdrop" onClick={() => setInspectedCard(null)}>
           <div
@@ -1611,18 +1646,18 @@ export default function GameBoard({
             onClick={(e) => e.stopPropagation()}
           >
             <img src={inspectedCard.imageUrl} alt={inspectedCard.name} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '17px' }}>{inspectedCard.name}</h3>
-              <div style={{ fontSize: '12px', color: '#d8b4fe' }}>
-                {inspectedCard.type} • {inspectedCard.element} • Force of Harmony Cost: {inspectedCard.cost} • Inspiration: {inspectedCard.power}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
+              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '23px' }}>{inspectedCard.name}</h3>
+              <div style={{ fontSize: '14px', color: '#fde047', fontWeight: 800 }}>
+                {inspectedCard.type} • {inspectedCard.element} • Cost: {inspectedCard.cost} • Inspiration: {inspectedCard.power}
               </div>
-              <p style={{ fontSize: '13px', lineHeight: 1.45, color: '#f3e8ff', margin: 0 }}>
+              <p style={{ fontSize: '16px', lineHeight: 1.55, color: '#f3e8ff', margin: 0 }}>
                 {cleanCardText(inspectedCard.effectText) || 'No special ability text.'}
               </p>
               <button
                 type="button"
-                className="action-bar-btn secondary"
-                style={{ marginTop: 'auto' }}
+                className="action-bar-btn gold"
+                style={{ marginTop: 'auto', fontSize: '14px', padding: '10px 22px' }}
                 onClick={() => setInspectedCard(null)}
               >
                 Close
@@ -1653,7 +1688,7 @@ export default function GameBoard({
         <div className="action-bar-buttons">
           {isMyTurn && gameState.phase === 'PENDING_TARGET' && gameState.pendingTarget && (
             <>
-              <span style={{ fontSize: '11px', color: '#fde047', fontWeight: 800 }}>
+              <span style={{ fontSize: '12px', color: '#fde047', fontWeight: 900 }}>
                 🎯 {gameState.pendingTarget.promptText}
               </span>
               <button
