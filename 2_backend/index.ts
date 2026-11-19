@@ -10,6 +10,7 @@ import shopsRouter from './routes/shops.js';
 import mediaRouter from './routes/media.js';
 import adminRouter from './routes/admin.js';
 import forumRouter from './routes/forum.js';
+import rankedRouter from './routes/ranked.js';
 import { GameManager } from './websocket/gameManager.js';
 
 const app = express();
@@ -167,6 +168,33 @@ async function startServer() {
       );
     `);
 
+    // 9. Ranked Mode Ratings & Match History Tables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS auth.player_ratings (
+        user_id VARCHAR(255) PRIMARY KEY,
+        username VARCHAR(100) NOT NULL,
+        display_name VARCHAR(100) NOT NULL,
+        mmr INT DEFAULT 1200,
+        peak_mmr INT DEFAULT 1200,
+        placement_matches INT DEFAULT 0,
+        wins INT DEFAULT 0,
+        losses INT DEFAULT 0,
+        win_streak INT DEFAULT 0,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS auth.ranked_match_history (
+        id VARCHAR(255) PRIMARY KEY,
+        winner_id VARCHAR(255) NOT NULL,
+        winner_name VARCHAR(100) NOT NULL,
+        loser_id VARCHAR(255) NOT NULL,
+        loser_name VARCHAR(100) NOT NULL,
+        winner_mmr_change INT NOT NULL,
+        loser_mmr_change INT NOT NULL,
+        played_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     console.log('[DATABASE] Initialization and schema hardening complete.');
   } catch (err: any) {
     console.error('[DATABASE INIT ERROR]', err.message);
@@ -179,6 +207,7 @@ async function startServer() {
   app.use('/api/media', mediaRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/forum', forumRouter);
+  app.use('/api/ranked', rankedRouter);
   app.use('/api', cardsRouter);
   app.use('/api', decksRouter);
 

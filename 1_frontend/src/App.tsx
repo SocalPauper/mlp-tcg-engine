@@ -12,6 +12,7 @@ import ShopView from './components/ShopView';
 import RulesGlossaryTab from './components/RulesGlossaryTab';
 import AdminPanel from './components/AdminPanel';
 import FanPageHub from './components/FanPageHub';
+import StandingsHub from './components/StandingsHub';
 import AuthModal from './components/AuthModal';
 import './index.css';
 
@@ -359,7 +360,12 @@ function AppContent() {
                 )}
                 {currentTab === 'shop' && <ShopView />}
                 {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
-                {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
+                {currentTab === 'standings' && (
+                  <StandingsHub
+                    currentUser={user}
+                    onQueueRanked={() => handleTabChange('hub')}
+                  />
+                )}
                 {currentTab === 'fanPage' && <FanPageHub currentUser={user} />}
                 {currentTab === 'rules' && <RulesGlossaryTab />}
                 {currentTab === 'admin' && <AdminPanel />}
