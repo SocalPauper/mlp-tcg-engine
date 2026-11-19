@@ -12,11 +12,11 @@ const startermaps: any[] = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'StartingDecks.json'), 'utf-8')
 );
 
-async function getCardLookupMap(): Promise> {
+async function getCardLookupMap() {
   const res = await pool.query(
     `SELECT id, name, card_type, element, image_url FROM game.cards;`
   );
-  const map = new Map<string, any>();
+  const map = new Map();
   for (const row of res.rows) {
     map.set(String(row.id).toLowerCase(), row);
   }
@@ -24,10 +24,10 @@ async function getCardLookupMap(): Promise> {
 }
 
 function findRealManeCard(
-  cardMap: Map<string, any>,
+  cardMap: any,
   maneId: string | null,
   ponyHint?: string
-): any | null {
+) {
   if (maneId) {
     const direct = cardMap.get(String(maneId).toLowerCase());
     if (direct && direct.image_url) return direct;
@@ -51,8 +51,8 @@ function findRealManeCard(
   return null;
 }
 
-async function buildStarterDecks(cardMap: Map<string, any>) {
-  return startermaps.map((starter) => {
+async function buildStarterDecks(cardMap: any) {
+  return startermaps.map((starter: any) => {
     const ponyName = String(starter.name || '').split('-')[0].trim();
     const realMane = findRealManeCard(cardMap, starter.mane_character, ponyName);
 
@@ -68,7 +68,7 @@ async function buildStarterDecks(cardMap: Map<string, any>) {
   });
 }
 
-function normalizeDeckRow(row: any, cardMap: Map<string, any>) {
+function normalizeDeckRow(row: any, cardMap: any) {
   let parsedCards: any = {};
   if (row.cards) {
     if (typeof row.cards === 'string') {
@@ -125,7 +125,7 @@ router.get('/decks', async (req, res) => {
     ]);
 
     const starters = await buildStarterDecks(cardMap);
-    const userDecks = result.rows.map((r) => normalizeDeckRow(r, cardMap));
+    const userDecks = result.rows.map((r: any) => normalizeDeckRow(r, cardMap));
     return res.json([...starters, ...userDecks]);
   } catch (err) {
     console.error('Error fetching decks:', err);
