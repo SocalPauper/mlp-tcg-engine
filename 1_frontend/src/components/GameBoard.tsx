@@ -37,11 +37,20 @@ interface AdventureSlot {
   items: CardDefinition[];
   inspoBoost: number;
   isExhausted?: boolean;
+  treats?: number;
+  presents?: CardDefinition[];
 }
 
 interface PendingTargetSelection {
   sourceCard: CardDefinition;
-  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT' | 'STORY_PROMOTION';
+  sourceOrigin:
+    | 'HAND_EVENT'
+    | 'ADVENTURE_TAP'
+    | 'MANE_ABILITY'
+    | 'APPEAR_EFFECT'
+    | 'FAREWELL_EFFECT'
+    | 'PRE_PLAN_EFFECT'
+    | 'STORY_PROMOTION';
   sourceLane?: 'left' | 'center' | 'right';
   effectAction: string;
   value: number;
@@ -55,11 +64,29 @@ interface PendingTargetSelection {
 
 interface PendingHandChoice {
   sourceCard: CardDefinition;
-  choiceType: 'DISCARD_FROM_HAND' | 'RECOVER_FROM_RETIREMENT';
+  choiceType:
+    | 'DISCARD_FROM_HAND'
+    | 'DISCARD_THEN_DRAW'
+    | 'RECOVER_FROM_RETIREMENT'
+    | 'PICK_REVEALED_TO_HAND';
   count: number;
+  secondaryDrawCount?: number;
   promptText: string;
   candidateCards: CardDefinition[];
+  validIndices?: number[];
   filterLabel?: string;
+}
+
+interface ActionSpotlightEvent {
+  id: string;
+  actorId: '0' | '1';
+  actorName: string;
+  actionType: string;
+  title: string;
+  subtitle: string;
+  card?: CardDefinition | null;
+  lane?: 'left' | 'center' | 'right';
+  timestamp: number;
 }
 
 interface ActionLogEntry {
@@ -157,6 +184,7 @@ export interface LiveGameState {
     acknowledgedBy: ('0' | '1')[];
     isGameWinningStage: boolean;
   } | null;
+  lastActionBanner?: ActionSpotlightEvent | null;
   announcements: { type: string; message: string; timestamp: number }[];
   actionLog?: ActionLogEntry[];
 }
@@ -271,15 +299,15 @@ function computeClientPowerDetails(
     }
   }
 
-  if ((slot.inspoBoost || 0) > 0) {
+  if ((slot.inspoBoost || 0) !== 0) {
     lines.push({
-      label: 'Inspiration Boost / Event Modifiers',
+      label: slot.inspoBoost > 0 ? 'Inspiration Boost / Event Modifiers' : 'Rival Debuffs',
       bonus: slot.inspoBoost,
       color: '#f472b6',
     });
   }
 
-  const totalPower = basePower + lines.reduce((sum, l) => sum + l.bonus, 0);
+  const totalPower = Math.max(0, basePower + lines.reduce((sum, l) => sum + l.bonus, 0));
   return {
     cardName: char.name,
     laneName: laneKey.toUpperCase(),
@@ -372,11 +400,11 @@ export default function GameBoard({
   const [powerBreakdown, setPowerBreakdown] = useState<PowerBreakdownDetails | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number>(180);
 
-  // Collapsible Action Log Drawer + First-Game Onboarding Bubble + Action Toast
+  // Collapsible Action Log Drawer + Onboarding Bubble + Visual Spotlight Banner
   const [isLogOpen, setIsLogOpen] = useState<boolean>(false);
   const [showLogOnboardingBubble, setShowLogOnboardingBubble] = useState<boolean>(true);
-  const [actionToast, setActionToast] = useState<ActionLogEntry | null>(null);
-  const lastSeenLogIdRef = useRef<string | null>(null);
+  const [spotlightBanner, setSpotlightBanner] = useState<ActionSpotlightEvent | null>(null);
+  const lastSeenSpotlightIdRef = useRef<string | null>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
   // Interactive Hand / Retirement Choice Selections
@@ -397,26 +425,22 @@ export default function GameBoard({
   const isMyTurn = !isSpectator && gameState.turnPlayerId === mySeat;
   const isOppTurn = gameState.turnPlayerId === oppSeat;
 
-  // Auto-dismiss the onboarding bubble after 9 seconds or when user opens the drawer
   useEffect(() => {
     const timer = setTimeout(() => setShowLogOnboardingBubble(false), 9000);
     return () => clearTimeout(timer);
   }, []);
 
-  // Show non-invasive toast when new EFFECT or STORY log entries arrive
+  // Trigger prominent visual Action Spotlight Banner & Lane Pulse whenever a major game action occurs
   useEffect(() => {
-    const logs = gameState.actionLog || [];
-    if (logs.length === 0) return;
-    const latest = logs[logs.length - 1];
-    if (lastSeenLogIdRef.current !== latest.id) {
-      lastSeenLogIdRef.current = latest.id;
-      if (latest.category === 'EFFECT' || latest.category === 'STORY') {
-        setActionToast(latest);
-        const timer = setTimeout(() => setActionToast(null), 4200);
-        return () => clearTimeout(timer);
-      }
+    const banner = gameState.lastActionBanner;
+    if (!banner) return;
+    if (lastSeenSpotlightIdRef.current !== banner.id) {
+      lastSeenSpotlightIdRef.current = banner.id;
+      setSpotlightBanner(banner);
+      const timer = setTimeout(() => setSpotlightBanner(null), 4000);
+      return () => clearTimeout(timer);
     }
-  }, [gameState.actionLog]);
+  }, [gameState.lastActionBanner?.id]);
 
   useEffect(() => {
     if (isLogOpen) {
@@ -602,6 +626,11 @@ export default function GameBoard({
               (gameState.phase === 'CONTACT_INSPIRE' || gameState.phase === 'BREAKTHROUGH_CHOICE') &&
               gameState.contactState?.activeLane === laneKey;
 
+            const isSpotlightLane =
+              spotlightBanner &&
+              spotlightBanner.actorId === player.id &&
+              spotlightBanner.lane === laneKey;
+
             const details = slot.character
               ? computeClientPowerDetails(gameState, player, laneKey)
               : null;
@@ -612,7 +641,9 @@ export default function GameBoard({
                 key={laneKey}
                 className={`adventure-slot ${isOpponent ? 'opponent-slot' : 'self-slot'} ${
                   isTargetable ? 'targetable' : ''
-                } ${isActiveClashLane ? 'active-lane-glow' : ''}`}
+                } ${isActiveClashLane ? 'active-lane-glow' : ''} ${
+                  isSpotlightLane ? 'lane-spotlight-pulse' : ''
+                }`}
                 onClick={() => handleAdventureSlotClick(ownerSide, laneKey)}
                 onContextMenu={(e) => handleContextMenu(e, slot.character)}
                 onTouchStart={() => handleTouchStartInspect(slot.character)}
@@ -645,6 +676,16 @@ export default function GameBoard({
                           style={{ top: 'auto', bottom: '4px', left: '4px', color: '#fde047' }}
                         >
                           {slot.isExhausted ? 'Tapped ↷' : 'Acted ✓'}
+                        </div>
+                      )}
+                      {((slot.treats || 0) > 0 || (slot.presents?.length || 0) > 0) && (
+                        <div className="keyword-counter-strip">
+                          {(slot.treats || 0) > 0 && (
+                            <span className="keyword-pill-badge">🍬 {slot.treats}</span>
+                          )}
+                          {(slot.presents?.length || 0) > 0 && (
+                            <span className="keyword-pill-badge">🎁 {slot.presents!.length}</span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -899,10 +940,20 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Non-Invasive Action Trigger Toast */}
-      {actionToast && (
-        <div className="action-toast-banner">
-          ✨ <strong>{actionToast.actor}:</strong> {actionToast.text}
+      {/* Visual Action Spotlight Banner (Opponent & Self Move Alert) */}
+      {spotlightBanner && (
+        <div className="action-spotlight-banner">
+          {spotlightBanner.card?.imageUrl && (
+            <img src={spotlightBanner.card.imageUrl} alt={spotlightBanner.card.name} />
+          )}
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 900, color: '#fde047', textTransform: 'uppercase' }}>
+              ✨ {spotlightBanner.title}
+            </div>
+            <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#fce7f3', marginTop: '2px' }}>
+              {spotlightBanner.subtitle}
+            </div>
+          </div>
         </div>
       )}
 
@@ -1055,12 +1106,12 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 2B. Interactive Hand / Retirement Choice Prompt Modal (e.g., Draw 2, Discard 1) */}
+      {/* 2B. Interactive Hand / Retirement / Reveal Choice Prompt Modal */}
       {showHandChoiceModalForMe && gameState.pendingHandChoice && (
         <div className="inspector-backdrop">
           <div className="hand-choice-modal">
             <h3 style={{ margin: 0, color: '#fde047', fontSize: '20px' }}>
-              ✨ {gameState.pendingHandChoice.sourceCard.name} — Action Required
+              ✨ {gameState.pendingHandChoice.sourceCard.name} — Decision Required
             </h3>
             <p style={{ margin: 0, fontSize: '13.5px', color: '#fbcfe8', textAlign: 'center' }}>
               {gameState.pendingHandChoice.promptText}
@@ -1069,11 +1120,17 @@ export default function GameBoard({
             <div className="hand-choice-grid">
               {gameState.pendingHandChoice.candidateCards.map((card, idx) => {
                 const isPicked = pickedChoiceIndices.includes(idx);
+                const validList = gameState.pendingHandChoice!.validIndices;
+                const isValidChoice = !validList || validList.includes(idx);
+
                 return (
                   <div
                     key={`${card.id}-${idx}`}
-                    className={`hand-choice-card ${isPicked ? 'picked' : ''}`}
+                    className={`hand-choice-card ${isValidChoice ? 'valid-choice' : 'invalid-choice'} ${
+                      isPicked ? 'picked' : ''
+                    }`}
                     onClick={() => {
+                      if (!isValidChoice) return;
                       const maxNeeded = gameState.pendingHandChoice!.count;
                       if (isPicked) {
                         setPickedChoiceIndices((prev) => prev.filter((i) => i !== idx));
@@ -1087,7 +1144,7 @@ export default function GameBoard({
                   >
                     <img src={card.imageUrl || CARD_BACK_URL} alt={card.name} />
                     <span style={{ fontSize: '10px', fontWeight: 800, textAlign: 'center' }}>
-                      {isPicked ? '✅ Selected' : card.name}
+                      {isPicked ? '✅ Selected' : isValidChoice ? card.name : 'Not Eligible'}
                     </span>
                   </div>
                 );

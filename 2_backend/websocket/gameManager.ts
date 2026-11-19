@@ -1,6 +1,8 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import crypto from 'crypto';
-import startermaps from '../StartingDecks.json' assert { type: 'json' };
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   KayouGameState,
   DeckId,
@@ -29,7 +31,13 @@ import {
   resolveHandChoice,
 } from '../../3_engine/gameRules.js';
 import { pool } from '../../4_data/db.js';
-import startermaps from '../routes/StartingDecks.json' assert { type: 'json' };
+import { recordRankedMatchResult } from '../routes/ranked.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const startermaps: any[] = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '../routes/StartingDecks.json'), 'utf-8')
+);
 
 const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 
@@ -39,6 +47,7 @@ interface RoomClient {
   roomCode: string;
   selectedDeck: DeckId;
   username: string;
+  userId?: string;
   sessionToken: string;
 }
 
@@ -46,6 +55,7 @@ interface QueuedPlayer {
   ws: WebSocket;
   deckId: DeckId;
   username: string;
+  userId?: string;
   mode: 'Casual' | 'Ranked';
 }
 
@@ -58,9 +68,11 @@ interface Room {
   state: KayouGameState;
   clients: RoomClient[];
   decks: Partial<Record<'0' | '1', DeckId>>;
+  userIds: Partial<Record<'0' | '1', string>>;
   seatTokens: Partial<Record<'0' | '1', string>>;
   disconnectedAt: Partial<Record<'0' | '1', number>>;
   lastActivityAt: number;
+  rankedRecorded: boolean;
 }
 
 function mapDbRowToCardDef(row: any): CardDefinition {
@@ -73,6 +85,7 @@ function mapDbRowToCardDef(row: any): CardDefinition {
     cost: Number(row.cost) || 0,
     power: Number(row.power) || 1,
     defense: Number(row.defense) || 1,
+    traits: row.traits || '',
     effectText: row.effect_text || '',
     imageUrl: row.image_url || '',
     rarity: row.rarity || 'C',
@@ -89,6 +102,25 @@ export class GameManager {
     this.wss = new WebSocketServer({ server });
     this.initListeners();
     this.startWatchdogTimer();
+  }
+
+  private maybeRecordRankedOutcome(room: Room) {
+    if (
+      room.mode === 'Ranked' &&
+      room.state.phase === 'GAME_OVER' &&
+      room.state.winnerId &&
+      !room.rankedRecorded
+    ) {
+      const winnerUserId = room.userIds[room.state.winnerId];
+      const loserSeat: '0' | '1' = room.state.winnerId === '0' ? '1' : '0';
+      const loserUserId = room.userIds[loserSeat];
+      if (winnerUserId && loserUserId) {
+        room.rankedRecorded = true;
+        recordRankedMatchResult(winnerUserId, loserUserId).catch((err) =>
+          console.error('[RANKED RECORD ERROR]', err)
+        );
+      }
+    }
   }
 
   private startWatchdogTimer() {
@@ -112,6 +144,7 @@ export class GameManager {
               seat,
               `${leaverName} disconnected and did not return within 3 minutes.`
             );
+            this.maybeRecordRankedOutcome(room);
             this.broadcastRoomState(room);
             this.broadcastLobbyRooms();
             break;
@@ -132,6 +165,7 @@ export class GameManager {
             stalledSeat,
             `${stalledName} made no move for 3 minutes (Inactivity Forfeit).`
           );
+          this.maybeRecordRankedOutcome(room);
           this.broadcastRoomState(room);
           this.broadcastLobbyRooms();
         }
@@ -189,6 +223,7 @@ export class GameManager {
               userSession.seat,
               `${leaverName} forfeited the match.`
             );
+            this.maybeRecordRankedOutcome(room);
           }
           if (room.clients.length === 0 && room.state.phase === 'WAITING_FOR_PLAYERS') {
             this.rooms.delete(room.code);
@@ -232,6 +267,7 @@ export class GameManager {
                 roomCode: room.code,
                 selectedDeck: room.decks[seat] || 'starter-sd01',
                 username: room.state.players[seat].displayName,
+                userId: room.userIds[seat],
                 sessionToken,
               };
               userSession = restoredSession;
@@ -258,6 +294,7 @@ export class GameManager {
             const deckId: DeckId = message.deckId || 'starter-sd01';
             const mode: 'Casual' | 'Ranked' = message.mode === 'Ranked' ? 'Ranked' : 'Casual';
             const username = message.username || `Guest_${Math.floor(100 + Math.random() * 900)}`;
+            const userId = message.userId ? String(message.userId) : undefined;
 
             this.quickPlayQueue = this.quickPlayQueue.filter((q) => q.ws.readyState === WebSocket.OPEN);
 
@@ -276,9 +313,14 @@ export class GameManager {
                 state: createWaitingMatch(),
                 clients: [],
                 decks: { '0': opponent.deckId, '1': deckId },
+                userIds: {
+                  ...(opponent.userId ? { '0': opponent.userId } : {}),
+                  ...(userId ? { '1': userId } : {}),
+                },
                 seatTokens: { '0': token0, '1': token1 },
                 disconnectedAt: {},
                 lastActivityAt: Date.now(),
+                rankedRecorded: false,
               };
 
               const p0Session: RoomClient = {
@@ -287,6 +329,7 @@ export class GameManager {
                 roomCode,
                 selectedDeck: opponent.deckId,
                 username: opponent.username,
+                userId: opponent.userId,
                 sessionToken: token0,
               };
               const p1Session: RoomClient = {
@@ -295,6 +338,7 @@ export class GameManager {
                 roomCode,
                 selectedDeck: deckId,
                 username,
+                userId,
                 sessionToken: token1,
               };
 
@@ -310,7 +354,7 @@ export class GameManager {
               this.broadcastRoomState(room);
               this.broadcastLobbyRooms();
             } else {
-              this.quickPlayQueue.push({ ws, deckId, username, mode });
+              this.quickPlayQueue.push({ ws, deckId, username, userId, mode });
               ws.send(
                 JSON.stringify({
                   type: 'QUEUED',
@@ -332,6 +376,7 @@ export class GameManager {
             const allowSpectators = message.allowSpectators ?? true;
             const deckId: DeckId = message.deckId || 'starter-sd01';
             const username = message.username || 'Host';
+            const userId = message.userId ? String(message.userId) : undefined;
             const token0 = crypto.randomUUID();
 
             const room: Room = {
@@ -343,9 +388,11 @@ export class GameManager {
               state: createWaitingMatch(),
               clients: [],
               decks: { '0': deckId },
+              userIds: userId ? { '0': userId } : {},
               seatTokens: { '0': token0 },
               disconnectedAt: {},
               lastActivityAt: Date.now(),
+              rankedRecorded: false,
             };
 
             this.rooms.set(roomCode, room);
@@ -356,6 +403,7 @@ export class GameManager {
               roomCode,
               selectedDeck: deckId,
               username,
+              userId,
               sessionToken: token0,
             };
             room.clients.push(userSession);
@@ -371,6 +419,7 @@ export class GameManager {
             const suppliedPassword = message.password ? String(message.password).trim() : '';
             const chosenDeckId: DeckId = message.deckId || 'starter-sd02';
             const username = message.username || 'GuestPlayer';
+            const userId = message.userId ? String(message.userId) : undefined;
 
             const room = this.rooms.get(roomCode);
             if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Match room not found.' }));
@@ -396,10 +445,12 @@ export class GameManager {
               roomCode,
               selectedDeck: chosenDeckId,
               username,
+              userId,
               sessionToken: seatToken,
             };
             room.clients.push(userSession);
             room.decks[assignedSeat] = chosenDeckId;
+            if (userId) room.userIds[assignedSeat] = userId;
             room.seatTokens[assignedSeat] = seatToken;
 
             if (
@@ -466,6 +517,7 @@ export class GameManager {
               room.state = this.processGameAction(room.state, userSession.seat, action, payload);
               room.lastActivityAt = Date.now();
               room.state.turnDeadlineMs = room.lastActivityAt + INACTIVITY_TIMEOUT_MS;
+              this.maybeRecordRankedOutcome(room);
               this.broadcastRoomState(room);
               if (room.state.phase === 'GAME_OVER') {
                 this.broadcastLobbyRooms();
@@ -561,7 +613,7 @@ export class GameManager {
 
   private async hydrateDeckFromDatabase(deckId: DeckId): Promise<HydratedDeckPayload> {
     const cardRes = await pool.query(
-      `SELECT id, name, set_code, card_type, element, rarity, cost, power, defense, effect_text, image_url
+      `SELECT id, name, set_code, card_type, element, rarity, cost, power, defense, traits, effect_text, image_url
        FROM game.cards
        ORDER BY
          CASE WHEN id ~* '^SD01[A-F]-' THEN 0 WHEN set_code ILIKE 'SD%' OR id ~* '^SD' THEN 1 ELSE 2 END,

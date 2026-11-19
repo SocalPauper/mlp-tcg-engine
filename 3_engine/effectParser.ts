@@ -163,6 +163,14 @@ function doesPassiveTextApplyToCharacter(
     return 0;
   }
 
+  if (/while (?:it has|adorned with) (?:a )?treat/i.test(text) && slot && slot.treats <= 0) {
+    return 0;
+  }
+
+  if (/while (?:it has|adorned with) (?:a )?present/i.test(text) && slot && slot.presents.length === 0) {
+    return 0;
+  }
+
   if (/this\s+character\s+gets/i.test(text) && !isSelfCard && !isAttachedItem) {
     return 0;
   }
@@ -342,6 +350,7 @@ export interface ParsedActivatedEffect {
   kind:
     | 'DRAW'
     | 'DRAW_THEN_DISCARD'
+    | 'DISCARD_HAND'
     | 'DISCARD_THEN_DRAW'
     | 'RECOVER_RETIREMENT'
     | 'UNTAP_SCENES'
@@ -368,7 +377,14 @@ export interface ParsedActivatedEffect {
 
 export function extractTriggerClause(
   effectText: string | undefined,
-  triggerType: 'Appear' | 'Farewell' | 'Treat for you!' | 'Deliver Present' | 'Unwrap Present'
+  triggerType:
+    | 'Appear'
+    | 'Farewell'
+    | 'Adventure'
+    | 'Pre-Plan'
+    | 'Treat for you!'
+    | 'Deliver Present'
+    | 'Unwrap Present'
 ): string | null {
   const text = sanitizeCardText(effectText);
   if (!text) return null;
@@ -389,8 +405,10 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   const nameBracket = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
   const nameFilter = nameBracket ? nameBracket[1].trim() : undefined;
 
-  // 0A. Draw X, then discard Y (e.g., SD01C-SR02 Gummy, SD01-SR01 Twilight Sparkle)
-  const drawDiscardMatch = text.match(/draw\s+(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?discard\s+(\d+|a|an)\s+cards?/i);
+  // 0A. Draw X, then discard Y
+  const drawDiscardMatch = text.match(
+    /draw\s+(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?discard\s+(\d+|a|an)\s+cards?/i
+  );
   if (drawDiscardMatch) {
     const dRaw = drawDiscardMatch[1].toLowerCase();
     const discRaw = drawDiscardMatch[2].toLowerCase();
@@ -401,8 +419,10 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 0B. Discard X, draw Y (e.g., BP04-GR06 Rarity, BP04-GR02 Fluttershy)
-  const discardDrawMatch = text.match(/discard\s+(?:up\s+to\s+)?(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?draw\s+(\d+|a|an)\s+cards?/i);
+  // 0B. Discard X, then draw Y
+  const discardDrawMatch = text.match(
+    /discard\s+(?:up\s+to\s+)?(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?draw\s+(\d+|a|an)\s+cards?/i
+  );
   if (discardDrawMatch) {
     const discRaw = discardDrawMatch[1].toLowerCase();
     const dRaw = discardDrawMatch[2].toLowerCase();
@@ -414,8 +434,20 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 0C. Untap Scenes in Scene Area (e.g., BP01-CR10, BP01-GR10, SD01D-U04 Winona)
-  const untapSceneMatch = text.match(/choose\s+(\d+|a|an)\s+(?:face-down\s+tapped\s+)?scenes?\s+in\s+your\s+scene\s+area.*?(?:untap|turn\s+it\s+up)/i);
+  // 0C. Standalone Discard from Hand
+  const soloDiscardMatch = text.match(/discard\s+(\d+|a|an)\s+cards?\s+from\s+(?:your\s+)?hand/i);
+  if (soloDiscardMatch) {
+    const discRaw = soloDiscardMatch[1].toLowerCase();
+    return {
+      kind: 'DISCARD_HAND',
+      amount: discRaw === 'a' || discRaw === 'an' ? 1 : parseInt(discRaw, 10) || 1,
+    };
+  }
+
+  // 0D. Untap / Ready Scenes in Scene Area
+  const untapSceneMatch = text.match(
+    /(?:choose|ready|untap)\s+(\d+|a|an)\s+(?:face-down\s+|exhausted\s+|tapped\s+)?scenes?\s+in\s+your\s+scene\s+area/i
+  );
   if (untapSceneMatch) {
     const raw = untapSceneMatch[1].toLowerCase();
     return {
@@ -424,21 +456,24 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 0D. Reveal top X cards of Deck, choose 1 matching card to add to Hand (e.g., BP01-CR03, BP01-GR08, SD01D-SR01)
-  const revealPickMatch = text.match(/reveal\s+the\s+top\s+(\d+)\s+cards?\s+of\s+(?:your|the)\s+deck.*?choose\s+1\s+(Item|Event|Character|Scene|[｢\[「][^｣\]」]+[｣\]」])/i);
+  // 0E. Reveal top X cards of Deck, choose 1 matching card to add to Hand
+  const revealPickMatch = text.match(
+    /reveal\s+the\s+top\s+(\d+)\s+cards?\s+of\s+(?:your|the)\s+deck.*?choose\s+1\s+(Item|Event|Character|Scene|card|[｢\[「][^｣\]」]+[｣\]」])/i
+  );
   if (revealPickMatch) {
     const count = parseInt(revealPickMatch[1], 10) || 3;
     const rawTarget = revealPickMatch[2].replace(/[｢\[「｣\]」]/g, '').trim();
+    const isAnyCard = rawTarget.toLowerCase() === 'card';
     const isCardType = ['item', 'event', 'character', 'scene'].includes(rawTarget.toLowerCase());
     return {
       kind: 'REVEAL_TOP_PICK_HAND',
       amount: count,
       requiredTypeFilter: isCardType ? rawTarget : undefined,
-      requiredNameFilter: !isCardType ? rawTarget : nameFilter,
+      requiredNameFilter: !isCardType && !isAnyCard ? rawTarget : nameFilter,
     };
   }
 
-  // 1. Treat for you! (BP03 Nightmare Night mechanic)
+  // 1. Treat for you!
   if (/treat for you!|put\s+\d+\s+treat/i.test(text)) {
     const countMatch = text.match(/put\s+(\d+)\s+treat/i);
     const isGlobal = /each\s+/i.test(text);
@@ -456,7 +491,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 2. Unwrap Present (BP04 Hearth's Warming mechanic)
+  // 2. Unwrap Present
   if (/unwrap\s+(?:1\s+)?present/i.test(text)) {
     const targetSide: 'SELF' | 'OPPONENT' | 'ANY' = /rival'?s\s+adventure/i.test(text)
       ? 'OPPONENT'
@@ -471,7 +506,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 3. Deliver Present (BP04 Hearth's Warming mechanic)
+  // 3. Deliver Present
   if (/deliver\s+present|put\s+\d+\s+present/i.test(text)) {
     const countMatch = text.match(/put\s+(\d+)\s+present/i);
     const isGlobal = /each\s+/i.test(text);
@@ -522,7 +557,9 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       text
     )
   ) {
-    const limitMatch = text.match(/(?:cost(?:\s+of\s+Force\s+of\s+Harmony)?|power|inspiration)\s*(\d+)\s*or\s*less/i);
+    const limitMatch = text.match(
+      /(?:cost(?:\s+of\s+Force\s+of\s+Harmony)?|power|inspiration)\s*(\d+)\s*or\s*less/i
+    );
     return {
       kind: 'TARGET_RETIRE_OPPONENT',
       amount: 1,
@@ -535,7 +572,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     return { kind: 'TARGET_READY_FRIENDLY', amount: 1 };
   }
 
-  // 9. Recover from Retirement Area (including Story Stage 2/3 effects like SD01C-C08 & SD01F-SR01)
+  // 9. Recover from Retirement Area
   if (
     /in\s+your\s+retirement\s+(?:area\s+|pile\s+)?(?:,|\s)*add\s+(?:it|them)\s+to\s+(?:your\s+)?hand|from\s+your\s+retirement\s+(?:area\s+|pile\s+)?to\s+(?:your\s+)?hand/i.test(
       text
@@ -573,7 +610,8 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   // 12. Single-target or self +Inspiration buff
   const buffMatch = text.match(/\+(\d+)\s*(?:Inspiration|Power)/i);
   if (buffMatch) {
-    const isTargeted = /choose|target|1\s+of\s+your|another/i.test(text) || Boolean(nameBracket);
+    const isTargeted =
+      /choose|target|1\s+of\s+your|another/i.test(text) || Boolean(nameBracket);
     return {
       kind: 'TARGET_BUFF_POWER',
       amount: parseInt(buffMatch[1], 10) || 1,
@@ -591,7 +629,8 @@ export function parseAppearOrFarewellEffect(effectText?: string): ParsedActivate
 
 export function parseActivatedCardEffect(card: CardDefinition): ParsedActivatedEffect {
   const text = sanitizeCardText(card.effectText);
-  const parsed = parseEffectClause(text);
+  const adventureClause = extractTriggerClause(text, 'Adventure');
+  const parsed = parseEffectClause(adventureClause || text);
   if (parsed) return parsed;
 
   const buffMatch = text.match(/\+(\d+)\s*(?:Inspiration|Power)/i);

@@ -9,6 +9,7 @@ import {
   PendingTargetSelection,
   PendingHandChoice,
   ActionLogEntry,
+  ActionSpotlightEvent,
   AdventureSlot,
 } from './types.js';
 import {
@@ -55,6 +56,31 @@ function appendActionLog(
   return {
     ...state,
     actionLog: [...(state.actionLog || []), entry].slice(-80),
+  };
+}
+
+function setActionSpotlight(
+  state: KayouGameState,
+  actorId: '0' | '1',
+  actionType: ActionSpotlightEvent['actionType'],
+  title: string,
+  subtitle: string,
+  card?: CardDefinition | null,
+  lane?: LaneKey
+): KayouGameState {
+  return {
+    ...state,
+    lastActionBanner: {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      actorId,
+      actorName: state.players[actorId].displayName,
+      actionType,
+      title,
+      subtitle,
+      card: card || null,
+      lane,
+      timestamp: Date.now(),
+    },
   };
 }
 
@@ -122,6 +148,7 @@ export function createWaitingMatch(): KayouGameState {
     lastClashEvent: null,
     lastPlanRevealEvent: null,
     lastStoryRevealEvent: null,
+    lastActionBanner: null,
     announcements: [],
     actionLog: [],
   };
@@ -198,6 +225,7 @@ export function startSeatedMatch(
     lastClashEvent: null,
     lastPlanRevealEvent: null,
     lastStoryRevealEvent: null,
+    lastActionBanner: null,
     announcements: [
       {
         type: 'SYSTEM',
@@ -368,7 +396,12 @@ export function resolveMulligan(
   return workingState;
 }
 
-function matchesFilter(card: CardDefinition, filter?: string): boolean {
+function matchesFilter(card: CardDefinition, filter?: string, typeFilter?: string): boolean {
+  if (typeFilter) {
+    const t = String(card.type || '').toLowerCase();
+    const ft = typeFilter.trim().toLowerCase();
+    if (!t.includes(ft)) return false;
+  }
   if (!filter) return true;
   const f = filter.trim().toLowerCase();
   return (
@@ -429,7 +462,7 @@ function buildPendingTargetFromParsed(
   playerId: '0' | '1',
   sourceCard: CardDefinition,
   parsed: ParsedActivatedEffect,
-  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT' | 'STORY_PROMOTION',
+  sourceOrigin: PendingTargetSelection['sourceOrigin'],
   sourceLane?: LaneKey,
   resumeAttackQueue?: LaneKey[] | null
 ): PendingTargetSelection | null {
@@ -453,7 +486,7 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'BUFF_POWER',
       value: parsed.amount,
-      promptText: `Select one of your Characters to grant +${parsed.amount} Inspiration:`,
+      promptText: `${sourceCard.name}: Select one of your Characters to grant +${parsed.amount} Inspiration:`,
       validTargets,
       resumeAttackQueue,
     };
@@ -470,7 +503,7 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'DEBUFF_OPPONENT',
       value: parsed.amount,
-      promptText: `Select an opponent's Character to give -${parsed.amount} Inspiration:`,
+      promptText: `${sourceCard.name}: Select an opponent's Character to give -${parsed.amount} Inspiration:`,
       validTargets,
       resumeAttackQueue,
     };
@@ -505,7 +538,7 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'TREAT_CHARACTER',
       value: parsed.amount,
-      promptText: `Treat for you! Select a Character to receive ${parsed.amount} Treat:`,
+      promptText: `Treat for you! (${sourceCard.name}) Select a Character to receive ${parsed.amount} Treat:`,
       validTargets: targets,
       resumeAttackQueue,
     };
@@ -540,7 +573,7 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'DELIVER_PRESENT',
       value: parsed.amount,
-      promptText: `Deliver Present: Select a Character to receive a Present:`,
+      promptText: `Deliver Present (${sourceCard.name}): Select a Character to receive a Present:`,
       validTargets: targets,
       resumeAttackQueue,
     };
@@ -569,7 +602,7 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'UNWRAP_PRESENT',
       value: 1,
-      promptText: `Unwrap Present: Select a Character with a Present to unwrap:`,
+      promptText: `Unwrap Present (${sourceCard.name}): Select a Character with a Present to unwrap:`,
       validTargets: targets,
       resumeAttackQueue,
     };
@@ -588,7 +621,7 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'SWITCH_POSITIONS',
       value: 1,
-      promptText: `Switch Positions: Select the first Character to swap:`,
+      promptText: `Switch Positions (${sourceCard.name}): Select the first Character to swap:`,
       validTargets: occupiedLanes,
       resumeAttackQueue,
     };
@@ -614,7 +647,7 @@ function buildPendingTargetFromParsed(
       effectAction: 'RETIRE_OPPONENT',
       value: 1,
       maxTargetCostOrPower: parsed.maxLimit,
-      promptText: `Select an opponent's Character to move to their Retirement Area:`,
+      promptText: `${sourceCard.name}: Select an opponent's Character to move to their Retirement Area:`,
       validTargets,
       resumeAttackQueue,
     };
@@ -631,7 +664,7 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'READY_FRIENDLY',
       value: 1,
-      promptText: `Select an exhausted Character to Ready (untap):`,
+      promptText: `${sourceCard.name}: Select an exhausted Character to Ready (untap):`,
       validTargets,
       resumeAttackQueue,
     };
@@ -648,7 +681,7 @@ function buildPendingTargetFromParsed(
       sourceLane,
       effectAction: 'MOVE_FRIENDLY',
       value: 1,
-      promptText: `Select one of your Characters to move to another lane:`,
+      promptText: `${sourceCard.name}: Select one of your Characters to move to another lane:`,
       validTargets,
       resumeAttackQueue,
     };
@@ -673,28 +706,81 @@ function buildPendingHandChoiceFromParsed(
     const count = Math.min(discardCount, player.hand.length);
     return {
       sourceCard,
+      playerId,
       choiceType: 'DISCARD_FROM_HAND',
       count,
       promptText: `${sourceCard.name}: Choose ${count} card${
         count === 1 ? '' : 's'
       } from your Hand to discard to your Retirement Area:`,
       candidateCards: player.hand,
+      validIndices: player.hand.map((_, idx) => idx),
+      resumeAttackQueue,
+    };
+  }
+
+  if (parsed.kind === 'DISCARD_THEN_DRAW') {
+    if (player.hand.length === 0) return null;
+    const validIndices = player.hand
+      .map((c, idx) => (matchesFilter(c, parsed.requiredNameFilter) ? idx : -1))
+      .filter((idx) => idx !== -1);
+    if (validIndices.length === 0) return null;
+    const count = Math.min(parsed.amount, validIndices.length);
+    return {
+      sourceCard,
+      playerId,
+      choiceType: 'DISCARD_THEN_DRAW',
+      count,
+      secondaryDrawCount: parsed.secondaryAmount || 1,
+      promptText: `${sourceCard.name}: Choose ${count} card${
+        count === 1 ? '' : 's'
+      } from your Hand to discard, then draw ${parsed.secondaryAmount || 1}:`,
+      candidateCards: player.hand,
+      validIndices,
       resumeAttackQueue,
     };
   }
 
   if (parsed.kind === 'RECOVER_RETIREMENT') {
-    const matching = player.retirement.filter((c) => matchesFilter(c, parsed.requiredNameFilter));
+    const matching = player.retirement.filter((c) =>
+      matchesFilter(c, parsed.requiredNameFilter, parsed.requiredTypeFilter)
+    );
     if (matching.length === 0) return null;
     return {
       sourceCard,
+      playerId,
       choiceType: 'RECOVER_FROM_RETIREMENT',
       count: 1,
       promptText: `${sourceCard.name}: Choose 1 ${
-        parsed.requiredNameFilter || 'card'
+        parsed.requiredNameFilter || parsed.requiredTypeFilter || 'card'
       } from your Retirement Area to add to your Hand:`,
       candidateCards: matching,
-      filterLabel: parsed.requiredNameFilter,
+      validIndices: matching.map((_, idx) => idx),
+      filterLabel: parsed.requiredNameFilter || parsed.requiredTypeFilter,
+      resumeAttackQueue,
+    };
+  }
+
+  if (parsed.kind === 'REVEAL_TOP_PICK_HAND') {
+    const revealed = player.mainDeck.slice(0, parsed.amount);
+    if (revealed.length === 0) return null;
+    const validIndices = revealed
+      .map((c, idx) =>
+        matchesFilter(c, parsed.requiredNameFilter, parsed.requiredTypeFilter) ? idx : -1
+      )
+      .filter((idx) => idx !== -1);
+
+    if (validIndices.length === 0) return null;
+    return {
+      sourceCard,
+      playerId,
+      choiceType: 'PICK_REVEALED_TO_HAND',
+      count: 1,
+      promptText: `${sourceCard.name}: Revealed top ${revealed.length} cards — choose 1 matching ${
+        parsed.requiredNameFilter || parsed.requiredTypeFilter || 'card'
+      } to add to your Hand:`,
+      candidateCards: revealed,
+      validIndices,
+      filterLabel: parsed.requiredNameFilter || parsed.requiredTypeFilter,
       resumeAttackQueue,
     };
   }
@@ -718,6 +804,34 @@ function executeParsedImmediateEffect(
       res.state,
       player.displayName,
       `drew ${parsed.amount} card${parsed.amount === 1 ? '' : 's'} via ${sourceCard.name}.`,
+      'EFFECT',
+      sourceCard.name
+    );
+  }
+
+  if (parsed.kind === 'UNTAP_SCENES') {
+    let remainingToUntap = parsed.amount;
+    const updatedScenes = player.sceneArea.map((sc) => {
+      if (remainingToUntap > 0 && (sc.isExhausted || !sc.isFaceUp)) {
+        remainingToUntap -= 1;
+        return { ...sc, isExhausted: false, isFaceUp: true };
+      }
+      return sc;
+    });
+    const next = {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          sceneArea: updatedScenes,
+        },
+      },
+    };
+    return appendActionLog(
+      next,
+      player.displayName,
+      `readied ${parsed.amount} Scene card(s) via ${sourceCard.name}.`,
       'EFFECT',
       sourceCard.name
     );
@@ -759,7 +873,11 @@ function executeParsedImmediateEffect(
 
     for (const lane of ['left', 'center', 'right'] as const) {
       const slot = adv[lane];
-      if (slot.character && matchesFilter(slot.character, parsed.requiredNameFilter) && deck.length > 0) {
+      if (
+        slot.character &&
+        matchesFilter(slot.character, parsed.requiredNameFilter) &&
+        deck.length > 0
+      ) {
         const presentCard = deck.shift()!;
         adv[lane] = {
           ...slot,
@@ -884,23 +1002,24 @@ function executeAppearOrFarewellEffect(
     };
   }
 
-  if (workingState.turnPlayerId === playerId && workingState.phase === 'MAIN_PHASE') {
-    const pending = buildPendingTargetFromParsed(
-      workingState,
-      playerId,
-      card,
-      parsed,
-      'APPEAR_EFFECT',
-      lane
-    );
-    if (pending) {
-      return {
-        ...workingState,
-        phase: 'PENDING_TARGET',
-        pendingTarget: pending,
-      };
-    }
-  } else if (parsed.kind === 'TARGET_RETIRE_OPPONENT') {
+  const origin = type === 'Appear' ? 'APPEAR_EFFECT' : 'FAREWELL_EFFECT';
+  const pending = buildPendingTargetFromParsed(
+    workingState,
+    playerId,
+    card,
+    parsed,
+    origin,
+    lane
+  );
+  if (pending && workingState.turnPlayerId === playerId && workingState.phase === 'MAIN_PHASE') {
+    return {
+      ...workingState,
+      phase: 'PENDING_TARGET',
+      pendingTarget: pending,
+    };
+  }
+
+  if (parsed.kind === 'TARGET_RETIRE_OPPONENT') {
     const oppId: '0' | '1' = playerId === '0' ? '1' : '0';
     const opp = workingState.players[oppId];
     const validLane = (['left', 'center', 'right'] as LaneKey[]).find((l) => {
@@ -990,20 +1109,11 @@ function buildPendingTargetFromEffect(
   state: KayouGameState,
   playerId: '0' | '1',
   sourceCard: CardDefinition,
-  sourceOrigin: 'HAND_EVENT' | 'ADVENTURE_TAP' | 'MANE_ABILITY' | 'APPEAR_EFFECT',
+  sourceOrigin: PendingTargetSelection['sourceOrigin'],
   sourceLane?: LaneKey
 ): PendingTargetSelection | null {
   const parsed = parseActivatedCardEffect(sourceCard);
   return buildPendingTargetFromParsed(state, playerId, sourceCard, parsed, sourceOrigin, sourceLane);
-}
-
-function executeImmediateActivatedEffect(
-  state: KayouGameState,
-  playerId: '0' | '1',
-  sourceCard: CardDefinition
-): KayouGameState {
-  const parsed = parseActivatedCardEffect(sourceCard);
-  return executeParsedImmediateEffect(state, playerId, sourceCard, parsed);
 }
 
 export function playCardFromHand(
@@ -1079,6 +1189,16 @@ export function playCardFromHand(
       card.name
     );
 
+    workingState = setActionSpotlight(
+      workingState,
+      playerId,
+      'PLAY_CHARACTER',
+      `${player.displayName} played ${card.name}`,
+      `Placed in ${lane.toUpperCase()} Adventure Lane`,
+      card,
+      lane
+    );
+
     workingState = executeAppearOrFarewellEffect(workingState, playerId, card, lane, 'Appear');
     return workingState;
   }
@@ -1110,12 +1230,22 @@ export function playCardFromHand(
       },
     };
 
-    return appendActionLog(
+    nextState = appendActionLog(
       nextState,
       player.displayName,
       `adorned ${currentSlot.character.name} with Item ${card.name} (Cost: ${effectiveCost}).`,
       'PLAY',
       card.name
+    );
+
+    return setActionSpotlight(
+      nextState,
+      playerId,
+      'ADORN_ITEM',
+      `${player.displayName} adorned ${card.name}`,
+      `Equipped onto ${currentSlot.character.name} (${lane.toUpperCase()} Lane)`,
+      card,
+      lane
     );
   }
 
@@ -1138,6 +1268,15 @@ export function playCardFromHand(
     `played Event ${card.name} (Cost: ${effectiveCost} Force of Harmony).`,
     'PLAY',
     card.name
+  );
+
+  nextState = setActionSpotlight(
+    nextState,
+    playerId,
+    'PLAY_EVENT',
+    `${player.displayName} played Event: ${card.name}`,
+    sanitizeCardText(card.effectText) || 'Event activated',
+    card
   );
 
   const parsed = parseActivatedCardEffect(card);
@@ -1192,7 +1331,7 @@ export function resolveHandChoice(
   let workingState = { ...state };
   const resumeQueue = choice.resumeAttackQueue;
 
-  if (choice.choiceType === 'DISCARD_FROM_HAND') {
+  if (choice.choiceType === 'DISCARD_FROM_HAND' || choice.choiceType === 'DISCARD_THEN_DRAW') {
     const selectedSet = new Set(uniqueIndices);
     const discardedCards = player.hand.filter((_, idx) => selectedSet.has(idx));
     const remainingHand = player.hand.filter((_, idx) => !selectedSet.has(idx));
@@ -1218,6 +1357,19 @@ export function resolveHandChoice(
       'EFFECT',
       choice.sourceCard.name
     );
+
+    if (choice.choiceType === 'DISCARD_THEN_DRAW' && choice.secondaryDrawCount) {
+      const drawRes = drawCardsWithDeckOutCheck(workingState, playerId, choice.secondaryDrawCount);
+      workingState = drawRes.state;
+      if (workingState.phase === 'GAME_OVER') return workingState;
+      workingState = appendActionLog(
+        workingState,
+        player.displayName,
+        `drew ${choice.secondaryDrawCount} card(s) after discarding.`,
+        'EFFECT',
+        choice.sourceCard.name
+      );
+    }
   } else if (choice.choiceType === 'RECOVER_FROM_RETIREMENT') {
     const chosenCard = choice.candidateCards[uniqueIndices[0]];
     const retIdx = player.retirement.findIndex((c) => c.id === chosenCard.id);
@@ -1245,6 +1397,33 @@ export function resolveHandChoice(
       workingState,
       player.displayName,
       `recovered ${chosenCard.name} from Retirement Area to Hand.`,
+      'EFFECT',
+      choice.sourceCard.name
+    );
+  } else if (choice.choiceType === 'PICK_REVEALED_TO_HAND') {
+    const chosenCard = choice.candidateCards[uniqueIndices[0]];
+    const revealedCount = choice.candidateCards.length;
+    const remainingDeck = player.mainDeck.slice(revealedCount);
+    const unpicked = choice.candidateCards.filter((_, idx) => idx !== uniqueIndices[0]);
+
+    workingState = {
+      ...workingState,
+      phase: 'MAIN_PHASE',
+      pendingHandChoice: null,
+      players: {
+        ...workingState.players,
+        [playerId]: {
+          ...player,
+          mainDeck: [...remainingDeck, ...unpicked],
+          hand: [...player.hand, chosenCard],
+        },
+      },
+    };
+
+    workingState = appendActionLog(
+      workingState,
+      player.displayName,
+      `revealed top ${revealedCount} cards and added ${chosenCard.name} to Hand.`,
       'EFFECT',
       choice.sourceCard.name
     );
@@ -1572,6 +1751,14 @@ export function resolveTargetSelection(
       },
     };
 
+    updatedState = appendActionLog(
+      updatedState,
+      state.players[playerId].displayName,
+      `unwrapped a Present on ${slot.character.name}!`,
+      'EFFECT',
+      pending.sourceCard.name
+    );
+
     updatedState = triggerOnPresentUnwrapped(updatedState, targetPlayerId);
     return finishAndResume(updatedState);
   }
@@ -1680,6 +1867,16 @@ export function activateCharacterAdventureAbility(
     slot.character.name
   );
 
+  workingState = setActionSpotlight(
+    workingState,
+    playerId,
+    'ACTIVATE_ABILITY',
+    `${player.displayName} activated Adventure!`,
+    `${slot.character.name} (${lane.toUpperCase()} Lane)`,
+    slot.character,
+    lane
+  );
+
   const parsed = parseActivatedCardEffect(slot.character);
   workingState = executeParsedImmediateEffect(workingState, playerId, slot.character, parsed, lane);
   if (workingState.phase === 'GAME_OVER') return workingState;
@@ -1739,6 +1936,15 @@ export function activateManeLeaderAbility(
     `activated Main Character ability of ${player.leader.name}.`,
     'EFFECT',
     player.leader.name
+  );
+
+  workingState = setActionSpotlight(
+    workingState,
+    playerId,
+    'ACTIVATE_ABILITY',
+    `${player.displayName} activated Mane Ability!`,
+    player.leader.name,
+    player.leader
   );
 
   const parsed = parseActivatedCardEffect(player.leader);
@@ -1863,10 +2069,8 @@ export function startContactPhase(state: KayouGameState, playerId: '0' | '1'): K
     return endTurn(state, playerId);
   }
 
-  const orderedLanes: LaneKey[] =
-    playerId === state.firstPlayerId
-      ? ['left', 'center', 'right']
-      : ['right', 'center', 'left'];
+  // Rules v1.3.0: Encounters always proceed strictly from Left -> Center -> Right
+  const orderedLanes: LaneKey[] = ['left', 'center', 'right'];
 
   const activeAttackLanes = orderedLanes.filter(
     (l) =>
@@ -1878,11 +2082,19 @@ export function startContactPhase(state: KayouGameState, playerId: '0' | '1'): K
     return endTurn(state, playerId);
   }
 
-  const loggedState = appendActionLog(
+  let loggedState = appendActionLog(
     state,
     attacker.displayName,
-    `entered Contact Phase across lanes: ${activeAttackLanes.map((l) => l.toUpperCase()).join(' → ')}.`,
+    `entered Contact Phase (Left → Right): ${activeAttackLanes.map((l) => l.toUpperCase()).join(' → ')}.`,
     'CLASH'
+  );
+
+  loggedState = setActionSpotlight(
+    loggedState,
+    playerId,
+    'ENTER_CONTACT',
+    `${attacker.displayName} entered Encounter Phase!`,
+    `Resolving Left → Right: ${activeAttackLanes.map((l) => l.toUpperCase()).join(' → ')}`
   );
 
   return advanceToNextAttackLane(loggedState, playerId, activeAttackLanes);
@@ -2077,45 +2289,24 @@ export function passInspireInContact(
 
   if (outcome === 'ATTACKER_WINS') {
     workingState = retireCharacterWithFarewell(workingState, defenderId, lane);
-    const atk = workingState.players[attackerId];
-    workingState = {
-      ...workingState,
-      players: {
-        ...workingState.players,
-        [attackerId]: {
-          ...atk,
-          actedLanesThisTurn: [...atk.actedLanesThisTurn, lane],
-        },
-      },
-    };
   } else if (outcome === 'DEFENDER_WINS') {
     workingState = retireCharacterWithFarewell(workingState, attackerId, lane);
-    const atk = workingState.players[attackerId];
-    workingState = {
-      ...workingState,
-      players: {
-        ...workingState.players,
-        [attackerId]: {
-          ...atk,
-          actedLanesThisTurn: [...atk.actedLanesThisTurn, lane],
-        },
-      },
-    };
   } else {
     workingState = retireCharacterWithFarewell(workingState, attackerId, lane);
     workingState = retireCharacterWithFarewell(workingState, defenderId, lane);
-    const atk = workingState.players[attackerId];
-    workingState = {
-      ...workingState,
-      players: {
-        ...workingState.players,
-        [attackerId]: {
-          ...atk,
-          actedLanesThisTurn: [...atk.actedLanesThisTurn, lane],
-        },
-      },
-    };
   }
+
+  const atkAfter = workingState.players[attackerId];
+  workingState = {
+    ...workingState,
+    players: {
+      ...workingState.players,
+      [attackerId]: {
+        ...atkAfter,
+        actedLanesThisTurn: [...atkAfter.actedLanesThisTurn, lane],
+      },
+    },
+  };
 
   const remainingQueue = state.contactState.laneQueue.slice(1);
   return {
@@ -2177,8 +2368,11 @@ function executePrePlanEffectAndReturnToHand(
   hasPrePlanTrigger: boolean;
   effectSummary: string | null;
 } {
-  const text = sanitizeCardText(revealedCard.effectText);
-  const hasPrePlanTrigger = /Pre-Plan|Scheme|When revealed as a Plan|Plan:/i.test(text);
+  const fullText = sanitizeCardText(revealedCard.effectText);
+  const prePlanClause = extractTriggerClause(fullText, 'Pre-Plan');
+  const hasPrePlanTrigger = Boolean(
+    prePlanClause || /Pre-Plan|Scheme|When revealed as a Plan|Plan:/i.test(fullText)
+  );
 
   let workingState: KayouGameState = {
     ...state,
@@ -2194,22 +2388,32 @@ function executePrePlanEffectAndReturnToHand(
   let effectSummary: string | null = null;
 
   if (hasPrePlanTrigger) {
-    if (/draw\s+1|draw\s+a\s+card/i.test(text)) {
-      const drawRes = drawCardsWithDeckOutCheck(workingState, defenderId, 1);
-      workingState = drawRes.state;
-      effectSummary = `Pre-Plan Triggered: ${workingState.players[defenderId].displayName} drew 1 card!`;
-    } else if (/draw\s+2/i.test(text)) {
-      const drawRes = drawCardsWithDeckOutCheck(workingState, defenderId, 2);
-      workingState = drawRes.state;
-      effectSummary = `Pre-Plan Triggered: ${workingState.players[defenderId].displayName} drew 2 cards!`;
+    const clauseToParse = prePlanClause || fullText;
+    const parsed = parseEffectClause(clauseToParse);
+
+    if (parsed) {
+      workingState = executeParsedImmediateEffect(
+        workingState,
+        defenderId,
+        revealedCard,
+        parsed,
+        activeLane
+      );
+      if (
+        parsed.kind === 'TARGET_RETIRE_OPPONENT' &&
+        workingState.players[attackerId].adventureArea[activeLane].character
+      ) {
+        workingState = retireCharacterWithFarewell(workingState, attackerId, activeLane);
+      }
+      effectSummary = `Pre-Plan Triggered (${revealedCard.name}): ${clauseToParse}`;
     } else if (
-      /retire|remove/i.test(text) &&
+      /retire|remove/i.test(clauseToParse) &&
       workingState.players[attackerId].adventureArea[activeLane].character
     ) {
       workingState = retireCharacterWithFarewell(workingState, attackerId, activeLane);
-      effectSummary = `Pre-Plan Triggered: Attacking character in ${activeLane.toUpperCase()} lane moved to Retirement Area!`;
+      effectSummary = `Pre-Plan Triggered: Attacking character in ${activeLane.toUpperCase()} lane retired!`;
     } else {
-      effectSummary = `Pre-Plan Triggered: ${text}`;
+      effectSummary = `Pre-Plan Triggered: ${clauseToParse}`;
     }
 
     workingState = appendActionLog(
@@ -2357,6 +2561,16 @@ export function resolveBreakthroughChoice(
       'STORY'
     );
 
+    baseStateWithStory = setActionSpotlight(
+      baseStateWithStory,
+      playerId,
+      'PROGRESS_STORY',
+      `${attacker.displayName} Progressed Story!`,
+      `Reached Story Stage ${nextProgress} / 4 (${activeLane.toUpperCase()} Lane)`,
+      attacker.storyStages[nextProgress - 1]?.storyCard,
+      activeLane
+    );
+
     if (nextProgress >= 4) {
       return {
         ...baseStateWithStory,
@@ -2443,6 +2657,16 @@ export function resolveBreakthroughChoice(
       `intervened on ${defender.displayName}'s Story Stage ${targetStage.stage} Plan (${revealedCard.name})!`,
       'STORY',
       revealedCard.name
+    );
+
+    baseStateWithPlan = setActionSpotlight(
+      baseStateWithPlan,
+      playerId,
+      'INTERVENE_PLAN',
+      `${attacker.displayName} Intervened!`,
+      `Revealed ${defender.displayName}'s Stage ${targetStage.stage} Plan: ${revealedCard.name}`,
+      revealedCard,
+      activeLane
     );
 
     const { nextState, hasPrePlanTrigger, effectSummary } = executePrePlanEffectAndReturnToHand(
