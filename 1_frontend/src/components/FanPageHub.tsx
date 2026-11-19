@@ -1,0 +1,653 @@
+import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
+import './FanPageHub.css';
+
+interface ForumPost {
+  id: string;
+  author_id: string;
+  author_name: string;
+  category: string;
+  title: string;
+  body: string;
+  image_url: string | null;
+  visible_image_url: string | null;
+  image_status: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  upvotes: number;
+  downvotes: number;
+  comment_count: number;
+  is_pinned: boolean;
+  created_at: string;
+}
+
+interface ForumComment {
+  id: string;
+  post_id: string;
+  parent_id: string | null;
+  author_name: string;
+  body: string;
+  upvotes: number;
+  downvotes: number;
+  created_at: string;
+}
+
+interface FanPageHubProps {
+  currentUser: {
+    id?: string | number;
+    username?: string;
+    displayName?: string;
+    isSafeMode?: boolean;
+    is_admin?: boolean;
+    role?: string;
+  } | null;
+}
+
+const CATEGORIES = ['ALL', 'General', 'Deck Tech', 'Pulls & Binder', 'Fan Art', 'Rules Q&A'];
+
+export default function FanPageHub({ currentUser }: FanPageHubProps) {
+  const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [category, setCategory] = useState<string>('ALL');
+  const [sort, setSort] = useState<'new' | 'top'>('new');
+  const [loading, setLoading] = useState(false);
+
+  // Create Thread Modal
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newCategory, setNewCategory] = useState('General');
+  const [newBody, setNewBody] = useState('');
+  const [newImageUrl, setNewImageUrl] = useState('');
+  const [formError, setFormError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Active Thread & Comments
+  const [activePost, setActivePost] = useState<ForumPost | null>(null);
+  const [comments, setComments] = useState<ForumComment[]>([]);
+  const [replyText, setReplyText] = useState('');
+  const [replyParentId, setReplyParentId] = useState<string | null>(null);
+  const [commentError, setCommentError] = useState('');
+
+  // Admin Image Approval Queue
+  const [pendingImages, setPendingImages] = useState<ForumPost[]>([]);
+  const [showAdminQueue, setShowAdminQueue] = useState(false);
+
+  const isLoggedIn = Boolean(currentUser?.id);
+  const isSafeMode = Boolean(currentUser?.isSafeMode);
+  const canParticipate = isLoggedIn && !isSafeMode;
+  const isAdmin = Boolean(currentUser?.is_admin || currentUser?.role === 'admin');
+
+  const fetchPosts = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(
+        `${API_BASE_URL}/api/forum/posts?category=${encodeURIComponent(category)}&sort=${sort}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      if (res.ok) {
+        setPosts(await res.json());
+      }
+    } catch (err) {
+      console.error('Error loading forum posts:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPendingImages = async () => {
+    if (!isAdmin) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/forum/admin/pending-images`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setPendingImages(await res.json());
+    } catch (err) {
+      console.error('Error loading pending images:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchPosts();
+  }, [category, sort]);
+
+  useEffect(() => {
+    fetchPendingImages();
+  }, [isAdmin]);
+
+  const openThread = async (post: ForumPost) => {
+    setActivePost(post);
+    setCommentError('');
+    setReplyParentId(null);
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/forum/posts/${post.id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActivePost(data.post);
+        setComments(data.comments || []);
+      }
+    } catch (err) {
+      console.error('Failed to open thread:', err);
+    }
+  };
+
+  const handleCreatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+    const token = localStorage.getItem('token');
+    if (!token) return setFormError('Please sign in first.');
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/forum/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: newTitle,
+          category: newCategory,
+          body: newBody,
+          image_url: newImageUrl.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFormError(data.message || 'Post blocked by safety filter.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (data.pendingImageApproval) {
+        alert('Thread published! Your attached image is queued for Administrator approval before public display.');
+      }
+
+      setNewTitle('');
+      setNewBody('');
+      setNewImageUrl('');
+      setShowCreateModal(false);
+      fetchPosts();
+      if (isAdmin) fetchPendingImages();
+    } catch {
+      setFormError('Network error while publishing post.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleVote = async (targetId: string, targetType: 'post' | 'comment', value: 1 | -1) => {
+    if (!canParticipate) {
+      alert('Registered non-Safe Mode accounts are required to vote.');
+      return;
+    }
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/forum/vote`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ targetId, targetType, value }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        if (targetType === 'post') {
+          setPosts((prev) =>
+            prev.map((p) =>
+              p.id === targetId ? { ...p, upvotes: updated.upvotes, downvotes: updated.downvotes } : p
+            )
+          );
+          if (activePost?.id === targetId) {
+            setActivePost({ ...activePost, upvotes: updated.upvotes, downvotes: updated.downvotes });
+          }
+        } else {
+          setComments((prev) =>
+            prev.map((c) =>
+              c.id === targetId ? { ...c, upvotes: updated.upvotes, downvotes: updated.downvotes } : c
+            )
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Vote failed:', err);
+    }
+  };
+
+  const handlePostComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activePost || !replyText.trim()) return;
+    setCommentError('');
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/forum/posts/${activePost.id}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ body: replyText, parent_id: replyParentId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCommentError(data.message || 'Reply blocked by safety filter.');
+        return;
+      }
+      setComments((prev) => [...prev, data.comment]);
+      setReplyText('');
+      setReplyParentId(null);
+      fetchPosts();
+    } catch {
+      setCommentError('Failed to post reply.');
+    }
+  };
+
+  const handleModerateImage = async (postId: string, action: 'APPROVE' | 'REJECT') => {
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/forum/admin/moderate-image/${postId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        setPendingImages((prev) => prev.filter((p) => p.id !== postId));
+        fetchPosts();
+      }
+    } catch (err) {
+      console.error('Moderation error:', err);
+    }
+  };
+
+  const renderCommentTree = (parentId: string | null = null, depth = 0) => {
+    const branch = comments.filter((c) => (c.parent_id || null) === parentId);
+    if (branch.length === 0) return null;
+
+    return branch.map((c) => (
+      <div key={c.id} className={`forum-comment-branch ${depth > 0 ? 'nested' : ''}`}>
+        <div className="forum-comment-box">
+          <div style={{ fontSize: '12px', color: '#ffd700', fontWeight: 800, marginBottom: '4px' }}>
+            {c.author_name} •{' '}
+            <span style={{ color: '#c4b5fd', fontWeight: 600 }}>
+              {new Date(c.created_at).toLocaleString()}
+            </span>
+          </div>
+          <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#fce7f3', whiteSpace: 'pre-wrap' }}>
+            {c.body}
+          </p>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', fontSize: '12px' }}>
+            <button
+              className="vote-arrow-btn up"
+              style={{ fontSize: '12px' }}
+              onClick={() => handleVote(c.id, 'comment', 1)}
+            >
+              ▲ {c.upvotes}
+            </button>
+            <button
+              className="vote-arrow-btn down"
+              style={{ fontSize: '12px' }}
+              onClick={() => handleVote(c.id, 'comment', -1)}
+            >
+              ▼ {c.downvotes}
+            </button>
+            {canParticipate && (
+              <button
+                onClick={() => setReplyParentId(c.id)}
+                style={{ background: 'none', border: 'none', color: '#f9a8d4', cursor: 'pointer', fontWeight: 800 }}
+              >
+                💬 Reply
+              </button>
+            )}
+          </div>
+        </div>
+        {renderCommentTree(c.id, depth + 1)}
+      </div>
+    ));
+  };
+
+  return (
+    <div className="fanpage-container">
+      <div className="fanpage-wrapper">
+        {/* Header */}
+        <div className="fanpage-header">
+          <div>
+            <h1>📜 Equestrian Fan Forum</h1>
+            <span className="fanpage-subtitle">
+              Share deck techs, tournament stories, binder pulls, and community art
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {isAdmin && (
+              <button
+                className="stable-tab-btn"
+                style={{ borderColor: '#ffd700', color: '#ffd700' }}
+                onClick={() => setShowAdminQueue((prev) => !prev)}
+              >
+                🛡️ Image Approval Queue ({pendingImages.length})
+              </button>
+            )}
+            {canParticipate ? (
+              <button className="build-new-btn" onClick={() => setShowCreateModal(true)}>
+                ✍️ Create Thread ✨
+              </button>
+            ) : (
+              <div className="fanpage-lock-pill">
+                {isSafeMode
+                  ? '🔒 Safe Mode Active (Verify Email to Post)'
+                  : '🔒 Sign in to Create Threads & Vote'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Admin Image Moderation Panel */}
+        {isAdmin && showAdminQueue && (
+          <div className="admin-moderation-box">
+            <h3 style={{ margin: 0, color: '#ffd700' }}>
+              🛡️ Pending User Image Uploads ({pendingImages.length})
+            </h3>
+            {pendingImages.length === 0 ? (
+              <p style={{ color: '#e9d5ff', marginTop: '10px', marginBottom: 0 }}>
+                No pending images awaiting approval.
+              </p>
+            ) : (
+              <div className="admin-moderation-grid">
+                {pendingImages.map((item) => (
+                  <div key={item.id} className="admin-mod-card">
+                    <img src={item.image_url || ''} alt="Pending upload" />
+                    <div style={{ fontWeight: 800, fontSize: '14px', color: '#fff' }}>{item.title}</div>
+                    <div style={{ fontSize: '12px', color: '#c4b5fd', marginBottom: '10px' }}>
+                      by {item.author_name}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        className="deck-action-btn btn-primary"
+                        onClick={() => handleModerateImage(item.id, 'APPROVE')}
+                      >
+                        Approve ✅
+                      </button>
+                      <button
+                        className="deck-action-btn btn-danger"
+                        onClick={() => handleModerateImage(item.id, 'REJECT')}
+                      >
+                        Reject ❌
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Filter & Sort Controls */}
+        <div className="fanpage-toolbar">
+          <div className="fanpage-pill-group">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                className={`stable-tab-btn ${category === cat ? 'active' : ''}`}
+                onClick={() => {
+                  setActivePost(null);
+                  setCategory(cat);
+                }}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+          <div className="fanpage-pill-group">
+            <button
+              className={`stable-tab-btn ${sort === 'new' ? 'active' : ''}`}
+              onClick={() => setSort('new')}
+            >
+              🆕 Newest
+            </button>
+            <button
+              className={`stable-tab-btn ${sort === 'top' ? 'active' : ''}`}
+              onClick={() => setSort('top')}
+            >
+              🔥 Top Voted
+            </button>
+          </div>
+        </div>
+
+        {/* Thread Detail View OR Feed */}
+        {activePost ? (
+          <div className="forum-thread-detail">
+            <button
+              className="stable-tab-btn"
+              style={{ marginBottom: '16px' }}
+              onClick={() => setActivePost(null)}
+            >
+              ← Back to Forum Feed
+            </button>
+
+            <div style={{ display: 'flex', gap: '18px', alignItems: 'flex-start' }}>
+              <div className="forum-vote-col">
+                <button className="vote-arrow-btn up" onClick={() => handleVote(activePost.id, 'post', 1)}>
+                  ▲
+                </button>
+                <span className="vote-score">{activePost.upvotes - activePost.downvotes}</span>
+                <button className="vote-arrow-btn down" onClick={() => handleVote(activePost.id, 'post', -1)}>
+                  ▼
+                </button>
+              </div>
+
+              <div className="forum-post-main">
+                <div className="forum-meta-row">
+                  <span className="forum-category-badge">{activePost.category}</span>
+                  <span className="forum-author-text">
+                    Posted by <strong>{activePost.author_name}</strong> •{' '}
+                    {new Date(activePost.created_at).toLocaleString()}
+                  </span>
+                </div>
+
+                <h2 style={{ margin: '6px 0 12px 0', color: '#fff', fontSize: '23px' }}>{activePost.title}</h2>
+
+                {activePost.visible_image_url && (
+                  <div>
+                    {activePost.image_status === 'PENDING' && (
+                      <div className="forum-pending-badge" style={{ display: 'inline-block', marginBottom: '8px' }}>
+                        ⏳ Image Pending Administrator Approval (Only visible to you & admins)
+                      </div>
+                    )}
+                    <img
+                      src={activePost.visible_image_url}
+                      alt={activePost.title}
+                      className="forum-full-image"
+                    />
+                  </div>
+                )}
+
+                <p style={{ color: '#fce7f3', fontSize: '15px', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
+                  {activePost.body}
+                </p>
+              </div>
+            </div>
+
+            <hr style={{ borderColor: 'rgba(255, 158, 187, 0.25)', margin: '22px 0' }} />
+
+            {canParticipate && (
+              <form onSubmit={handlePostComment} style={{ marginBottom: '22px' }}>
+                {replyParentId && (
+                  <div style={{ fontSize: '12px', color: '#ffd700', marginBottom: '6px' }}>
+                    Replying to comment •{' '}
+                    <button
+                      type="button"
+                      onClick={() => setReplyParentId(null)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#fda4af',
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+                <textarea
+                  rows={3}
+                  className="forum-textarea"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Write a respectful reply..."
+                />
+                {commentError && <div className="forum-error-banner">⚠️ {commentError}</div>}
+                <button type="submit" className="build-new-btn" style={{ padding: '9px 22px', fontSize: '13.5px' }}>
+                  Post Reply 💬
+                </button>
+              </form>
+            )}
+
+            <h3 style={{ color: '#ffd700', margin: '0 0 8px 0' }}>Comments ({comments.length})</h3>
+            {comments.length === 0 ? (
+              <p style={{ color: '#c4b5fd' }}>No replies yet. Start the conversation!</p>
+            ) : (
+              renderCommentTree(null, 0)
+            )}
+          </div>
+        ) : loading ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#ffd700', fontSize: '18px' }}>
+            <strong>Loading Forum Threads... ✨</strong>
+          </div>
+        ) : (
+          <div className="fanpage-feed">
+            {posts.map((post) => (
+              <div key={post.id} className="forum-post-card" onClick={() => openThread(post)}>
+                <div className="forum-vote-col" onClick={(e) => e.stopPropagation()}>
+                  <button className="vote-arrow-btn up" onClick={() => handleVote(post.id, 'post', 1)}>
+                    ▲
+                  </button>
+                  <span className="vote-score">{post.upvotes - post.downvotes}</span>
+                  <button className="vote-arrow-btn down" onClick={() => handleVote(post.id, 'post', -1)}>
+                    ▼
+                  </button>
+                </div>
+
+                <div className="forum-post-main">
+                  <div className="forum-meta-row">
+                    <span className="forum-category-badge">{post.category}</span>
+                    <span className="forum-author-text">
+                      Posted by <strong>{post.author_name}</strong> •{' '}
+                      {new Date(post.created_at).toLocaleDateString()}
+                    </span>
+                    {post.image_status === 'PENDING' && (
+                      <span className="forum-pending-badge">⏳ Image Awaiting Admin Approval</span>
+                    )}
+                  </div>
+                  <h3 className="forum-post-title">{post.title}</h3>
+                  <p className="forum-post-excerpt">{post.body}</p>
+                  <div style={{ fontSize: '12.5px', color: '#ffd700', fontWeight: 800 }}>
+                    💬 {post.comment_count || 0} Comments
+                  </div>
+                </div>
+
+                {post.visible_image_url && (
+                  <img src={post.visible_image_url} alt="Thumbnail" className="forum-post-thumb" />
+                )}
+              </div>
+            ))}
+
+            {posts.length === 0 && (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '40px',
+                  color: '#fbcfe8',
+                  background: 'rgba(36, 12, 56, 0.55)',
+                  borderRadius: '26px',
+                  border: '2px dashed rgba(255, 158, 187, 0.45)',
+                }}
+              >
+                No threads in this category yet. Be the first to start a discussion!
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Create Thread Modal */}
+      {showCreateModal && (
+        <div className="forum-modal-overlay" onClick={() => setShowCreateModal(false)}>
+          <form className="forum-modal-card" onSubmit={handleCreatePost} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: '0 0 16px 0', color: '#ffd700' }}>✍️ Create New Forum Thread</h2>
+
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '4px' }}>
+              Category
+            </label>
+            <select
+              className="forum-select"
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+            >
+              {CATEGORIES.filter((c) => c !== 'ALL').map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '4px' }}>
+              Thread Title
+            </label>
+            <input
+              type="text"
+              required
+              className="forum-input"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="Enter an engaging title..."
+            />
+
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '4px' }}>
+              Post Body
+            </label>
+            <textarea
+              rows={5}
+              required
+              className="forum-textarea"
+              value={newBody}
+              onChange={(e) => setNewBody(e.target.value)}
+              placeholder="Share your thoughts, decklist insights, or story..."
+            />
+
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '4px' }}>
+              Optional Image URL (Requires Administrator Approval before public display)
+            </label>
+            <input
+              type="url"
+              className="forum-input"
+              value={newImageUrl}
+              onChange={(e) => setNewImageUrl(e.target.value)}
+              placeholder="https://..."
+            />
+
+            {formError && <div className="forum-error-banner">⚠️ {formError}</div>}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="stable-tab-btn"
+                onClick={() => setShowCreateModal(false)}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="build-new-btn" disabled={submitting}>
+                {submitting ? 'Publishing...' : 'Publish Thread ✨'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -9,6 +9,7 @@ import decksRouter from './routes/decks.js';
 import shopsRouter from './routes/shops.js';
 import mediaRouter from './routes/media.js';
 import adminRouter from './routes/admin.js';
+import forumRouter from './routes/forum.js';
 import { GameManager } from './websocket/gameManager.js';
 
 const app = express();
@@ -129,6 +130,43 @@ async function startServer() {
       ALTER TABLE auth.uploaded_media ADD COLUMN IF NOT EXISTS title VARCHAR(255);
     `);
 
+    // 8. Fan Page Forum Tables (Threads, Nested Comments, Votes)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS auth.forum_posts (
+        id VARCHAR(255) PRIMARY KEY,
+        author_id VARCHAR(255),
+        author_name VARCHAR(255) NOT NULL,
+        category VARCHAR(64) DEFAULT 'General',
+        title VARCHAR(255) NOT NULL,
+        body TEXT NOT NULL,
+        image_url TEXT,
+        image_status VARCHAR(32) DEFAULT 'NONE',
+        upvotes INT DEFAULT 1,
+        downvotes INT DEFAULT 0,
+        is_pinned BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS auth.forum_comments (
+        id VARCHAR(255) PRIMARY KEY,
+        post_id VARCHAR(255) REFERENCES auth.forum_posts(id) ON DELETE CASCADE,
+        parent_id VARCHAR(255) NULL,
+        author_id VARCHAR(255),
+        author_name VARCHAR(255) NOT NULL,
+        body TEXT NOT NULL,
+        upvotes INT DEFAULT 1,
+        downvotes INT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS auth.forum_votes (
+        user_id VARCHAR(255) NOT NULL,
+        target_id VARCHAR(255) NOT NULL,
+        vote_value INT NOT NULL,
+        PRIMARY KEY (user_id, target_id)
+      );
+    `);
+
     console.log('[DATABASE] Initialization and schema hardening complete.');
   } catch (err: any) {
     console.error('[DATABASE INIT ERROR]', err.message);
@@ -140,6 +178,7 @@ async function startServer() {
   app.use('/api/shop', shopsRouter);
   app.use('/api/media', mediaRouter);
   app.use('/api/admin', adminRouter);
+  app.use('/api/forum', forumRouter);
   app.use('/api', cardsRouter);
   app.use('/api', decksRouter);
 

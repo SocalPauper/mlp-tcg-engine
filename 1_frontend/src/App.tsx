@@ -11,18 +11,20 @@ import CollectionBinder from './components/CollectionBinder';
 import ShopView from './components/ShopView';
 import RulesGlossaryTab from './components/RulesGlossaryTab';
 import AdminPanel from './components/AdminPanel';
+import FanPageHub from './components/FanPageHub';
 import AuthModal from './components/AuthModal';
 import './index.css';
 
 axios.defaults.withCredentials = true;
 
 interface User {
-  id: number;
+  id: number | string;
   username: string;
   email: string;
   displayName: string;
   isSafeMode: boolean;
   isVerified: boolean;
+  is_admin?: boolean;
   role?: string;
   reward_points?: number;
 }
@@ -256,7 +258,6 @@ function AppContent() {
     }
   };
 
-  // Restore active match even if the browser tab/window was closed and reopened
   useEffect(() => {
     const savedRaw = localStorage.getItem(MATCH_SESSION_KEY);
     if (!savedRaw) return;
@@ -359,7 +360,7 @@ function AppContent() {
                 {currentTab === 'shop' && <ShopView />}
                 {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
                 {currentTab === 'standings' && <div className="placeholder-tab"><h2>Tournament Standings Coming Soon</h2></div>}
-                {currentTab === 'fanPage' && <div className="placeholder-tab"><h2>Fan Art & Lore Page Coming Soon</h2></div>}
+                {currentTab === 'fanPage' && <FanPageHub currentUser={user} />}
                 {currentTab === 'rules' && <RulesGlossaryTab />}
                 {currentTab === 'admin' && <AdminPanel />}
               </>
