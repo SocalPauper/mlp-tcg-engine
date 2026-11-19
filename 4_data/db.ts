@@ -53,10 +53,20 @@ export async function initDatabase() {
       ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS pity_counter INT DEFAULT 0;
     `);
 
+    // Detect the exact column type of auth.users.id (UUID vs INT vs VARCHAR)
+    const idTypeRes = await client.query(`
+      SELECT data_type, udt_name
+      FROM information_schema.columns
+      WHERE table_schema = 'auth' AND table_name = 'users' AND column_name = 'id';
+    `);
+    const udt = idTypeRes.rows[0]?.udt_name || 'int4';
+    const userIdColType =
+      udt === 'uuid' ? 'UUID' : udt === 'int8' ? 'BIGINT' : udt === 'int4' ? 'INT' : 'VARCHAR(100)';
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS auth.point_transactions (
         id SERIAL PRIMARY KEY,
-        user_id INT NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+        user_id ${userIdColType} NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
         room_code VARCHAR(100),
         queue_type VARCHAR(50) NOT NULL,
         delta INT NOT NULL,
