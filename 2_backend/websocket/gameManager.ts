@@ -623,14 +623,33 @@ export class GameManager {
     const cardMap = new Map<string, CardDefinition>(
       allRows.map((r: any) => [String(r.id).toLowerCase(), mapDbRowToCardDef(r)])
     );
+    const allCards = Array.from(cardMap.values());
 
-    if (deckId.startsWith('starter-')) {
-      const found = (startermaps as any[]).find((s) => s.id === deckId) || (startermaps as any[])[0];
+    const normalizedDeckId = String(deckId || 'starter-sd01').trim().toLowerCase();
+
+    if (normalizedDeckId.startsWith('starter-')) {
+      const found =
+        (startermaps as any[]).find((s) => String(s.id).toLowerCase() === normalizedDeckId) ||
+        (startermaps as any[])[0];
+
       const hydrateIds = (ids: string[]): CardDefinition[] =>
-        ids.map((id) => cardMap.get(String(id).toLowerCase())).filter(Boolean) as CardDefinition[];
+        (Array.isArray(ids) ? ids : [])
+          .map((id) => cardMap.get(String(id).toLowerCase()))
+          .filter(Boolean) as CardDefinition[];
+
+      const targetElement = String(found.element || '').toLowerCase();
+      const leader =
+        cardMap.get(String(found.mane_character || '').toLowerCase()) ||
+        allCards.find(
+          (c) =>
+            String(c.type || '').toLowerCase().includes('mane') &&
+            String(c.element || '').toLowerCase() === targetElement
+        ) ||
+        allCards.find((c) => String(c.type || '').toLowerCase().includes('mane')) ||
+        allCards[0];
 
       return {
-        leader: cardMap.get(String(found.mane_character).toLowerCase()) || Array.from(cardMap.values())[0],
+        leader,
         storyDeck: hydrateIds(found.story_deck),
         sceneDeck: hydrateIds(found.scene_deck),
         mainDeck: hydrateIds(found.main_deck),
@@ -653,7 +672,8 @@ export class GameManager {
 
       const leader =
         (maneId && cardMap.get(String(maneId).toLowerCase())) ||
-        Array.from(cardMap.values()).find((c) => c.type === 'Mane Character')!;
+        allCards.find((c) => String(c.type || '').toLowerCase().includes('mane')) ||
+        allCards[0];
 
       return {
         leader,
@@ -665,10 +685,15 @@ export class GameManager {
 
     const fallbackFound = (startermaps as any[])[0];
     const hydrateIds = (ids: string[]): CardDefinition[] =>
-      ids.map((id) => cardMap.get(String(id).toLowerCase())).filter(Boolean) as CardDefinition[];
+      (Array.isArray(ids) ? ids : [])
+        .map((id) => cardMap.get(String(id).toLowerCase()))
+        .filter(Boolean) as CardDefinition[];
 
     return {
-      leader: cardMap.get(String(fallbackFound.mane_character).toLowerCase()) || Array.from(cardMap.values())[0],
+      leader:
+        cardMap.get(String(fallbackFound.mane_character).toLowerCase()) ||
+        allCards.find((c) => String(c.type || '').toLowerCase().includes('mane')) ||
+        allCards[0],
       storyDeck: hydrateIds(fallbackFound.story_deck),
       sceneDeck: hydrateIds(fallbackFound.scene_deck),
       mainDeck: hydrateIds(fallbackFound.main_deck),

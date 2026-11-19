@@ -28,48 +28,48 @@ interface MainHubProps {
   onNavigateTab?: (tab: string) => void;
 }
 
-const STARTER_DECKS: SelectableDeck[] = [
+const DEFAULT_STARTER_DECKS: SelectableDeck[] = [
   {
     id: 'starter-sd01',
     name: 'Twilight Sparkle - Magic Starter',
     element: 'Magic',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01A-RR01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-RR01.webp',
   },
   {
     id: 'starter-sd02',
     name: 'Rainbow Dash - Loyalty Starter',
     element: 'Loyalty',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01E-RR01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-RR05.webp',
   },
   {
     id: 'starter-sd03',
     name: 'Applejack - Honesty Starter',
     element: 'Honesty',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01D-RR01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-RR04.webp',
   },
   {
     id: 'starter-sd04',
     name: 'Rarity - Generosity Starter',
     element: 'Generosity',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01F-RR01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-RR06.webp',
   },
   {
     id: 'starter-sd05',
     name: 'Fluttershy - Kindness Starter',
     element: 'Kindness',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01B-RR01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-RR02.webp',
   },
   {
     id: 'starter-sd06',
     name: 'Pinkie Pie - Laughter Starter',
     element: 'Laughter',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01C-RR01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-RR03.webp',
   },
 ];
 
@@ -104,40 +104,35 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   const { user } = useAuth();
   const isGuest = !user;
 
-  // Strict verification & safety gate for Community Chat
   const isSafeMode = user?.isSafeMode ?? true;
   const canChat = Boolean(user && !isSafeMode && (user.isVerified || user.role === 'admin'));
 
   const wsRef = useRef<WebSocket | null>(null);
-  const [availableDecks, setAvailableDecks] = useState<SelectableDeck[]>(STARTER_DECKS);
+  const [starterDecks, setStarterDecks] = useState<SelectableDeck[]>(DEFAULT_STARTER_DECKS);
+  const [availableDecks, setAvailableDecks] = useState<SelectableDeck[]>(DEFAULT_STARTER_DECKS);
   const [liveRooms, setLiveRooms] = useState<LobbyRoom[]>([]);
 
-  // Matchmaking & In-Hub Deck Picker State
   const [matchMode, setMatchMode] = useState<'Casual' | 'Ranked'>('Casual');
   const [selectedDeck, setSelectedDeck] = useState<string>(() => {
     return localStorage.getItem('mlp_last_deck_id') || 'starter-sd01';
   });
   const [showDeckPickerModal, setShowDeckPickerModal] = useState(false);
 
-  // Quick Play Starter Prompt & Queue State
   const [showQuickPlayStarterModal, setShowQuickPlayStarterModal] = useState(false);
   const [quickPlayStarterId, setQuickPlayStarterId] = useState<string>('starter-sd01');
   const [isSearchingQueue, setIsSearchingQueue] = useState(false);
   const [queueStatusText, setQueueStatusText] = useState('Searching for opponent...');
 
-  // Create Private Match State
   const [privateRoomName, setPrivateRoomName] = useState('');
   const [privatePassword, setPrivatePassword] = useState('');
   const [allowSpectators, setAllowSpectators] = useState(true);
 
-  // Join Private Room Password Prompt
   const [passwordPromptRoom, setPasswordPromptRoom] = useState<{
     room: LobbyRoom;
     action: 'JOIN' | 'SPECTATE';
   } | null>(null);
   const [joinPasswordInput, setJoinPasswordInput] = useState('');
 
-  // Verified-only Community Chat State
   const [chatMessages, setChatMessages] = useState([
     {
       user: 'Princess Celestia',
@@ -146,7 +141,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   ]);
   const [inputMsg, setInputMsg] = useState('');
 
-  // Global theme settings loaded from backend auth.site_settings
   const [customBgUrl, setCustomBgUrl] = useState<string>('');
   const [bgOpacity, setBgOpacity] = useState<number>(1);
 
@@ -177,28 +171,63 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
     localStorage.setItem('mlp_last_deck_id', selectedDeck);
   }, [selectedDeck]);
 
-  // Fetch user's custom decks + starters
+  // Hydrate both Starter Decks and Custom Decks directly from /api/decks + /api/cards so R2 image URLs always match DB
   useEffect(() => {
     const token = localStorage.getItem('token');
-    fetch(`${API_BASE_URL}/api/decks`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data: any[]) => {
-        if (!Array.isArray(data) || data.length === 0) return;
-        const starterFallbackMap = new Map(
-          STARTER_DECKS.map((s) => [s.id, s.mane_image_url])
-        );
-        const mapped: SelectableDeck[] = data.map((d) => ({
+    Promise.all([
+      fetch(`${API_BASE_URL}/api/decks`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }).then((res) => (res.ok ? res.json() : [])),
+      fetch(`${API_BASE_URL}/api/cards`).then((res) => (res.ok ? res.json() : [])),
+    ])
+      .then(([decksData, cardsData]: [any[], any[]]) => {
+        const maneByElement = new Map<string, string>();
+        if (Array.isArray(cardsData)) {
+          for (const c of cardsData) {
+            const type = String(c.card_type || c.type || '').toLowerCase();
+            const el = String(c.element || '').toLowerCase();
+            const img = c.image_url || c.imageUrl;
+            if (type.includes('mane') && el && img && !maneByElement.has(el)) {
+              maneByElement.set(el, img);
+            }
+          }
+        }
+
+        const hydratedStarters = DEFAULT_STARTER_DECKS.map((st) => {
+          const fromApi = Array.isArray(decksData)
+            ? decksData.find((d) => d.id === st.id)
+            : null;
+          const dbImg =
+            fromApi?.mane_image_url ||
+            maneByElement.get(st.element.toLowerCase()) ||
+            st.mane_image_url;
+          return {
+            ...st,
+            name: fromApi?.name || st.name,
+            mane_image_url: dbImg,
+          };
+        });
+
+        setStarterDecks(hydratedStarters);
+
+        if (!Array.isArray(decksData) || decksData.length === 0) {
+          setAvailableDecks(hydratedStarters);
+          return;
+        }
+
+        const starterImgMap = new Map(hydratedStarters.map((s) => [s.id, s.mane_image_url]));
+        const mapped: SelectableDeck[] = decksData.map((d) => ({
           id: d.id,
           name: d.name,
           element: d.element || 'Unaligned',
           is_starter: Boolean(d.is_starter || String(d.id).startsWith('starter-')),
           mane_image_url:
             d.mane_image_url ||
-            starterFallbackMap.get(d.id) ||
-            'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01A-RR01.webp',
+            starterImgMap.get(d.id) ||
+            maneByElement.get(String(d.element || '').toLowerCase()) ||
+            'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp',
         }));
+
         const filtered = isGuest ? mapped.filter((d) => d.is_starter) : mapped;
         if (filtered.length > 0) {
           setAvailableDecks(filtered);
@@ -469,7 +498,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
 
           {/* 3. CURRENT GAMES BROWSER & CREATE PRIVATE MATCH */}
           <div className="lobby-dual-grid">
-            {/* Active / Open Games Module */}
             <div className="cloud-panel">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <h3 style={{ margin: 0 }}>🎮 Live Matches &amp; Lobbies</h3>
@@ -539,7 +567,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
               )}
             </div>
 
-            {/* Create Private Match Module */}
             <div className="cloud-panel">
               <h3>🔐 Create Private Match</h3>
               <form className="private-match-form" onSubmit={handleCreatePrivateMatch}>
@@ -689,9 +716,13 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
                   <img
                     src={
                       deck.mane_image_url ||
-                      'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01A-RR01.webp'
+                      'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp'
                     }
                     alt={deck.name}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src =
+                        'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp';
+                    }}
                   />
                   <strong style={{ fontSize: '13px', color: '#fffdf7' }}>{deck.name}</strong>
                   <span style={{ fontSize: '11px', color: '#ffd700', fontWeight: 800 }}>
@@ -724,13 +755,23 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
             </p>
 
             <div className="hub-picker-grid">
-              {STARTER_DECKS.map((starter) => (
+              {starterDecks.map((starter) => (
                 <div
                   key={starter.id}
                   className={`hub-deck-option ${quickPlayStarterId === starter.id ? 'selected' : ''}`}
                   onClick={() => setQuickPlayStarterId(starter.id)}
                 >
-                  <img src={starter.mane_image_url!} alt={starter.name} />
+                  <img
+                    src={
+                      starter.mane_image_url ||
+                      'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp'
+                    }
+                    alt={starter.name}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src =
+                        'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp';
+                    }}
+                  />
                   <strong style={{ fontSize: '13px', color: '#fffdf7' }}>{starter.name}</strong>
                   <span style={{ fontSize: '11px', color: '#ffd700', fontWeight: 800 }}>
                     {starter.element}
