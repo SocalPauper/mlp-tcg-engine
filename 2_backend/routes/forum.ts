@@ -375,7 +375,7 @@ router.get('/admin/pending-images', requireAdmin, async (_req, res) => {
   }
 });
 
-// ADMIN: Approve or Reject Uploaded Image (Explicit SQL branches avoid PostgreSQL parameter type mismatch)
+// ADMIN: Approve or Reject Uploaded Image
 router.post('/admin/moderate-image/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { action } = req.body;
@@ -397,6 +397,82 @@ router.post('/admin/moderate-image/:id', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Error moderating image:', err);
     return res.status(500).json({ success: false, message: 'Failed to update image status.' });
+  }
+});
+
+// DELETE /api/forum/posts/:id (Author or Admin can delete a thread)
+router.delete('/posts/:id', async (req, res) => {
+  const { id } = req.params;
+  const user = await resolveSessionUser(req);
+
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Authentication required.' });
+  }
+
+  try {
+    const postRes = await pool.query(
+      'SELECT author_id FROM auth.forum_posts WHERE id = $1;',
+      [id]
+    );
+    if (postRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Post not found.' });
+    }
+
+    const isAuthor = String(postRes.rows[0].author_id) === String(user.id);
+    const isAdmin = Boolean(user.is_admin);
+
+    if (!isAuthor && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the post author or an administrator can delete this thread.',
+      });
+    }
+
+    await pool.query('DELETE FROM auth.forum_votes WHERE target_id = $1;', [id]);
+    await pool.query('DELETE FROM auth.forum_posts WHERE id = $1;', [id]);
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting forum post:', err);
+    return res.status(500).json({ success: false, message: 'Failed to delete post.' });
+  }
+});
+
+// DELETE /api/forum/comments/:id (Author or Admin can delete a comment)
+router.delete('/comments/:id', async (req, res) => {
+  const { id } = req.params;
+  const user = await resolveSessionUser(req);
+
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Authentication required.' });
+  }
+
+  try {
+    const commentRes = await pool.query(
+      'SELECT author_id FROM auth.forum_comments WHERE id = $1;',
+      [id]
+    );
+    if (commentRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Comment not found.' });
+    }
+
+    const isAuthor = String(commentRes.rows[0].author_id) === String(user.id);
+    const isAdmin = Boolean(user.is_admin);
+
+    if (!isAuthor && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the comment author or an administrator can delete this reply.',
+      });
+    }
+
+    await pool.query('DELETE FROM auth.forum_votes WHERE target_id = $1;', [id]);
+    await pool.query('DELETE FROM auth.forum_comments WHERE id = $1 OR parent_id = $1;', [id]);
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting forum comment:', err);
+    return res.status(500).json({ success: false, message: 'Failed to delete reply.' });
   }
 });
 

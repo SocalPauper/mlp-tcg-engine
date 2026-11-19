@@ -23,6 +23,7 @@ interface ForumComment {
   id: string;
   post_id: string;
   parent_id: string | null;
+  author_id?: string;
   author_name: string;
   body: string;
   upvotes: number;
@@ -43,6 +44,28 @@ interface FanPageHubProps {
 }
 
 const CATEGORIES = ['ALL', 'General', 'Deck Tech', 'Pulls & Binder', 'Fan Art', 'Rules Q&A'];
+
+function renderTextWithLinks(text: string) {
+  const urlRegex = /(https?:\/\/[^\s<>"')]+)/gi;
+  const parts = String(text || '').split(urlRegex);
+  return parts.map((part, idx) => {
+    if (/^https?:\/\//i.test(part)) {
+      return (
+        <a
+          key={idx}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: '#ffd700', textDecoration: 'underline', fontWeight: 800 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      );
+    }
+    return <React.Fragment key={idx}>{part}</React.Fragment>;
+  });
+}
 
 export default function FanPageHub({ currentUser }: FanPageHubProps) {
   const [posts, setPosts] = useState<ForumPost[]>([]);
@@ -89,6 +112,12 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
       headers['Authorization'] = `Bearer ${token}`;
     }
     return headers;
+  };
+
+  const canDeleteItem = (authorId?: string) => {
+    if (!isLoggedIn) return false;
+    if (isAdmin) return true;
+    return Boolean(authorId && String(authorId) === String(currentUser?.id));
   };
 
   const fetchPosts = async () => {
@@ -220,6 +249,53 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
     }
   };
 
+  const handleDeletePost = async (postId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm('Are you sure you want to permanently delete this thread?')) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/forum/posts/${postId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.message || 'Failed to delete thread.');
+        return;
+      }
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      setPendingImages((prev) => prev.filter((p) => p.id !== postId));
+      if (activePost?.id === postId) {
+        setActivePost(null);
+      }
+    } catch (err) {
+      console.error('Error deleting post:', err);
+      alert('Network error while deleting post.');
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!window.confirm('Delete this reply?')) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/forum/comments/${commentId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.message || 'Failed to delete reply.');
+        return;
+      }
+      setComments((prev) => prev.filter((c) => c.id !== commentId && c.parent_id !== commentId));
+      fetchPosts();
+    } catch (err) {
+      console.error('Error deleting comment:', err);
+    }
+  };
+
   const handleVote = async (targetId: string, targetType: 'post' | 'comment', value: 1 | -1) => {
     if (!canParticipate) {
       alert('Registered non-Safe Mode accounts are required to vote.');
@@ -321,7 +397,7 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
             </span>
           </div>
           <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#fce7f3', whiteSpace: 'pre-wrap' }}>
-            {c.body}
+            {renderTextWithLinks(c.body)}
           </p>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', fontSize: '12px' }}>
             <button
@@ -344,6 +420,14 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
                 style={{ background: 'none', border: 'none', color: '#f9a8d4', cursor: 'pointer', fontWeight: 800 }}
               >
                 💬 Reply
+              </button>
+            )}
+            {canDeleteItem(c.author_id) && (
+              <button
+                onClick={() => handleDeleteComment(c.id)}
+                style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontWeight: 800 }}
+              >
+                🗑️ Delete
               </button>
             )}
           </div>
@@ -435,13 +519,23 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
         {/* Thread Detail View OR Feed */}
         {activePost ? (
           <div className="forum-thread-detail">
-            <button
-              className="stable-tab-btn"
-              style={{ marginBottom: '16px' }}
-              onClick={() => setActivePost(null)}
-            >
-              ← Back to Forum Feed
-            </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+              <button
+                className="stable-tab-btn"
+                onClick={() => setActivePost(null)}
+              >
+                ← Back to Forum Feed
+              </button>
+              {canDeleteItem(activePost.author_id) && (
+                <button
+                  className="deck-action-btn btn-danger"
+                  style={{ flex: '0 0 auto', padding: '8px 16px' }}
+                  onClick={() => handleDeletePost(activePost.id)}
+                >
+                  🗑️ Delete Thread
+                </button>
+              )}
+            </div>
 
             <div style={{ display: 'flex', gap: '18px', alignItems: 'flex-start' }}>
               <div className="forum-vote-col">
@@ -504,7 +598,7 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
                 )}
 
                 <p style={{ color: '#fce7f3', fontSize: '15px', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
-                  {activePost.body}
+                  {renderTextWithLinks(activePost.body)}
                 </p>
               </div>
             </div>
@@ -579,6 +673,15 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
                     </span>
                     {post.image_status === 'PENDING' && (
                       <span className="forum-pending-badge">⏳ Image Awaiting Admin Approval</span>
+                    )}
+                    {canDeleteItem(post.author_id) && (
+                      <button
+                        className="deck-action-btn btn-danger"
+                        style={{ flex: '0 0 auto', padding: '2px 10px', fontSize: '11px', marginLeft: 'auto' }}
+                        onClick={(e) => handleDeletePost(post.id, e)}
+                      >
+                        🗑️ Delete
+                      </button>
                     )}
                   </div>
                   <h3 className="forum-post-title">{post.title}</h3>
