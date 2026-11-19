@@ -34,42 +34,42 @@ const STARTER_DECKS: SelectableDeck[] = [
     name: 'Twilight Sparkle - Magic Starter',
     element: 'Magic',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01A-RR01.webp',
   },
   {
     id: 'starter-sd02',
     name: 'Rainbow Dash - Loyalty Starter',
     element: 'Loyalty',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD02-C01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01E-RR01.webp',
   },
   {
     id: 'starter-sd03',
     name: 'Applejack - Honesty Starter',
     element: 'Honesty',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD03-C01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01D-RR01.webp',
   },
   {
     id: 'starter-sd04',
     name: 'Rarity - Generosity Starter',
     element: 'Generosity',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD04-C01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01F-RR01.webp',
   },
   {
     id: 'starter-sd05',
     name: 'Fluttershy - Kindness Starter',
     element: 'Kindness',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD05-C01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01B-RR01.webp',
   },
   {
     id: 'starter-sd06',
     name: 'Pinkie Pie - Laughter Starter',
     element: 'Laughter',
     is_starter: true,
-    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD06-C01.webp',
+    mane_image_url: 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01C-RR01.webp',
   },
 ];
 
@@ -100,7 +100,7 @@ const KAYOU_MLP_NEWS = [
   },
 ];
 
-export default function MainHub({ onMatchJoined }: MainHubProps) {
+export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) {
   const { user } = useAuth();
   const isGuest = !user;
 
@@ -186,12 +186,18 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
       .then((res) => (res.ok ? res.json() : []))
       .then((data: any[]) => {
         if (!Array.isArray(data) || data.length === 0) return;
+        const starterFallbackMap = new Map(
+          STARTER_DECKS.map((s) => [s.id, s.mane_image_url])
+        );
         const mapped: SelectableDeck[] = data.map((d) => ({
           id: d.id,
           name: d.name,
           element: d.element || 'Unaligned',
           is_starter: Boolean(d.is_starter || String(d.id).startsWith('starter-')),
-          mane_image_url: d.mane_image_url || null,
+          mane_image_url:
+            d.mane_image_url ||
+            starterFallbackMap.get(d.id) ||
+            'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01A-RR01.webp',
         }));
         const filtered = isGuest ? mapped.filter((d) => d.is_starter) : mapped;
         if (filtered.length > 0) {
@@ -250,6 +256,10 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
       alert('Connecting to game server... Please try again in a second.');
       return;
     }
+    if (modeToUse === 'Ranked' && isGuest) {
+      alert('Please sign in to your account to play Ranked placement & ladder matches!');
+      return;
+    }
     setIsSearchingQueue(true);
     setQueueStatusText(`Joining ${modeToUse} queue...`);
     wsRef.current.send(
@@ -258,6 +268,7 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
         deckId: deckIdToUse,
         mode: modeToUse,
         username: playerDisplayName,
+        userId: user?.id ? String(user.id) : undefined,
       })
     );
   };
@@ -286,6 +297,7 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
         allowSpectators,
         deckId: selectedDeck,
         username: playerDisplayName,
+        userId: user?.id ? String(user.id) : undefined,
       })
     );
   };
@@ -300,6 +312,7 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
           password: suppliedPass,
           deckId: selectedDeck,
           username: playerDisplayName,
+          userId: user?.id ? String(user.id) : undefined,
         })
       );
     } else {
@@ -392,7 +405,7 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
                       checked={matchMode === 'Ranked'}
                       onChange={() => setMatchMode('Ranked')}
                     />
-                    Ranked
+                    Ranked (5 Placement Seeding)
                   </label>
                 </div>
               </div>
@@ -559,18 +572,28 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
             </div>
           </div>
 
-          {/* 4. BOTTOM ROW: COMING SOON LEADERBOARD & KAYOU MLP TCG NEWS FEED */}
+          {/* 4. BOTTOM ROW: RANKED STANDINGS PREVIEW & KAYOU MLP TCG NEWS FEED */}
           <div className="hub-bottom-row">
             <div className="cloud-panel">
-              <h3>🏆 Ranked Leaderboard</h3>
+              <h3>🏆 Ranked Ladder</h3>
               <div className="coming-soon-leaderboard-box">
                 <div style={{ fontSize: '36px' }}>👑✨</div>
                 <strong style={{ color: '#ffd700', fontSize: '17px' }}>
-                  Season 1 Leaderboard Coming Soon!
+                  Season 1 Ranked Active!
                 </strong>
                 <p style={{ margin: 0, fontSize: '13px', color: '#fbcfe8', lineHeight: 1.45 }}>
-                  Play Casual &amp; Ranked matches to test your builds while official MMR standings prepare for launch.
+                  Complete 5 seeding placement matches in Ranked Mode to calibrate your Equestrian Tier and climb the leaderboard.
                 </p>
+                {onNavigateTab && (
+                  <button
+                    type="button"
+                    className="mlp-cloud-btn secondary small-pill"
+                    style={{ marginTop: '6px' }}
+                    onClick={() => onNavigateTab('standings')}
+                  >
+                    📊 View Standings &amp; Placement Progress
+                  </button>
+                )}
               </div>
             </div>
 
@@ -646,7 +669,7 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
       {showDeckPickerModal && (
         <div className="hub-modal-backdrop" onClick={() => setShowDeckPickerModal(false)}>
           <div className="hub-picker-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ margin: '0 0 6px', color: '#ffd700', fontFamily: 'Cinzel Decorative, serif' }}>
+            <h3 style={{ margin: '0 0 6px', color: '#ffd700', fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: '20px' }}>
               🃏 Select Your Active Deck
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: '#fbcfe8' }}>
@@ -666,7 +689,7 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
                   <img
                     src={
                       deck.mane_image_url ||
-                      'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01-C01.webp'
+                      'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/SD01A-RR01.webp'
                     }
                     alt={deck.name}
                   />
@@ -693,7 +716,7 @@ export default function MainHub({ onMatchJoined }: MainHubProps) {
       {showQuickPlayStarterModal && (
         <div className="hub-modal-backdrop" onClick={() => setShowQuickPlayStarterModal(false)}>
           <div className="hub-picker-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ margin: '0 0 6px', color: '#ffd700', fontFamily: 'Cinzel Decorative, serif' }}>
+            <h3 style={{ margin: '0 0 6px', color: '#ffd700', fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: '20px' }}>
               ⚡ Quick Play — Choose Your Starter Deck
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: '#fbcfe8' }}>
