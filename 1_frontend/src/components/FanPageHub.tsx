@@ -74,13 +74,22 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
   const canParticipate = isLoggedIn && !isSafeMode;
   const isAdmin = Boolean(currentUser?.is_admin || currentUser?.role === 'admin');
 
+  const getAuthHeaders = (includeJson = false): Record<string, string> => {
+    const token = localStorage.getItem('token');
+    const headers: Record<string, string> = {};
+    if (includeJson) headers['Content-Type'] = 'application/json';
+    if (token && token !== 'null' && token !== 'undefined') {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  };
+
   const fetchPosts = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
       const res = await fetch(
         `${API_BASE_URL}/api/forum/posts?category=${encodeURIComponent(category)}&sort=${sort}`,
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        { headers: getAuthHeaders(), credentials: 'include' }
       );
       if (res.ok) {
         setPosts(await res.json());
@@ -94,11 +103,10 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
 
   const fetchPendingImages = async () => {
     if (!isAdmin) return;
-    const token = localStorage.getItem('token');
-    if (!token) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/forum/admin/pending-images`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
+        credentials: 'include',
       });
       if (res.ok) setPendingImages(await res.json());
     } catch (err) {
@@ -118,10 +126,10 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
     setActivePost(post);
     setCommentError('');
     setReplyParentId(null);
-    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/forum/posts/${post.id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: getAuthHeaders(),
+        credentials: 'include',
       });
       if (res.ok) {
         const data = await res.json();
@@ -136,22 +144,23 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
-    const token = localStorage.getItem('token');
-    if (!token) return setFormError('Please sign in first.');
+
+    let normalizedImg = newImageUrl.trim();
+    if (normalizedImg && !/^https?:\/\//i.test(normalizedImg)) {
+      normalizedImg = `https://${normalizedImg}`;
+    }
 
     setSubmitting(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/forum/posts`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(true),
+        credentials: 'include',
         body: JSON.stringify({
           title: newTitle,
           category: newCategory,
           body: newBody,
-          image_url: newImageUrl.trim() || null,
+          image_url: normalizedImg || null,
         }),
       });
       const data = await res.json();
@@ -183,14 +192,11 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
       alert('Registered non-Safe Mode accounts are required to vote.');
       return;
     }
-    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/forum/vote`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(true),
+        credentials: 'include',
         body: JSON.stringify({ targetId, targetType, value }),
       });
       if (res.ok) {
@@ -221,14 +227,11 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
     e.preventDefault();
     if (!activePost || !replyText.trim()) return;
     setCommentError('');
-    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/forum/posts/${activePost.id}/comments`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(true),
+        credentials: 'include',
         body: JSON.stringify({ body: replyText, parent_id: replyParentId }),
       });
       const data = await res.json();
@@ -246,14 +249,11 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
   };
 
   const handleModerateImage = async (postId: string, action: 'APPROVE' | 'REJECT') => {
-    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/forum/admin/moderate-image/${postId}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(true),
+        credentials: 'include',
         body: JSON.stringify({ action }),
       });
       if (res.ok) {
@@ -621,14 +621,14 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
             />
 
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '4px' }}>
-              Optional Image URL (Requires Administrator Approval before public display)
+              Optional Direct Image Link (Requires Administrator Approval before public display)
             </label>
             <input
-              type="url"
+              type="text"
               className="forum-input"
               value={newImageUrl}
               onChange={(e) => setNewImageUrl(e.target.value)}
-              placeholder="https://..."
+              placeholder="https://example.com/my-pull.png (leave blank if none)"
             />
 
             {formError && <div className="forum-error-banner">⚠️ {formError}</div>}

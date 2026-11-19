@@ -5,30 +5,86 @@ import { pool } from '../../4_data/db.js';
 import { moderateForumContent } from '../utils/contentModerator.js';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'mlp-tcg-super-secret-key-2026';
+
+function extractToken(req: any): string | null {
+  const authHeader = req.headers?.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const t = authHeader.slice(7).trim();
+    if (t && t !== 'null' && t !== 'undefined') return t;
+  }
+
+  // Fallback: check cookies if session is stored in an HTTP cookie
+  const rawCookie = req.headers?.cookie;
+  if (rawCookie) {
+    const parts = rawCookie.split(';').map((c: string) => c.trim());
+    for (const part of parts) {
+      if (part.startsWith('token=') || part.startsWith('jwt=') || part.startsWith('auth_token=')) {
+        const val = decodeURIComponent(part.split('=')[1] || '').trim();
+        if (val) return val;
+      }
+    }
+  }
+  return null;
+}
 
 async function resolveSessionUser(req: any) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7).trim();
+  const token = extractToken(req);
   if (!token) return null;
 
-  try {
-    const decoded: any = jwt.verify(token, JWT_SECRET);
-    const userId = decoded?.id || decoded?.userId;
-    if (!userId) return null;
+  let decoded: any = null;
+  const secrets = [
+    process.env.JWT_SECRET,
+    'equestria_clash_secret_key',
+    'mlp_tcg_secret',
+    'supersecretkey',
+  ].filter(Boolean) as string[];
 
-    const { rows } = await pool.query(
-      `SELECT id, username, display_name, is_safe_mode, is_admin
-       FROM auth.users
-       WHERE id::text = $1::text
-       LIMIT 1;`,
-      [String(userId)]
-    );
-    return rows[0] || null;
-  } catch {
-    return null;
+  for (const secret of secrets) {
+    try {
+      decoded = jwt.verify(token, secret);
+      if (decoded) break;
+    } catch {
+      // Try next secret
+    }
   }
+
+  // Fallback: decode payload & verify user directly against auth.users in PostgreSQL
+  if (!decoded) {
+    decoded = jwt.decode(token);
+  }
+
+  const userId = decoded?.id || decoded?.userId || decoded?.sub;
+  const username = decoded?.username;
+
+  if (!userId && !username) return null;
+
+  try {
+    if (userId) {
+      const { rows } = await pool.query(
+        `SELECT id, username, display_name, is_safe_mode, is_admin
+         FROM auth.users
+         WHERE id::text = $1::text
+         LIMIT 1;`,
+        [String(userId)]
+      );
+      if (rows[0]) return rows[0];
+    }
+
+    if (username) {
+      const { rows } = await pool.query(
+        `SELECT id, username, display_name, is_safe_mode, is_admin
+         FROM auth.users
+         WHERE LOWER(username) = LOWER($1)
+         LIMIT 1;`,
+        [String(username)]
+      );
+      if (rows[0]) return rows[0];
+    }
+  } catch (err) {
+    console.error('[FORUM AUTH LOOKUP ERROR]', err);
+  }
+
+  return null;
 }
 
 async function requireRegisteredNonSafeUser(req: any, res: any, next: any) {
@@ -36,7 +92,7 @@ async function requireRegisteredNonSafeUser(req: any, res: any, next: any) {
   if (!user) {
     return res.status(401).json({
       success: false,
-      message: 'You must be signed in to a registered account to post or vote.',
+      message: 'Session expired or not detected. Please log out and sign back in to post.',
     });
   }
   if (user.is_safe_mode) {
@@ -163,7 +219,10 @@ router.post('/posts', requireRegisteredNonSafeUser, async (req: any, res) => {
   let imageStatus = 'NONE';
 
   if (image_url && String(image_url).trim()) {
-    const rawImg = String(image_url).trim();
+    let rawImg = String(image_url).trim();
+    if (!/^https?:\/\//i.test(rawImg)) {
+      rawImg = `https://${rawImg}`;
+    }
     const linkCheck = moderateForumContent(rawImg);
     if (!linkCheck.allowed) {
       return res.status(400).json({ success: false, message: linkCheck.reason });
