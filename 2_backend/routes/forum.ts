@@ -375,21 +375,25 @@ router.get('/admin/pending-images', requireAdmin, async (_req, res) => {
   }
 });
 
-// ADMIN: Approve or Reject Uploaded Image
+// ADMIN: Approve or Reject Uploaded Image (Explicit SQL branches avoid PostgreSQL parameter type mismatch)
 router.post('/admin/moderate-image/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { action } = req.body;
-  const status = action === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+  const isApprove = action === 'APPROVE';
 
   try {
-    await pool.query(
-      `UPDATE auth.forum_posts
-       SET image_status = $1,
-           image_url = CASE WHEN $1 = 'REJECTED' THEN NULL ELSE image_url END
-       WHERE id = $2;`,
-      [status, id]
-    );
-    return res.json({ success: true, status });
+    if (isApprove) {
+      await pool.query(
+        `UPDATE auth.forum_posts SET image_status = 'APPROVED' WHERE id = $1;`,
+        [id]
+      );
+    } else {
+      await pool.query(
+        `UPDATE auth.forum_posts SET image_status = 'REJECTED', image_url = NULL WHERE id = $1;`,
+        [id]
+      );
+    }
+    return res.json({ success: true, status: isApprove ? 'APPROVED' : 'REJECTED' });
   } catch (err) {
     console.error('Error moderating image:', err);
     return res.status(500).json({ success: false, message: 'Failed to update image status.' });

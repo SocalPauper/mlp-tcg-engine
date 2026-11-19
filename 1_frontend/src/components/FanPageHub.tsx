@@ -662,7 +662,20 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
                       src={currentReviewItem.image_url || ''}
                       alt="Pending submission"
                       style={{ maxWidth: '100%', maxHeight: '280px', borderRadius: '10px' }}
+                      onError={(e) => {
+                        const img = e.currentTarget as HTMLImageElement;
+                        img.style.display = 'none';
+                        const fallback = img.nextElementSibling as HTMLElement | null;
+                        if (fallback) fallback.style.display = 'block';
+                      }}
                     />
+                    <div style={{ display: 'none', color: '#fda4af', fontSize: '12.5px', padding: '12px', wordBreak: 'break-all' }}>
+                      ⚠️ Not a direct image file: <strong>{currentReviewItem.image_url}</strong>
+                      <br />
+                      <span style={{ color: '#c4b5fd', fontSize: '11px' }}>
+                        (Click Reject to remove the broken attachment while keeping the text post)
+                      </span>
+                    </div>
                   </div>
                 </div>
 
