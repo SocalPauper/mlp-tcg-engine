@@ -1,13 +1,15 @@
 import { WebSocket, WebSocketServer } from 'ws';
+import http from 'http';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { pool } from '../../4_data/db.js';
 import {
   KayouGameState,
-  DeckId,
   CardDefinition,
   HydratedDeckPayload,
+  MatchRewardSummary,
 } from '../../3_engine/types.js';
 import {
   createWaitingMatch,
@@ -15,7 +17,11 @@ import {
   acknowledgeVsIntro,
   resolveMulligan,
   playCardFromHand,
+  resolveTargetSelection,
+  cancelTargetSelection,
+  resolveHandChoice,
   activateCharacterAdventureAbility,
+  activateManeLeaderAbility,
   startContactPhase,
   inspireInContact,
   passInspireInContact,
@@ -23,15 +29,9 @@ import {
   resolveBreakthroughChoice,
   acknowledgePlanReveal,
   acknowledgeStoryReveal,
-  forfeitMatch,
   endTurn,
-  activateManeLeaderAbility,
-  resolveTargetSelection,
-  cancelTargetSelection,
-  resolveHandChoice,
+  forfeitMatch,
 } from '../../3_engine/gameRules.js';
-import { pool } from '../../4_data/db.js';
-import { recordRankedMatchResult } from '../routes/ranked.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,726 +39,928 @@ const startermaps: any[] = JSON.parse(
   fs.readFileSync(path.join(__dirname, '../routes/StartingDecks.json'), 'utf-8')
 );
 
-const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+const TURN_DURATION_MS = 180_000;
+const DISCONNECT_GRACE_MS = 180_000;
+const RANKED_REMATCH_COOLDOWN_MS = 10 * 60 * 1000; // 10-minute anti-back-to-back Ranked pairing window
 
-interface RoomClient {
-  ws: WebSocket;
-  seat: '0' | '1' | 'spectator';
-  roomCode: string;
-  selectedDeck: DeckId;
-  username: string;
+interface SeatConnection {
+  ws: WebSocket | null;
   userId?: string;
+  displayName: string;
+  deckId?: string;
+  hydratedDeck?: HydratedDeckPayload;
   sessionToken: string;
+  disconnectTimer?: ReturnType<typeof setTimeout>;
+}
+
+interface GameRoom {
+  roomCode: string;
+  mode: string;
+  isRandomMatch: boolean;
+  isRanked: boolean;
+  isPrivate: boolean;
+  password?: string;
+  state: KayouGameState;
+  seats: Partial<Record<'0' | '1', SeatConnection>>;
+  spectators: Set<WebSocket>;
+  turnTimer?: ReturnType<typeof setTimeout>;
+  rankedRecorded?: boolean;
+  rewardsGranted?: boolean;
 }
 
 interface QueuedPlayer {
   ws: WebSocket;
-  deckId: DeckId;
-  username: string;
   userId?: string;
-  mode: 'Casual' | 'Ranked';
+  displayName: string;
+  deckId: string;
+  mode: string;
+  queuedAt: number;
 }
 
-interface Room {
-  code: string;
-  name: string;
-  mode: 'Casual' | 'Ranked';
-  password?: string;
-  allowSpectators: boolean;
-  state: KayouGameState;
-  clients: RoomClient[];
-  decks: Partial<Record<'0' | '1', DeckId>>;
-  userIds: Partial<Record<'0' | '1', string>>;
-  seatTokens: Partial<Record<'0' | '1', string>>;
-  disconnectedAt: Partial<Record<'0' | '1', number>>;
-  lastActivityAt: number;
-  rankedRecorded: boolean;
-}
-
-function mapDbRowToCardDef(row: any): CardDefinition {
-  return {
-    id: String(row.id),
-    cardNumber: String(row.id),
-    name: String(row.name || row.id),
-    type: String(row.card_type || 'Character'),
-    element: String(row.element || 'Everyday'),
-    cost: Number(row.cost) || 0,
-    power: Number(row.power) || 1,
-    defense: Number(row.defense) || 1,
-    traits: row.traits || '',
-    effectText: row.effect_text || '',
-    imageUrl: row.image_url || '',
-    rarity: row.rarity || 'C',
-    setCode: row.set_code || 'SD01',
-  };
-}
+const QUEUE_REWARD_CONFIG: Record<
+  'QUICK_PLAY' | 'CASUAL' | 'RANKED',
+  { win: number; loss: number; firstWin: number }
+> = {
+  QUICK_PLAY: { win: 25, loss: 10, firstWin: 25 },
+  CASUAL: { win: 40, loss: 15, firstWin: 40 },
+  RANKED: { win: 65, loss: 20, firstWin: 50 },
+};
 
 export class GameManager {
-  private rooms = new Map<string, Room>();
-  private quickPlayQueue: QueuedPlayer[] = [];
   private wss: WebSocketServer;
+  private rooms: Map<string, GameRoom> = new Map();
+  private quickPlayQueue: QueuedPlayer[] = [];
+  private recentRankedOpponents: Map<string, { opponentId: string; timestamp: number }> = new Map();
 
-  constructor(server: any) {
+  constructor(server: http.Server) {
     this.wss = new WebSocketServer({ server });
-    this.initListeners();
-    this.startWatchdogTimer();
+    this.setupListeners();
   }
 
-  private maybeRecordRankedOutcome(room: Room) {
-    if (
-      room.mode === 'Ranked' &&
-      room.state.phase === 'GAME_OVER' &&
-      room.state.winnerId &&
-      !room.rankedRecorded
-    ) {
-      const winnerUserId = room.userIds[room.state.winnerId];
-      const loserSeat: '0' | '1' = room.state.winnerId === '0' ? '1' : '0';
-      const loserUserId = room.userIds[loserSeat];
-      if (winnerUserId && loserUserId) {
-        room.rankedRecorded = true;
-        recordRankedMatchResult(winnerUserId, loserUserId).catch((err) =>
-          console.error('[RANKED RECORD ERROR]', err)
-        );
-      }
-    }
-  }
-
-  private startWatchdogTimer() {
-    setInterval(() => {
-      const now = Date.now();
-      for (const [code, room] of this.rooms.entries()) {
-        if (room.state.phase === 'GAME_OVER' || room.state.phase === 'WAITING_FOR_PLAYERS') {
-          if (room.state.phase === 'WAITING_FOR_PLAYERS' && now - room.lastActivityAt >= 15 * 60 * 1000) {
-            this.rooms.delete(code);
-            this.broadcastLobbyRooms();
-          }
-          continue;
-        }
-
-        for (const seat of ['0', '1'] as const) {
-          const discTime = room.disconnectedAt[seat];
-          if (discTime && now - discTime >= INACTIVITY_TIMEOUT_MS) {
-            const leaverName = room.state.players[seat].displayName;
-            room.state = forfeitMatch(
-              room.state,
-              seat,
-              `${leaverName} disconnected and did not return within 3 minutes.`
-            );
-            this.maybeRecordRankedOutcome(room);
-            this.broadcastRoomState(room);
-            this.broadcastLobbyRooms();
-            break;
-          }
-        }
-
-        if (room.state.phase === 'GAME_OVER') continue;
-
-        if (now - room.lastActivityAt >= INACTIVITY_TIMEOUT_MS) {
-          const stalledSeat: '0' | '1' =
-            room.state.phase === 'CONTACT_INSPIRE' && room.state.contactState
-              ? room.state.contactState.promptPlayerId
-              : room.state.turnPlayerId;
-
-          const stalledName = room.state.players[stalledSeat].displayName;
-          room.state = forfeitMatch(
-            room.state,
-            stalledSeat,
-            `${stalledName} made no move for 3 minutes (Inactivity Forfeit).`
-          );
-          this.maybeRecordRankedOutcome(room);
-          this.broadcastRoomState(room);
-          this.broadcastLobbyRooms();
-        }
-      }
-
-      for (const [code, room] of this.rooms.entries()) {
-        const activeSockets = room.clients.filter((c) => c.ws.readyState === WebSocket.OPEN);
-        if (activeSockets.length === 0 && room.state.phase === 'GAME_OVER') {
-          this.rooms.delete(code);
-        }
-      }
-    }, 5000);
-  }
-
-  private initListeners() {
+  private setupListeners() {
     this.wss.on('connection', (ws: WebSocket) => {
-      let userSession: RoomClient | null = null;
-
-      const removeFromQueue = () => {
-        this.quickPlayQueue = this.quickPlayQueue.filter(
-          (q) => q.ws !== ws && q.ws.readyState === WebSocket.OPEN
-        );
-      };
-
-      const handleSocketDisconnect = () => {
-        removeFromQueue();
-        if (!userSession) return;
-        const room = this.rooms.get(userSession.roomCode);
-        if (room) {
-          room.clients = room.clients.filter((c) => c.ws !== ws);
-          if (userSession.seat === '0' || userSession.seat === '1') {
-            room.disconnectedAt[userSession.seat] = Date.now();
-            room.state.players[userSession.seat].isConnected = false;
-            this.broadcastRoomState(room);
-          }
-        }
-        userSession = null;
-        this.broadcastLobbyRooms();
-      };
-
-      const handleExplicitLeave = () => {
-        removeFromQueue();
-        if (!userSession) return;
-        const room = this.rooms.get(userSession.roomCode);
-        if (room) {
-          room.clients = room.clients.filter((c) => c.ws !== ws);
-          if (
-            (userSession.seat === '0' || userSession.seat === '1') &&
-            room.state.phase !== 'WAITING_FOR_PLAYERS' &&
-            room.state.phase !== 'GAME_OVER'
-          ) {
-            const leaverName = room.state.players[userSession.seat].displayName;
-            room.state = forfeitMatch(
-              room.state,
-              userSession.seat,
-              `${leaverName} forfeited the match.`
-            );
-            this.maybeRecordRankedOutcome(room);
-          }
-          if (room.clients.length === 0 && room.state.phase === 'WAITING_FOR_PLAYERS') {
-            this.rooms.delete(room.code);
-          } else {
-            this.broadcastRoomState(room);
-          }
-        }
-        userSession = null;
-        this.broadcastLobbyRooms();
-      };
-
-      ws.on('message', async (rawMessage: string) => {
+      ws.on('message', async (rawData: string) => {
         try {
-          const message = JSON.parse(rawMessage.toString());
-
-          if (message.type === 'PING') {
-            ws.send(JSON.stringify({ type: 'PONG' }));
-            return;
-          }
-
-          if (message.type === 'GET_ROOMS') {
-            this.sendLobbyRoomsToClient(ws);
-            return;
-          }
-
-          if (message.type === 'RECONNECT_MATCH') {
-            const { roomCode, seat, sessionToken } = message;
-            const room = this.rooms.get(String(roomCode || '').trim().toLowerCase());
-            if (!room || room.state.phase === 'GAME_OVER') {
-              ws.send(JSON.stringify({ type: 'RECONNECT_FAILED' }));
-              return;
-            }
-            if ((seat === '0' || seat === '1') && room.seatTokens[seat] === sessionToken) {
-              room.clients = room.clients.filter((c) => c.seat !== seat);
-              delete room.disconnectedAt[seat];
-              room.state.players[seat].isConnected = true;
-
-              const restoredSession: RoomClient = {
-                ws,
-                seat,
-                roomCode: room.code,
-                selectedDeck: room.decks[seat] || 'starter-sd01',
-                username: room.state.players[seat].displayName,
-                userId: room.userIds[seat],
-                sessionToken,
-              };
-              userSession = restoredSession;
-              room.clients.push(restoredSession);
-
-              this.broadcastRoomState(room);
-              this.broadcastLobbyRooms();
-              return;
-            }
-            ws.send(JSON.stringify({ type: 'RECONNECT_FAILED' }));
-            return;
-          }
-
-          if (message.type === 'CANCEL_QUICK_PLAY') {
-            removeFromQueue();
-            ws.send(JSON.stringify({ type: 'QUICK_PLAY_CANCELLED' }));
-            return;
-          }
-
-          if (message.type === 'QUICK_PLAY') {
-            if (userSession) handleExplicitLeave();
-            removeFromQueue();
-
-            const deckId: DeckId = message.deckId || 'starter-sd01';
-            const mode: 'Casual' | 'Ranked' = message.mode === 'Ranked' ? 'Ranked' : 'Casual';
-            const username = message.username || `Guest_${Math.floor(100 + Math.random() * 900)}`;
-            const userId = message.userId ? String(message.userId) : undefined;
-
-            this.quickPlayQueue = this.quickPlayQueue.filter((q) => q.ws.readyState === WebSocket.OPEN);
-
-            const matchIdx = this.quickPlayQueue.findIndex((q) => q.mode === mode);
-            if (matchIdx !== -1) {
-              const [opponent] = this.quickPlayQueue.splice(matchIdx, 1);
-              const roomCode = `${mode === 'Ranked' ? 'rk' : 'qp'}-${Math.floor(10000 + Math.random() * 90000)}`;
-              const token0 = crypto.randomUUID();
-              const token1 = crypto.randomUUID();
-
-              const room: Room = {
-                code: roomCode,
-                name: `${opponent.username} vs ${username}`,
-                mode,
-                allowSpectators: true,
-                state: createWaitingMatch(),
-                clients: [],
-                decks: { '0': opponent.deckId, '1': deckId },
-                userIds: {
-                  ...(opponent.userId ? { '0': opponent.userId } : {}),
-                  ...(userId ? { '1': userId } : {}),
-                },
-                seatTokens: { '0': token0, '1': token1 },
-                disconnectedAt: {},
-                lastActivityAt: Date.now(),
-                rankedRecorded: false,
-              };
-
-              const p0Session: RoomClient = {
-                ws: opponent.ws,
-                seat: '0',
-                roomCode,
-                selectedDeck: opponent.deckId,
-                username: opponent.username,
-                userId: opponent.userId,
-                sessionToken: token0,
-              };
-              const p1Session: RoomClient = {
-                ws,
-                seat: '1',
-                roomCode,
-                selectedDeck: deckId,
-                username,
-                userId,
-                sessionToken: token1,
-              };
-
-              room.clients.push(p0Session, p1Session);
-              this.rooms.set(roomCode, room);
-
-              (opponent.ws as any).__setSession?.(p0Session);
-              userSession = p1Session;
-
-              await this.startMatchWithHydratedDecks(room);
-              room.lastActivityAt = Date.now();
-              room.state.turnDeadlineMs = room.lastActivityAt + INACTIVITY_TIMEOUT_MS;
-              this.broadcastRoomState(room);
-              this.broadcastLobbyRooms();
-            } else {
-              this.quickPlayQueue.push({ ws, deckId, username, userId, mode });
-              ws.send(
-                JSON.stringify({
-                  type: 'QUEUED',
-                  message: `Searching ${mode} queue for a worthy opponent...`,
-                })
-              );
-            }
-            return;
-          }
-
-          if (message.type === 'CREATE_ROOM') {
-            if (userSession) handleExplicitLeave();
-            const roomCode = (message.roomCode || `pony-${Math.floor(1000 + Math.random() * 9000)}`)
-              .trim()
-              .toLowerCase();
-            const roomName = String(message.roomName || 'Custom Mane Showdown').trim();
-            const mode: 'Casual' | 'Ranked' = message.mode === 'Ranked' ? 'Ranked' : 'Casual';
-            const password = message.password ? String(message.password).trim() : undefined;
-            const allowSpectators = message.allowSpectators ?? true;
-            const deckId: DeckId = message.deckId || 'starter-sd01';
-            const username = message.username || 'Host';
-            const userId = message.userId ? String(message.userId) : undefined;
-            const token0 = crypto.randomUUID();
-
-            const room: Room = {
-              code: roomCode,
-              name: roomName,
-              mode,
-              password,
-              allowSpectators,
-              state: createWaitingMatch(),
-              clients: [],
-              decks: { '0': deckId },
-              userIds: userId ? { '0': userId } : {},
-              seatTokens: { '0': token0 },
-              disconnectedAt: {},
-              lastActivityAt: Date.now(),
-              rankedRecorded: false,
-            };
-
-            this.rooms.set(roomCode, room);
-
-            userSession = {
-              ws,
-              seat: '0',
-              roomCode,
-              selectedDeck: deckId,
-              username,
-              userId,
-              sessionToken: token0,
-            };
-            room.clients.push(userSession);
-
-            this.broadcastRoomState(room);
-            this.broadcastLobbyRooms();
-            return;
-          }
-
-          if (message.type === 'JOIN_ROOM') {
-            if (userSession && userSession.roomCode !== message.roomCode) handleExplicitLeave();
-            const roomCode = (message.roomCode || '').trim().toLowerCase();
-            const suppliedPassword = message.password ? String(message.password).trim() : '';
-            const chosenDeckId: DeckId = message.deckId || 'starter-sd02';
-            const username = message.username || 'GuestPlayer';
-            const userId = message.userId ? String(message.userId) : undefined;
-
-            const room = this.rooms.get(roomCode);
-            if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Match room not found.' }));
-
-            if (room.password && room.password !== suppliedPassword) {
-              return ws.send(
-                JSON.stringify({ type: 'ERROR', message: 'Incorrect match password.' })
-              );
-            }
-
-            room.clients = room.clients.filter((c) => c.ws.readyState === WebSocket.OPEN && c.ws !== ws);
-            const seatedCount = room.clients.filter((c) => c.seat === '0' || c.seat === '1').length;
-            if (seatedCount >= 2) {
-              return ws.send(JSON.stringify({ type: 'ERROR', message: 'This match is already full.' }));
-            }
-
-            const assignedSeat = room.clients.some((c) => c.seat === '0') ? '1' : '0';
-            const seatToken = crypto.randomUUID();
-
-            userSession = {
-              ws,
-              seat: assignedSeat,
-              roomCode,
-              selectedDeck: chosenDeckId,
-              username,
-              userId,
-              sessionToken: seatToken,
-            };
-            room.clients.push(userSession);
-            room.decks[assignedSeat] = chosenDeckId;
-            if (userId) room.userIds[assignedSeat] = userId;
-            room.seatTokens[assignedSeat] = seatToken;
-
-            if (
-              room.clients.some((c) => c.seat === '0') &&
-              room.clients.some((c) => c.seat === '1') &&
-              room.state.phase === 'WAITING_FOR_PLAYERS'
-            ) {
-              await this.startMatchWithHydratedDecks(room);
-              room.lastActivityAt = Date.now();
-              room.state.turnDeadlineMs = room.lastActivityAt + INACTIVITY_TIMEOUT_MS;
-            }
-
-            this.broadcastRoomState(room);
-            this.broadcastLobbyRooms();
-            return;
-          }
-
-          if (message.type === 'SPECTATE_ROOM') {
-            const roomCode = (message.roomCode || '').trim().toLowerCase();
-            const suppliedPassword = message.password ? String(message.password).trim() : '';
-            const room = this.rooms.get(roomCode);
-            if (!room || !room.allowSpectators) {
-              return ws.send(
-                JSON.stringify({
-                  type: 'ERROR',
-                  message: 'Spectating is disabled for this room or room not found.',
-                })
-              );
-            }
-            if (room.password && room.password !== suppliedPassword) {
-              return ws.send(
-                JSON.stringify({ type: 'ERROR', message: 'Incorrect password to spectate this private match.' })
-              );
-            }
-
-            userSession = {
-              ws,
-              seat: 'spectator',
-              roomCode,
-              selectedDeck: 'starter-sd01',
-              username: 'Spectator',
-              sessionToken: '',
-            };
-            room.clients.push(userSession);
-
-            ws.send(
-              JSON.stringify({
-                type: 'STATE_UPDATE',
-                state: this.getPublicStateForSpectator(room.state),
-                seat: 'spectator',
-                roomCode: room.code,
-                clientCount: room.clients.length,
-              })
-            );
-            return;
-          }
-
-          if (message.type === 'GAME_ACTION' && userSession) {
-            const room = this.rooms.get(userSession.roomCode);
-            if (!room) return;
-
-            const { action, payload } = message;
-            if (userSession.seat === '0' || userSession.seat === '1') {
-              room.state = this.processGameAction(room.state, userSession.seat, action, payload);
-              room.lastActivityAt = Date.now();
-              room.state.turnDeadlineMs = room.lastActivityAt + INACTIVITY_TIMEOUT_MS;
-              this.maybeRecordRankedOutcome(room);
-              this.broadcastRoomState(room);
-              if (room.state.phase === 'GAME_OVER') {
-                this.broadcastLobbyRooms();
-              }
-            }
-            return;
-          }
-
-          if (message.type === 'LEAVE_ROOM') {
-            handleExplicitLeave();
-            return;
-          }
+          const message = JSON.parse(rawData.toString());
+          await this.handleMessage(ws, message);
         } catch (err) {
-          console.error('[WS ERROR]', err);
+          console.error('[WS PARSE ERROR]', err);
         }
       });
 
-      (ws as any).__setSession = (session: RoomClient) => {
-        userSession = session;
-      };
-
       ws.on('close', () => {
-        handleSocketDisconnect();
+        this.handleDisconnect(ws);
       });
     });
   }
 
-  private getRoomListPayload() {
-    const roomList = Array.from(this.rooms.values())
-      .filter((r) => r.state.phase !== 'GAME_OVER')
-      .map((r) => {
-        const hostClient = r.clients.find((c) => c.seat === '0');
-        const guestClient = r.clients.find((c) => c.seat === '1');
-        const playerCount =
-          (hostClient || r.disconnectedAt['0'] ? 1 : 0) +
-          (guestClient || r.disconnectedAt['1'] ? 1 : 0);
-        return {
-          code: r.code,
-          name: r.name,
-          host: hostClient?.username || r.state.players['0']?.displayName || 'Player',
-          mode: r.mode,
-          hasPassword: Boolean(r.password),
-          status: r.state.phase === 'WAITING_FOR_PLAYERS' && playerCount < 2 ? 'Waiting' : 'In-Progress',
-          allowSpectators: r.allowSpectators,
-          playerCount,
+  private getClientIp(ws: WebSocket): string {
+    return String((ws as any)?._socket?.remoteAddress || 'unknown');
+  }
+
+  private async handleMessage(ws: WebSocket, msg: any) {
+    switch (msg.type) {
+      case 'PING': {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'PONG' }));
+        }
+        break;
+      }
+
+      case 'GET_OPEN_ROOMS': {
+        this.sendOpenRooms(ws);
+        break;
+      }
+
+      case 'QUICK_PLAY': {
+        const mode = msg.mode || 'Standard';
+        const userId = msg.userId ? String(msg.userId) : undefined;
+        const displayName = msg.displayName || 'Guest Pony';
+        const deckId = msg.deckId || 'starter-sd01';
+
+        this.quickPlayQueue = this.quickPlayQueue.filter(
+          (q) => q.ws !== ws && q.ws.readyState === WebSocket.OPEN
+        );
+
+        const incomingKey = userId || `${displayName}:${this.getClientIp(ws)}`;
+        const isRankedQueue = String(mode).toLowerCase() === 'ranked';
+
+        let matchIdx = -1;
+        for (let i = 0; i < this.quickPlayQueue.length; i++) {
+          const candidate = this.quickPlayQueue[i];
+          if (candidate.mode !== mode) continue;
+
+          if (isRankedQueue) {
+            const candidateKey =
+              candidate.userId || `${candidate.displayName}:${this.getClientIp(candidate.ws)}`;
+            if (candidateKey === incomingKey) continue;
+
+            const lastForIncoming = this.recentRankedOpponents.get(incomingKey);
+            const lastForCandidate = this.recentRankedOpponents.get(candidateKey);
+            const now = Date.now();
+            const isRecentRematch =
+              (lastForIncoming &&
+                lastForIncoming.opponentId === candidateKey &&
+                now - lastForIncoming.timestamp < RANKED_REMATCH_COOLDOWN_MS) ||
+              (lastForCandidate &&
+                lastForCandidate.opponentId === incomingKey &&
+                now - lastForCandidate.timestamp < RANKED_REMATCH_COOLDOWN_MS);
+
+            // Prevent immediate back-to-back Ranked pairings (unless opponent has waited > 60s)
+            if (isRecentRematch && now - candidate.queuedAt < 60_000) {
+              continue;
+            }
+          }
+
+          matchIdx = i;
+          break;
+        }
+
+        if (matchIdx !== -1) {
+          const opponent = this.quickPlayQueue.splice(matchIdx, 1)[0];
+          const roomCode = this.generateRoomCode();
+
+          if (isRankedQueue) {
+            const oppKey =
+              opponent.userId || `${opponent.displayName}:${this.getClientIp(opponent.ws)}`;
+            const now = Date.now();
+            this.recentRankedOpponents.set(incomingKey, { opponentId: oppKey, timestamp: now });
+            this.recentRankedOpponents.set(oppKey, { opponentId: incomingKey, timestamp: now });
+          }
+
+          const room: GameRoom = {
+            roomCode,
+            mode,
+            isRandomMatch: true,
+            isRanked: isRankedQueue,
+            isPrivate: false,
+            state: createWaitingMatch(),
+            seats: {},
+            spectators: new Set(),
+          };
+          room.state.roomId = roomCode;
+          this.rooms.set(roomCode, room);
+
+          await this.seatPlayer(room, '0', opponent.ws, opponent.userId, opponent.displayName, opponent.deckId);
+          await this.seatPlayer(room, '1', ws, userId, displayName, deckId);
+          this.broadcastRoomList();
+        } else {
+          this.quickPlayQueue.push({
+            ws,
+            userId,
+            displayName,
+            deckId,
+            mode,
+            queuedAt: Date.now(),
+          });
+          ws.send(JSON.stringify({ type: 'QUEUED', mode }));
+        }
+        break;
+      }
+
+      case 'CANCEL_QUICK_PLAY': {
+        this.quickPlayQueue = this.quickPlayQueue.filter((q) => q.ws !== ws);
+        break;
+      }
+
+      case 'CREATE_ROOM': {
+        const roomCode = this.generateRoomCode();
+        const isPrivate = Boolean(msg.isPrivate);
+        const room: GameRoom = {
+          roomCode,
+          mode: msg.mode || 'Standard',
+          isRandomMatch: false,
+          isRanked: false,
+          isPrivate,
+          password: msg.password || undefined,
+          state: createWaitingMatch(),
+          seats: {},
+          spectators: new Set(),
         };
-      });
-    return JSON.stringify({ type: 'ROOMS_LIST', rooms: roomList });
-  }
+        room.state.roomId = roomCode;
+        this.rooms.set(roomCode, room);
 
-  private sendLobbyRoomsToClient(ws: WebSocket) {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(this.getRoomListPayload());
+        await this.seatPlayer(
+          room,
+          '0',
+          ws,
+          msg.userId ? String(msg.userId) : undefined,
+          msg.displayName || 'Host Pony',
+          msg.deckId || 'starter-sd01'
+        );
+        this.broadcastRoomList();
+        break;
+      }
+
+      case 'JOIN_ROOM': {
+        const roomCode = String(msg.roomCode || '').trim().toUpperCase();
+        const room = this.rooms.get(roomCode);
+        if (!room) {
+          ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found.' }));
+          return;
+        }
+        if (room.isPrivate && room.password && room.password !== msg.password) {
+          ws.send(JSON.stringify({ type: 'ERROR', message: 'Incorrect room password.' }));
+          return;
+        }
+
+        const asSpectator = Boolean(msg.asSpectator);
+        if (!asSpectator && !room.seats['0']) {
+          await this.seatPlayer(
+            room,
+            '0',
+            ws,
+            msg.userId ? String(msg.userId) : undefined,
+            msg.displayName || 'Player 1',
+            msg.deckId || 'starter-sd01'
+          );
+        } else if (!asSpectator && !room.seats['1']) {
+          await this.seatPlayer(
+            room,
+            '1',
+            ws,
+            msg.userId ? String(msg.userId) : undefined,
+            msg.displayName || 'Player 2',
+            msg.deckId || 'starter-sd01'
+          );
+        } else {
+          room.spectators.add(ws);
+          ws.send(
+            JSON.stringify({
+              type: 'STATE_UPDATE',
+              roomCode: room.roomCode,
+              seat: 'spectator',
+              state: room.state,
+            })
+          );
+        }
+        this.broadcastRoomList();
+        break;
+      }
+
+      case 'RECONNECT_MATCH': {
+        const roomCode = String(msg.roomCode || '').trim().toUpperCase();
+        const seat = msg.seat as '0' | '1';
+        const sessionToken = String(msg.sessionToken || '');
+
+        const room = this.rooms.get(roomCode);
+        const existingSeat = room?.seats[seat];
+
+        if (!room || !existingSeat || existingSeat.sessionToken !== sessionToken) {
+          ws.send(JSON.stringify({ type: 'RECONNECT_FAILED' }));
+          return;
+        }
+
+        if (existingSeat.disconnectTimer) {
+          clearTimeout(existingSeat.disconnectTimer);
+          existingSeat.disconnectTimer = undefined;
+        }
+
+        existingSeat.ws = ws;
+        room.state.players[seat].isConnected = true;
+        this.broadcastState(room);
+        break;
+      }
+
+      case 'GAME_ACTION': {
+        const found = this.findRoomBySocket(ws);
+        if (!found || found.seat === 'spectator') return;
+        const { room, seat } = found;
+        const prevTurnPlayer = room.state.turnPlayerId;
+        const prevPhase = room.state.phase;
+
+        switch (msg.action) {
+          case 'ACK_VS_INTRO':
+            room.state = acknowledgeVsIntro(room.state);
+            break;
+          case 'MULLIGAN_DECISION':
+            room.state = resolveMulligan(room.state, seat, Boolean(msg.payload?.doMulligan));
+            break;
+          case 'PLAY_CARD':
+            room.state = playCardFromHand(
+              room.state,
+              seat,
+              msg.payload?.cardId,
+              msg.payload?.laneIndex
+            );
+            break;
+          case 'SELECT_TARGET':
+            room.state = resolveTargetSelection(
+              room.state,
+              seat,
+              msg.payload?.targetOwner,
+              msg.payload?.laneIndex
+            );
+            break;
+          case 'CANCEL_TARGET':
+            room.state = cancelTargetSelection(room.state, seat);
+            break;
+          case 'RESOLVE_HAND_CHOICE':
+            room.state = resolveHandChoice(
+              room.state,
+              seat,
+              Array.isArray(msg.payload?.selectedIndices) ? msg.payload.selectedIndices : []
+            );
+            break;
+          case 'ACTIVATE_ADVENTURE':
+            room.state = activateCharacterAdventureAbility(
+              room.state,
+              seat,
+              msg.payload?.laneIndex
+            );
+            break;
+          case 'ACTIVATE_MANE_ABILITY':
+            room.state = activateManeLeaderAbility(room.state, seat);
+            break;
+          case 'START_CONTACT':
+            room.state = startContactPhase(room.state, seat);
+            break;
+          case 'INSPIRE_SCENE':
+            room.state = inspireInContact(room.state, seat, Number(msg.payload?.sceneIndex));
+            break;
+          case 'PASS_INSPIRE':
+            room.state = passInspireInContact(room.state, seat);
+            break;
+          case 'ACK_CLASH_ANIMATION':
+            room.state = acknowledgeClashAnimation(room.state, seat);
+            break;
+          case 'BREAKTHROUGH_CHOICE':
+            room.state = resolveBreakthroughChoice(
+              room.state,
+              seat,
+              msg.payload?.choice
+            );
+            break;
+          case 'ACK_PLAN_REVEAL':
+            room.state = acknowledgePlanReveal(room.state, seat);
+            break;
+          case 'ACK_STORY_REVEAL':
+            room.state = acknowledgeStoryReveal(room.state, seat);
+            break;
+          case 'END_TURN':
+            room.state = endTurn(room.state, seat);
+            break;
+        }
+
+        if (
+          room.state.phase === 'MAIN_PHASE' &&
+          (prevPhase !== 'MAIN_PHASE' || prevTurnPlayer !== room.state.turnPlayerId)
+        ) {
+          this.resetTurnTimer(room);
+        }
+
+        await this.finalizeMatchOutcome(room);
+        this.broadcastState(room);
+        break;
+      }
+
+      case 'LEAVE_ROOM': {
+        const found = this.findRoomBySocket(ws);
+        if (!found) return;
+        const { room, seat } = found;
+        if (seat === '0' || seat === '1') {
+          this.clearRoomTimers(room);
+          if (room.state.phase !== 'WAITING_FOR_PLAYERS' && room.state.phase !== 'GAME_OVER') {
+            room.state = forfeitMatch(
+              room.state,
+              seat,
+              `${room.state.players[seat].displayName} forfeited the match.`
+            );
+            await this.finalizeMatchOutcome(room);
+            this.broadcastState(room);
+          }
+          delete room.seats[seat];
+        } else {
+          room.spectators.delete(ws);
+        }
+        if (!room.seats['0'] && !room.seats['1']) {
+          this.rooms.delete(room.roomCode);
+        }
+        this.broadcastRoomList();
+        break;
+      }
     }
   }
 
-  private broadcastLobbyRooms() {
-    const payload = this.getRoomListPayload();
-    for (const client of this.wss.clients) {
-      if (client.readyState === WebSocket.OPEN) client.send(payload);
+  private async seatPlayer(
+    room: GameRoom,
+    seat: '0' | '1',
+    ws: WebSocket,
+    userId: string | undefined,
+    displayName: string,
+    deckId: string
+  ) {
+    const hydratedDeck = await this.hydrateDeckFromDatabase(deckId);
+    const sessionToken = crypto.randomBytes(24).toString('hex');
+
+    room.seats[seat] = {
+      ws,
+      userId,
+      displayName,
+      deckId,
+      hydratedDeck,
+      sessionToken,
+    };
+
+    room.state.players[seat].displayName = displayName;
+    room.state.players[seat].leader = hydratedDeck.leader;
+    room.state.players[seat].isConnected = true;
+
+    if (room.seats['0']?.hydratedDeck && room.seats['1']?.hydratedDeck) {
+      room.state = startSeatedMatch(
+        room.seats['0'].hydratedDeck,
+        room.seats['1'].hydratedDeck,
+        room.seats['0'].displayName,
+        room.seats['1'].displayName
+      );
+      room.state.roomId = room.roomCode;
+    }
+
+    this.broadcastState(room);
+  }
+
+  private resetTurnTimer(room: GameRoom) {
+    if (room.turnTimer) clearTimeout(room.turnTimer);
+    if (room.state.phase === 'GAME_OVER' || room.state.phase === 'WAITING_FOR_PLAYERS') return;
+
+    room.state.turnDeadlineMs = Date.now() + TURN_DURATION_MS;
+    room.turnTimer = setTimeout(async () => {
+      if (room.state.phase === 'GAME_OVER' || room.state.phase === 'WAITING_FOR_PLAYERS') return;
+      const idleSeat = room.state.turnPlayerId;
+      room.state = forfeitMatch(
+        room.state,
+        idleSeat,
+        `${room.state.players[idleSeat].displayName} ran out of turn time (3 minutes of inactivity)!`
+      );
+      await this.finalizeMatchOutcome(room);
+      this.broadcastState(room);
+    }, TURN_DURATION_MS);
+  }
+
+  private clearRoomTimers(room: GameRoom) {
+    if (room.turnTimer) {
+      clearTimeout(room.turnTimer);
+      room.turnTimer = undefined;
+    }
+    for (const s of ['0', '1'] as const) {
+      if (room.seats[s]?.disconnectTimer) {
+        clearTimeout(room.seats[s]!.disconnectTimer);
+        room.seats[s]!.disconnectTimer = undefined;
+      }
     }
   }
 
-  private broadcastRoomState(room: Room) {
-    for (const client of room.clients) {
-      if (client.ws.readyState === WebSocket.OPEN) {
-        const stateToSend =
-          client.seat === 'spectator' ? this.getPublicStateForSpectator(room.state) : room.state;
+  private getQueueTier(room: GameRoom): 'QUICK_PLAY' | 'CASUAL' | 'RANKED' | 'PRIVATE' {
+    if (!room.isRandomMatch || room.isPrivate) return 'PRIVATE';
+    const m = String(room.mode || '').toLowerCase();
+    if (room.isRanked || m === 'ranked') return 'RANKED';
+    if (m.includes('quick')) return 'QUICK_PLAY';
+    return 'CASUAL';
+  }
 
-        client.ws.send(
+  private async finalizeMatchOutcome(room: GameRoom) {
+    if (room.state.phase !== 'GAME_OVER' || !room.state.winnerId) return;
+
+    // 1. Record Ranked ELO if applicable
+    if (room.isRanked && !room.rankedRecorded) {
+      room.rankedRecorded = true;
+      const winnerSeat = room.state.winnerId;
+      const loserSeat: '0' | '1' = winnerSeat === '0' ? '1' : '0';
+      const winnerUserId = room.seats[winnerSeat]?.userId;
+      const loserUserId = room.seats[loserSeat]?.userId;
+
+      if (winnerUserId && loserUserId && winnerUserId !== loserUserId) {
+        try {
+          const client = await pool.connect();
+          try {
+            await client.query('BEGIN');
+            const wRes = await client.query(
+              'SELECT ranked_elo, ranked_wins, ranked_losses FROM auth.users WHERE id = $1 FOR UPDATE',
+              [winnerUserId]
+            );
+            const lRes = await client.query(
+              'SELECT ranked_elo, ranked_wins, ranked_losses FROM auth.users WHERE id = $1 FOR UPDATE',
+              [loserUserId]
+            );
+            if (wRes.rows.length > 0 && lRes.rows.length > 0) {
+              const wElo = Number(wRes.rows[0].ranked_elo || 1200);
+              const lElo = Number(lRes.rows[0].ranked_elo || 1200);
+              const expectedW = 1 / (1 + Math.pow(10, (lElo - wElo) / 400));
+              const delta = Math.max(8, Math.round(32 * (1 - expectedW)));
+              const newWElo = wElo + delta;
+              const newLElo = Math.max(100, lElo - delta);
+
+              await client.query(
+                'UPDATE auth.users SET ranked_elo = $1, ranked_wins = COALESCE(ranked_wins, 0) + 1 WHERE id = $2',
+                [newWElo, winnerUserId]
+              );
+              await client.query(
+                'UPDATE auth.users SET ranked_elo = $1, ranked_losses = COALESCE(ranked_losses, 0) + 1 WHERE id = $2',
+                [newLElo, loserUserId]
+              );
+            }
+            await client.query('COMMIT');
+          } catch (err) {
+            await client.query('ROLLBACK');
+            console.error('[RANKED ELO RECORD ERROR]', err);
+          } finally {
+            client.release();
+          }
+        } catch (err) {
+          console.error('[RANKED DB CONNECT ERROR]', err);
+        }
+      }
+    }
+
+    // 2. Grant Tiered Pony Points Rewards (Random Public Matchmaking Only)
+    if (room.rewardsGranted) return;
+    room.rewardsGranted = true;
+
+    const queueTier = this.getQueueTier(room);
+    const rewardSummary: Partial<Record<'0' | '1', MatchRewardSummary>> = {};
+
+    if (queueTier === 'PRIVATE') {
+      for (const s of ['0', '1'] as const) {
+        rewardSummary[s] = {
+          queueTier: 'PRIVATE',
+          basePoints: 0,
+          firstWinBonus: 0,
+          streakBonus: 0,
+          totalEarned: 0,
+          newBalance: 0,
+          note: 'Private / Custom Lobbies award 0 Pony Points.',
+        };
+      }
+      room.state.rewardSummary = rewardSummary;
+      return;
+    }
+
+    const tierRates = QUEUE_REWARD_CONFIG[queueTier];
+    const winnerSeat = room.state.winnerId;
+    const loserSeat: '0' | '1' = winnerSeat === '0' ? '1' : '0';
+    const reachedTurn4 = room.state.turnNumber >= 4;
+    const isForfeitOrDisconnect = /forfeit|disconnected|inactivity/i.test(
+      room.state.winReason || ''
+    );
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      for (const seat of [winnerSeat, loserSeat] as ('0' | '1')[]) {
+        const userId = room.seats[seat]?.userId;
+        const isWinner = seat === winnerSeat;
+
+        if (!userId) {
+          rewardSummary[seat] = {
+            queueTier,
+            basePoints: 0,
+            firstWinBonus: 0,
+            streakBonus: 0,
+            totalEarned: 0,
+            newBalance: 0,
+            note: 'Sign in to earn Pony Points from public matches!',
+          };
+          continue;
+        }
+
+        const uRes = await client.query(
+          `SELECT reward_points, win_streak, (last_first_win_date = CURRENT_DATE) AS claimed_today
+           FROM auth.users WHERE id = $1 FOR UPDATE`,
+          [userId]
+        );
+        if (uRes.rows.length === 0) continue;
+
+        const currentPoints = Number(uRes.rows[0].reward_points || 0);
+        const currentStreak = Number(uRes.rows[0].win_streak || 0);
+        const claimedToday = Boolean(uRes.rows[0].claimed_today);
+
+        let basePoints = 0;
+        let firstWinBonus = 0;
+        let streakBonus = 0;
+        let nextStreak = 0;
+        let note = '';
+
+        if (isWinner) {
+          basePoints = tierRates.win;
+          nextStreak = currentStreak + 1;
+          if (!claimedToday) {
+            firstWinBonus = tierRates.firstWin;
+          }
+          if (nextStreak >= 2 && (queueTier === 'CASUAL' || queueTier === 'RANKED')) {
+            streakBonus = Math.min(30, (nextStreak - 1) * 10);
+          }
+          note = `Victory in ${queueTier.replace('_', ' ')}!`;
+        } else {
+          nextStreak = 0;
+          if (reachedTurn4 && !isForfeitOrDisconnect) {
+            basePoints = tierRates.loss;
+            note = `Completed match (Turn ${room.state.turnNumber}) consolation reward.`;
+          } else {
+            note = 'Loss rewards require reaching Turn 4 without forfeiting/disconnecting.';
+          }
+        }
+
+        const totalEarned = basePoints + firstWinBonus + streakBonus;
+        let newBalance = currentPoints;
+
+        if (totalEarned > 0) {
+          const txRes = await client.query(
+            `INSERT INTO auth.point_transactions (user_id, room_code, queue_type, delta, reason)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (user_id, room_code) DO NOTHING
+             RETURNING id`,
+            [userId, room.roomCode, queueTier, totalEarned, note]
+          );
+
+          if (txRes.rows.length > 0) {
+            const upd = await client.query(
+              `UPDATE auth.users
+               SET reward_points = reward_points + $1,
+                   win_streak = $2,
+                   last_first_win_date = CASE WHEN $3 > 0 THEN CURRENT_DATE ELSE last_first_win_date END
+               WHERE id = $4
+               RETURNING reward_points`,
+              [totalEarned, nextStreak, firstWinBonus, userId]
+            );
+            newBalance = Number(upd.rows[0].reward_points || currentPoints + totalEarned);
+          }
+        } else {
+          await client.query(`UPDATE auth.users SET win_streak = 0 WHERE id = $1`, [userId]);
+        }
+
+        rewardSummary[seat] = {
+          queueTier,
+          basePoints,
+          firstWinBonus,
+          streakBonus,
+          totalEarned,
+          newBalance,
+          note,
+        };
+      }
+
+      await client.query('COMMIT');
+      room.state.rewardSummary = rewardSummary;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('[PONY POINTS REWARD ERROR]', err);
+    } finally {
+      client.release();
+    }
+  }
+
+  private async hydrateDeckFromDatabase(deckId: string): Promise<HydratedDeckPayload> {
+    const cleanDeckId = String(deckId || 'starter-sd01').trim();
+    const res = await pool.query(
+      `SELECT id, name, card_type, element, cost, power, defense, traits, effect_text, image_url, rarity, set_code
+       FROM game.cards;`
+    );
+
+    const cardMap = new Map<string, CardDefinition>();
+    for (const row of res.rows) {
+      const def: CardDefinition = {
+        id: row.id,
+        cardNumber: row.id,
+        name: row.name,
+        type: row.card_type,
+        element: row.element || 'Everyday',
+        cost: Number(row.cost) || 0,
+        power: Number(row.power) || 0,
+        defense: Number(row.defense) || 0,
+        traits: row.traits || '',
+        effectText: row.effect_text || '',
+        imageUrl: row.image_url || '',
+        rarity: row.rarity || 'C',
+        setCode: row.set_code || 'BP01',
+      };
+      cardMap.set(String(row.id).toLowerCase(), def);
+    }
+
+    const resolveCard = (id: string): CardDefinition | null => {
+      if (!id) return null;
+      return cardMap.get(String(id).toLowerCase()) || null;
+    };
+
+    const resolveManeCharacter = (
+      maneId: string | null,
+      deckNameHint?: string
+    ): CardDefinition | null => {
+      if (maneId) {
+        const direct = resolveCard(maneId);
+        if (direct && direct.imageUrl) return direct;
+      }
+
+      const hint = String(deckNameHint || '').split('-')[0].trim().toLowerCase();
+      if (hint) {
+        for (const c of cardMap.values()) {
+          const t = String(c.type || '').toLowerCase();
+          const n = String(c.name || '').toLowerCase();
+          if (
+            (t === 'mane character' || t === 'maincharacter') &&
+            n.includes(hint) &&
+            !n.includes(' - ') &&
+            !n.includes(' – ') &&
+            !String(c.id).includes('-S')
+          ) {
+            return c;
+          }
+        }
+      }
+
+      return null;
+    };
+
+    let starter = startermaps.find(
+      (s: any) => String(s.id).toLowerCase() === cleanDeckId.toLowerCase()
+    );
+
+    if (!starter && !cleanDeckId.startsWith('starter-')) {
+      const dbDeckRes = await pool.query(
+        'SELECT name, mane_character, cards FROM auth.decks WHERE id = $1;',
+        [cleanDeckId]
+      );
+      if (dbDeckRes.rows.length > 0) {
+        const row = dbDeckRes.rows[0];
+        const parsedCards =
+          typeof row.cards === 'string' ? JSON.parse(row.cards) : row.cards || {};
+
+        let rawManeId: string | null = null;
+        if (typeof row.mane_character === 'string') {
+          if (row.mane_character.startsWith('{')) {
+            try {
+              const obj = JSON.parse(row.mane_character);
+              rawManeId = obj.id || obj.card_id || null;
+            } catch {
+              rawManeId = row.mane_character;
+            }
+          } else {
+            rawManeId = row.mane_character;
+          }
+        } else if (row.mane_character && typeof row.mane_character === 'object') {
+          rawManeId = row.mane_character.id || row.mane_character.card_id || null;
+        }
+
+        const expandEntries = (list: any[]): string[] => {
+          const out: string[] = [];
+          for (const item of list || []) {
+            if (typeof item === 'string') out.push(item);
+            else if (item && typeof item === 'object') {
+              const cid = item.card_id || item.id;
+              const qty = Number(item.quantity) || 1;
+              if (cid) {
+                for (let i = 0; i < qty; i++) out.push(cid);
+              }
+            }
+          }
+          return out;
+        };
+
+        const leader =
+          resolveManeCharacter(rawManeId, row.name) ||
+          resolveManeCharacter('SD01-RR01', 'Twilight Sparkle')!;
+
+        return {
+          leader,
+          storyDeck: expandEntries(parsedCards.story_deck || parsedCards.stories)
+            .map(resolveCard)
+            .filter(Boolean) as CardDefinition[],
+          sceneDeck: expandEntries(parsedCards.scene_deck || parsedCards.scenes)
+            .map(resolveCard)
+            .filter(Boolean) as CardDefinition[],
+          mainDeck: expandEntries(parsedCards.main_deck || parsedCards.main)
+            .map(resolveCard)
+            .filter(Boolean) as CardDefinition[],
+        };
+      }
+    }
+
+    if (!starter) {
+      starter = startermaps[0];
+    }
+
+    const leader =
+      resolveManeCharacter(starter.mane_character, starter.name) ||
+      resolveManeCharacter('SD01-RR01', 'Twilight Sparkle')!;
+
+    return {
+      leader,
+      storyDeck: (starter.story_deck || []).map(resolveCard).filter(Boolean) as CardDefinition[],
+      sceneDeck: (starter.scene_deck || []).map(resolveCard).filter(Boolean) as CardDefinition[],
+      mainDeck: (starter.main_deck || []).map(resolveCard).filter(Boolean) as CardDefinition[],
+    };
+  }
+
+  private broadcastState(room: GameRoom) {
+    for (const seat of ['0', '1'] as const) {
+      const conn = room.seats[seat];
+      if (conn?.ws && conn.ws.readyState === WebSocket.OPEN) {
+        conn.ws.send(
           JSON.stringify({
             type: 'STATE_UPDATE',
-            state: stateToSend,
-            seat: client.seat,
-            roomCode: room.code,
-            sessionToken: client.sessionToken,
-            clientCount: room.clients.length,
+            roomCode: room.roomCode,
+            seat,
+            sessionToken: conn.sessionToken,
+            state: room.state,
+          })
+        );
+      }
+    }
+    for (const specWs of room.spectators) {
+      if (specWs.readyState === WebSocket.OPEN) {
+        specWs.send(
+          JSON.stringify({
+            type: 'STATE_UPDATE',
+            roomCode: room.roomCode,
+            seat: 'spectator',
+            state: room.state,
           })
         );
       }
     }
   }
 
-  private getPublicStateForSpectator(state: KayouGameState): KayouGameState {
-    return {
-      ...state,
-      players: {
-        '0': { ...state.players['0'], hand: [], mainDeck: [], sceneDeck: [] },
-        '1': { ...state.players['1'], hand: [], mainDeck: [], sceneDeck: [] },
-      },
-    };
+  private sendOpenRooms(ws: WebSocket) {
+    const openRooms = Array.from(this.rooms.values()).map((r) => ({
+      roomCode: r.roomCode,
+      mode: r.mode,
+      isPrivate: r.isPrivate,
+      hasPassword: Boolean(r.password),
+      player0: r.seats['0']?.displayName || null,
+      player1: r.seats['1']?.displayName || null,
+      spectatorCount: r.spectators.size,
+      status: r.seats['0'] && r.seats['1'] ? 'IN_PROGRESS' : 'WAITING',
+    }));
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'OPEN_ROOMS', rooms: openRooms }));
+    }
   }
 
-  private async hydrateDeckFromDatabase(deckId: DeckId): Promise<HydratedDeckPayload> {
-    const cardRes = await pool.query(
-      `SELECT id, name, set_code, card_type, element, rarity, cost, power, defense, traits, effect_text, image_url
-       FROM game.cards
-       ORDER BY
-         CASE WHEN id ~* '^SD01[A-F]-' THEN 0 WHEN set_code ILIKE 'SD%' OR id ~* '^SD' THEN 1 ELSE 2 END,
-         id ASC;`
-    );
-    const allRows = cardRes.rows;
-    const cardMap = new Map<string, CardDefinition>(
-      allRows.map((r: any) => [String(r.id).toLowerCase(), mapDbRowToCardDef(r)])
-    );
-    const allCards = Array.from(cardMap.values());
-
-    const normalizedDeckId = String(deckId || 'starter-sd01').trim().toLowerCase();
-
-    if (normalizedDeckId.startsWith('starter-')) {
-      const found =
-        (startermaps as any[]).find((s) => String(s.id).toLowerCase() === normalizedDeckId) ||
-        (startermaps as any[])[0];
-
-      const hydrateIds = (ids: string[]): CardDefinition[] =>
-        (Array.isArray(ids) ? ids : [])
-          .map((id) => cardMap.get(String(id).toLowerCase()))
-          .filter(Boolean) as CardDefinition[];
-
-      const targetElement = String(found.element || '').toLowerCase();
-      const leader =
-        cardMap.get(String(found.mane_character || '').toLowerCase()) ||
-        allCards.find(
-          (c) =>
-            String(c.type || '').toLowerCase().includes('mane') &&
-            String(c.element || '').toLowerCase() === targetElement
-        ) ||
-        allCards.find((c) => String(c.type || '').toLowerCase().includes('mane')) ||
-        allCards[0];
-
-      return {
-        leader,
-        storyDeck: hydrateIds(found.story_deck),
-        sceneDeck: hydrateIds(found.scene_deck),
-        mainDeck: hydrateIds(found.main_deck),
-      };
+  private broadcastRoomList() {
+    for (const client of this.wss.clients) {
+      if (client.readyState === WebSocket.OPEN) {
+        this.sendOpenRooms(client);
+      }
     }
-
-    const deckRes = await pool.query('SELECT * FROM auth.decks WHERE id = $1;', [deckId]);
-    if (deckRes.rows.length > 0) {
-      const row = deckRes.rows[0];
-      const parsed = typeof row.cards === 'string' ? JSON.parse(row.cards) : row.cards || {};
-      const maneId =
-        typeof row.mane_character === 'object' && row.mane_character !== null
-          ? row.mane_character.id || row.mane_character.card_id
-          : row.mane_character;
-
-      const hydrateIds = (ids: string[]): CardDefinition[] =>
-        (Array.isArray(ids) ? ids : [])
-          .map((id) => cardMap.get(String(id).toLowerCase()))
-          .filter(Boolean) as CardDefinition[];
-
-      const leader =
-        (maneId && cardMap.get(String(maneId).toLowerCase())) ||
-        allCards.find((c) => String(c.type || '').toLowerCase().includes('mane')) ||
-        allCards[0];
-
-      return {
-        leader,
-        storyDeck: hydrateIds(parsed.story_deck || parsed.stories || []),
-        sceneDeck: hydrateIds(parsed.scene_deck || parsed.scenes || []),
-        mainDeck: hydrateIds(parsed.main_deck || parsed.main || []),
-      };
-    }
-
-    const fallbackFound = (startermaps as any[])[0];
-    const hydrateIds = (ids: string[]): CardDefinition[] =>
-      (Array.isArray(ids) ? ids : [])
-        .map((id) => cardMap.get(String(id).toLowerCase()))
-        .filter(Boolean) as CardDefinition[];
-
-    return {
-      leader:
-        cardMap.get(String(fallbackFound.mane_character).toLowerCase()) ||
-        allCards.find((c) => String(c.type || '').toLowerCase().includes('mane')) ||
-        allCards[0],
-      storyDeck: hydrateIds(fallbackFound.story_deck),
-      sceneDeck: hydrateIds(fallbackFound.scene_deck),
-      mainDeck: hydrateIds(fallbackFound.main_deck),
-    };
   }
 
-  private async startMatchWithHydratedDecks(room: Room) {
-    const [deck0, deck1] = await Promise.all([
-      this.hydrateDeckFromDatabase(room.decks['0'] || 'starter-sd01'),
-      this.hydrateDeckFromDatabase(room.decks['1'] || 'starter-sd02'),
-    ]);
-
-    const p0Client = room.clients.find((c) => c.seat === '0');
-    const p1Client = room.clients.find((c) => c.seat === '1');
-
-    room.state = startSeatedMatch(
-      deck0,
-      deck1,
-      p0Client?.username || 'Player 1',
-      p1Client?.username || 'Player 2'
-    );
-    room.state.roomId = room.code;
+  private findRoomBySocket(ws: WebSocket): { room: GameRoom; seat: '0' | '1' | 'spectator' } | null {
+    for (const room of this.rooms.values()) {
+      if (room.seats['0']?.ws === ws) return { room, seat: '0' };
+      if (room.seats['1']?.ws === ws) return { room, seat: '1' };
+      if (room.spectators.has(ws)) return { room, seat: 'spectator' };
+    }
+    return null;
   }
 
-  private processGameAction(
-    state: KayouGameState,
-    playerId: '0' | '1',
-    action: string,
-    payload: any
-  ): KayouGameState {
-    switch (action) {
-      case 'ACK_VS_INTRO':
-        return acknowledgeVsIntro(state);
-      case 'MULLIGAN_DECISION':
-        return resolveMulligan(state, playerId, Boolean(payload?.doMulligan));
-      case 'PLAY_CARD':
-        return playCardFromHand(state, playerId, payload.cardId, payload.laneIndex);
-      case 'ACTIVATE_ADVENTURE':
-        return activateCharacterAdventureAbility(state, playerId, payload.laneIndex);
-      case 'START_CONTACT':
-        return startContactPhase(state, playerId);
-      case 'INSPIRE_SCENE':
-        return inspireInContact(state, playerId, payload.sceneIndex);
-      case 'PASS_INSPIRE':
-        return passInspireInContact(state, playerId);
-      case 'ACK_CLASH_ANIMATION':
-        return acknowledgeClashAnimation(state, playerId);
-      case 'BREAKTHROUGH_CHOICE':
-        return resolveBreakthroughChoice(state, playerId, payload.choice);
-      case 'ACK_PLAN_REVEAL':
-        return acknowledgePlanReveal(state, playerId);
-      case 'ACK_STORY_REVEAL':
-        return acknowledgeStoryReveal(state, playerId);
-      case 'END_TURN':
-        return endTurn(state, playerId);
-      case 'ACTIVATE_MANE_ABILITY':
-        return activateManeLeaderAbility(state, playerId);
-      case 'SELECT_TARGET':
-        return resolveTargetSelection(state, playerId, payload.targetOwner, payload.laneIndex);
-      case 'CANCEL_TARGET':
-        return cancelTargetSelection(state, playerId);
-      case 'RESOLVE_HAND_CHOICE':
-        return resolveHandChoice(state, playerId, payload.selectedIndices || []);
-      default:
-        return state;
+  private handleDisconnect(ws: WebSocket) {
+    this.quickPlayQueue = this.quickPlayQueue.filter((q) => q.ws !== ws);
+    const found = this.findRoomBySocket(ws);
+    if (!found) return;
+    const { room, seat } = found;
+
+    if (seat === 'spectator') {
+      room.spectators.delete(ws);
+      this.broadcastRoomList();
+      return;
     }
+
+    const seatConn = room.seats[seat];
+    if (!seatConn) return;
+    seatConn.ws = null;
+
+    if (room.state.phase === 'WAITING_FOR_PLAYERS' || room.state.phase === 'GAME_OVER') {
+      delete room.seats[seat];
+      if (!room.seats['0'] && !room.seats['1']) {
+        this.rooms.delete(room.roomCode);
+      }
+      this.broadcastRoomList();
+      return;
+    }
+
+    room.state.players[seat].isConnected = false;
+    this.broadcastState(room);
+
+    seatConn.disconnectTimer = setTimeout(async () => {
+      if (room.state.phase !== 'GAME_OVER') {
+        room.state = forfeitMatch(
+          room.state,
+          seat,
+          `${room.state.players[seat].displayName} disconnected and did not return within 3 minutes.`
+        );
+        this.clearRoomTimers(room);
+        await this.finalizeMatchOutcome(room);
+        this.broadcastState(room);
+      }
+    }, DISCONNECT_GRACE_MS);
+  }
+
+  private generateRoomCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return this.rooms.has(code) ? this.generateRoomCode() : code;
   }
 }

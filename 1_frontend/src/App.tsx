@@ -15,6 +15,7 @@ import FanPageHub from './components/FanPageHub';
 import StandingsHub from './components/StandingsHub';
 import AuthModal from './components/AuthModal';
 import './index.css';
+import './styles/CardFoil.css';
 
 axios.defaults.withCredentials = true;
 
@@ -51,7 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const token = localStorage.getItem('token');
       try {
         const { data } = await axios.get(`${API_BASE_URL}/api/auth/me`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (data.user) setUser(data.user);
       } catch {
@@ -93,7 +94,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, loading, login, logout, register, updateUserPoints }}>
+    <AuthContext.Provider
+      value={{ user, isAuthenticated: !!user, loading, login, logout, register, updateUserPoints }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -125,7 +128,7 @@ function VerifyEmailRoute() {
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || 'Verification failed.');
-        
+
         setIsSuccess(true);
         setStatusMessage(data.message || 'Email verified successfully!');
         window.alert('Success! Your email has been verified and Safe Mode has been lifted.');
@@ -145,8 +148,21 @@ function VerifyEmailRoute() {
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-      <div style={{ background: '#1f2937', padding: '32px', borderRadius: '16px', width: '100%', maxWidth: '450px', color: '#fff', textAlign: 'center', border: '1px solid #374151' }}>
-        <h2 style={{ marginBottom: '16px', color: isSuccess ? '#34d399' : '#f472b6' }}>Email Verification</h2>
+      <div
+        style={{
+          background: '#1f2937',
+          padding: '32px',
+          borderRadius: '16px',
+          width: '100%',
+          maxWidth: '450px',
+          color: '#fff',
+          textAlign: 'center',
+          border: '1px solid #374151',
+        }}
+      >
+        <h2 style={{ marginBottom: '16px', color: isSuccess ? '#34d399' : '#f472b6' }}>
+          Email Verification
+        </h2>
         <p style={{ fontSize: '0.95rem', color: '#d1d5db' }}>{statusMessage}</p>
       </div>
     </div>
@@ -158,9 +174,11 @@ const MATCH_SESSION_KEY = 'mlp_active_match_session';
 function AppContent() {
   const [currentTab, setCurrentTab] = useState<string>('hub');
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const { user } = useAuth();
+  const { user, updateUserPoints } = useAuth();
 
-  const [builderConfig, setBuilderConfig] = useState<{ id: string | null, mode: BuilderMode } | null>(null);
+  const [builderConfig, setBuilderConfig] = useState<{ id: string | null; mode: BuilderMode } | null>(
+    null
+  );
 
   const [activeMatch, setActiveMatch] = useState<{
     ws: WebSocket;
@@ -191,6 +209,14 @@ function AppContent() {
         if (data.type === 'STATE_UPDATE' && data.state) {
           if (data.state.phase === 'GAME_OVER') {
             localStorage.removeItem(MATCH_SESSION_KEY);
+            // Sync live Pony Points balance if match awarded rewards to this seat
+            const activeSeat = data.seat || seat;
+            if (
+              (activeSeat === '0' || activeSeat === '1') &&
+              data.state.rewardSummary?.[activeSeat]?.newBalance !== undefined
+            ) {
+              updateUserPoints(data.state.rewardSummary[activeSeat].newBalance);
+            }
           } else if (data.roomCode && data.sessionToken && (data.seat === '0' || data.seat === '1')) {
             localStorage.setItem(
               MATCH_SESSION_KEY,
@@ -284,7 +310,11 @@ function AppContent() {
     }
   }, []);
 
-  const handleMatchJoined = (ws: WebSocket, initialState: LiveGameState, seat: '0' | '1' | 'spectator') => {
+  const handleMatchJoined = (
+    ws: WebSocket,
+    initialState: LiveGameState,
+    seat: '0' | '1' | 'spectator'
+  ) => {
     if (initialState.roomId && (seat === '0' || seat === '1')) {
       const existing = localStorage.getItem(MATCH_SESSION_KEY);
       if (!existing) {
@@ -323,55 +353,70 @@ function AppContent() {
   return (
     <div className="app-container">
       {!activeMatch && (
-        <Navbar currentTab={currentTab} setCurrentTab={handleTabChange} onOpenAuth={() => setShowAuthModal(true)} />
+        <Navbar
+          currentTab={currentTab}
+          setCurrentTab={handleTabChange}
+          onOpenAuth={() => setShowAuthModal(true)}
+        />
       )}
 
       <main className="main-content-area">
         <Routes>
           <Route path="/verify" element={<VerifyEmailRoute />} />
-          <Route path="*" element={
-            activeMatch ? (
-              <GameBoard
-                ws={activeMatch.ws}
-                gameState={activeMatch.state}
-                seat={activeMatch.seat}
-                isReconnecting={activeMatch.isReconnecting}
-                onLeaveMatch={handleLeaveMatch}
-              />
-            ) : (
-              <>
-                {currentTab === 'hub' && <MainHub onMatchJoined={handleMatchJoined} onNavigateTab={handleTabChange} />}
-                {currentTab === 'stable' && (
-                  builderConfig ? (
-                    <DeckBuilder 
-                      deckId={builderConfig.id} 
-                      mode={builderConfig.mode}
-                      onClose={() => setBuilderConfig(null)} 
+          <Route
+            path="*"
+            element={
+              activeMatch ? (
+                <GameBoard
+                  ws={activeMatch.ws}
+                  gameState={activeMatch.state}
+                  seat={activeMatch.seat}
+                  isReconnecting={activeMatch.isReconnecting}
+                  onLeaveMatch={handleLeaveMatch}
+                />
+              ) : (
+                <>
+                  {currentTab === 'hub' && (
+                    <MainHub
+                      onMatchJoined={handleMatchJoined}
+                      onNavigateTab={handleTabChange}
                     />
-                  ) : (
-                    <StableHub 
-                      currentUserId={user?.id?.toString() || ''} 
-                      onOpenBuilder={(id, mode) => setBuilderConfig({ id, mode })} 
+                  )}
+                  {currentTab === 'stable' &&
+                    (builderConfig ? (
+                      <DeckBuilder
+                        deckId={builderConfig.id}
+                        mode={builderConfig.mode}
+                        onClose={() => setBuilderConfig(null)}
+                      />
+                    ) : (
+                      <StableHub
+                        currentUserId={user?.id?.toString() || ''}
+                        onOpenBuilder={(id, mode) => setBuilderConfig({ id, mode })}
+                      />
+                    ))}
+                  {currentTab === 'collection' && (
+                    <CollectionBinder onBackToStable={() => handleTabChange('stable')} />
+                  )}
+                  {currentTab === 'shop' && <ShopView />}
+                  {currentTab === 'community' && (
+                    <div className="placeholder-tab">
+                      <h2>Community Decks Coming Soon</h2>
+                    </div>
+                  )}
+                  {currentTab === 'standings' && (
+                    <StandingsHub
+                      currentUser={user}
+                      onQueueRanked={() => handleTabChange('hub')}
                     />
-                  )
-                )}
-                {currentTab === 'collection' && (
-                  <CollectionBinder onBackToStable={() => handleTabChange('stable')} />
-                )}
-                {currentTab === 'shop' && <ShopView />}
-                {currentTab === 'community' && <div className="placeholder-tab"><h2>Community Decks Coming Soon</h2></div>}
-                {currentTab === 'standings' && (
-                  <StandingsHub
-                    currentUser={user}
-                    onQueueRanked={() => handleTabChange('hub')}
-                  />
-                )}
-                {currentTab === 'fanPage' && <FanPageHub currentUser={user} />}
-                {currentTab === 'rules' && <RulesGlossaryTab />}
-                {currentTab === 'admin' && <AdminPanel />}
-              </>
-            )
-          } />
+                  )}
+                  {currentTab === 'fanPage' && <FanPageHub currentUser={user} />}
+                  {currentTab === 'rules' && <RulesGlossaryTab />}
+                  {currentTab === 'admin' && <AdminPanel />}
+                </>
+              )
+            }
+          />
         </Routes>
       </main>
 

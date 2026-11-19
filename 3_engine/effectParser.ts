@@ -14,6 +14,48 @@ export function sanitizeCardText(raw?: string): string {
   return raw.replace(/\{\{[^}]*$/g, '').replace(/\{\{|\}\}/g, '').trim();
 }
 
+export function detectEffectKeywords(raw?: string): string[] {
+  const text = sanitizeCardText(raw);
+  if (!text) return [];
+  const tags: string[] = [];
+  if (/\bAppear\b/i.test(text)) tags.push('Appear');
+  if (/\bFarewell\b/i.test(text)) tags.push('Farewell');
+  if (/\bAdventure\b/i.test(text)) tags.push('Adventure');
+  if (/\bPre-?Plan\b/i.test(text)) tags.push('Pre-Plan');
+  if (/\bWhenever\b/i.test(text)) tags.push('Whenever');
+  if (/\bWhile\b/i.test(text)) tags.push('While (Passive)');
+  if (/\bIf\b/i.test(text)) tags.push('If (Condition)');
+  if (/\bOnly\b/i.test(text)) tags.push('Only (Restriction)');
+  if (/\b(?:Choose|Select)\b/i.test(text)) tags.push('Choose/Select (Player Input)');
+  if (/at the end of/i.test(text)) tags.push('Delayed: End of Turn');
+  if (/until the end of/i.test(text)) tags.push('Duration: Until End of Turn');
+  if (/top or (?:the )?bottom/i.test(text)) tags.push('Top/Bottom Deck Choice');
+  const bracket = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
+  if (bracket) tags.push(`Keyword: 「${bracket[1]}」`);
+  return tags;
+}
+
+export function matchesCardKeywordExact(card: CardDefinition, filterText: string): boolean {
+  const target = filterText.trim().toLowerCase();
+  if (!target) return true;
+
+  const cardName = String(card.name || '').trim().toLowerCase();
+  if (cardName === target) return true;
+
+  const rawTraits = String(card.traits || '').toLowerCase();
+  const traitTokens = rawTraits
+    .split(/[,/|•·]+|\s{2,}/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  if (traitTokens.includes(target)) return true;
+
+  const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wordBoundaryRegex = new RegExp(`(?:^|\\s)${escaped}(?:$|\\s)`, 'i');
+  if (wordBoundaryRegex.test(rawTraits)) return true;
+
+  return false;
+}
+
 export function getEffectiveCardCost(player: PlayerState, card: CardDefinition): number {
   let baseCost = Math.max(0, Number(card.cost) || 0);
   if (baseCost === 0) return 0;
@@ -103,18 +145,6 @@ export function exhaustScenesWithElementPriority(
   );
 }
 
-function matchesCharacterFilter(character: CardDefinition, filterText: string): boolean {
-  const cleanFilter = filterText.trim().toLowerCase();
-  const charName = String(character.name || '').toLowerCase();
-  const charTraits = String(character.traits || '').toLowerCase();
-  const charType = String(character.type || '').toLowerCase();
-  return (
-    charName.includes(cleanFilter) ||
-    charTraits.includes(cleanFilter) ||
-    charType.includes(cleanFilter)
-  );
-}
-
 function doesPassiveTextApplyToCharacter(
   rawText: string,
   character: CardDefinition,
@@ -135,7 +165,7 @@ function doesPassiveTextApplyToCharacter(
   ) {
     return 0;
   }
-  if (/Adventure\s*:/i.test(text) && !/Adventure\s*:\s*While\b/i.test(text)) {
+  if (/Adventure\s*:\s*Tap/i.test(text)) {
     return 0;
   }
 
@@ -150,6 +180,27 @@ function doesPassiveTextApplyToCharacter(
   }
   if (/(?:during|in)\s+rival'?s\s+turn/i.test(text) && isOwnersTurn) {
     return 0;
+  }
+
+  // Applejack SD01D-U01: "While there is any untapped Scene in your Scene Area, this Character gets +2 Inspiration."
+  if (
+    /while\s+there\s+(?:is|are)\s+(?:any\s+)?untapped\s+scenes?\s+in\s+your\s+scene\s+area/i.test(
+      text
+    ) &&
+    ownerPlayer
+  ) {
+    const hasUntappedScene = ownerPlayer.sceneArea.some((sc) => !sc.isExhausted);
+    if (!hasUntappedScene) return 0;
+  }
+
+  if (
+    /while\s+there\s+(?:is|are)\s+(?:any\s+)?tapped\s+scenes?\s+in\s+your\s+scene\s+area/i.test(
+      text
+    ) &&
+    ownerPlayer
+  ) {
+    const hasTappedScene = ownerPlayer.sceneArea.some((sc) => sc.isExhausted);
+    if (!hasTappedScene) return 0;
   }
 
   if (/while there is any item in your retirement/i.test(text) && ownerPlayer) {
@@ -197,7 +248,7 @@ function doesPassiveTextApplyToCharacter(
 
   const charBracketMatch = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
   if (charBracketMatch && !isAttachedItem) {
-    if (!matchesCharacterFilter(character, charBracketMatch[1])) {
+    if (!matchesCardKeywordExact(character, charBracketMatch[1])) {
       return 0;
     }
   }
@@ -391,22 +442,21 @@ export function evaluateBoardCondition(
   const player = state.players[ownerId];
   const allLanes: LaneKey[] = ['left', 'center', 'right'];
 
-  // "if there is any 「Gummy」 in your Adventure Area"
-  const bracketInAdv = cond.match(/there\s+is\s+(?:any|a|an)\s+[｢\[「]([^｣\]」]+)[｣\]」]\s+in\s+your\s+adventure\s+area/i);
+  const bracketInAdv = cond.match(
+    /there\s+is\s+(?:any|a|an)\s+[｢\[「]([^｣\]」]+)[｣\]」]\s+in\s+your\s+adventure\s+area/i
+  );
   if (bracketInAdv) {
     const required = bracketInAdv[1].trim();
     return allLanes.some((l) => {
       const char = player.adventureArea[l].character;
-      return char !== null && matchesCharacterFilter(char, required);
+      return char !== null && matchesCardKeywordExact(char, required);
     });
   }
 
-  // "if there is any Item in your Retirement Area"
   if (/there\s+is\s+(?:any|an)\s+item\s+in\s+your\s+retirement/i.test(cond)) {
     return player.retirement.some((c) => String(c.type || '').toLowerCase() === 'item');
   }
 
-  // "if you have X or more Characters in your Adventure Area"
   const countCharsMatch = cond.match(/you\s+have\s+(\d+)\s+or\s+more\s+characters?/i);
   if (countCharsMatch) {
     const minCount = parseInt(countCharsMatch[1], 10) || 1;
@@ -419,12 +469,14 @@ export function evaluateBoardCondition(
 
 export interface ParsedActivatedEffect {
   kind:
+    | 'NONE_PASSIVE'
     | 'DRAW'
     | 'DRAW_THEN_DISCARD'
     | 'DISCARD_HAND'
     | 'DISCARD_THEN_DRAW'
     | 'RECOVER_RETIREMENT'
     | 'UNTAP_SCENES'
+    | 'SCRY_TOP_BOTTOM'
     | 'REVEAL_TOP_PICK_HAND'
     | 'TARGET_BUFF_POWER'
     | 'TARGET_DEBUFF_OPPONENT'
@@ -442,6 +494,7 @@ export interface ParsedActivatedEffect {
   maxLimit?: number;
   isSelfOnly?: boolean;
   isGlobal?: boolean;
+  requiresChoice?: boolean;
   targetSide?: 'SELF' | 'OPPONENT' | 'ANY';
   requiredTypeFilter?: string;
   requiredNameFilter?: string;
@@ -463,7 +516,7 @@ export function extractTriggerClause(
 
   const escaped = triggerType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(
-    `${escaped}\\s*:?\\s*([\\s\\S]*?)(?=(?:\\n|\\r|(?:Appear|Farewell|Adventure|Inspo Boost|Inspiration Boost|Pre-Plan|Mane Ability|Activate|Treat for you!|Deliver Present|Unwrap Present)\\s*:?|$))`,
+    `${escaped}\\s*(?:Tap\\s*:|:)\\s*([\\s\\S]*?)(?=(?:\\n|\\r|(?:Appear|Farewell|Adventure|Inspo Boost|Inspiration Boost|Pre-Plan|Mane Ability|Activate|Treat for you!|Deliver Present|Unwrap Present)\\s*(?:Tap\\s*:|:)|$))`,
     'i'
   );
   const match = text.match(regex);
@@ -474,7 +527,12 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   let text = sanitizeCardText(clauseText);
   if (!text) return null;
 
-  // Strip leading "If <condition>, " so the inner action parses cleanly after condition evaluation
+  text = text.replace(/^Tap\s*:\s*/i, '').trim();
+
+  if (/^while\b/i.test(text)) {
+    return { kind: 'NONE_PASSIVE', amount: 0 };
+  }
+
   const leadingIf = text.match(/^if\s+[^,]+,\s*([\s\S]+)$/i);
   if (leadingIf) {
     text = leadingIf[1].trim();
@@ -488,17 +546,31 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   );
   const parsedMaxLimit = limitMatch ? parseInt(limitMatch[1], 10) : undefined;
 
-  // 0A. Prevent Retire in Contact
+  // Owlowiscious (SD01A-C05): "Look/Reveal the top card of the Deck, put it at the top or the bottom of the Deck."
+  if (
+    /(?:look\s+at|reveal)\s+the\s+top\s+card\s+of\s+(?:your|the)\s+deck.*?(?:top\s+or\s+(?:the )?bottom)/i.test(
+      text
+    )
+  ) {
+    return {
+      kind: 'SCRY_TOP_BOTTOM',
+      amount: 1,
+      requiresChoice: true,
+    };
+  }
+
+  // Prevent Retire in Contact
   if (/won'?t\s+retire\s+in\s+contact|cannot\s+retire\s+in\s+contact/i.test(text)) {
     return {
       kind: 'PREVENT_RETIRE_IN_CONTACT',
       amount: 1,
       maxLimit: parsedMaxLimit,
       requiredNameFilter: nameFilter,
+      requiresChoice: true,
     };
   }
 
-  // 0B. Draw X, then discard Y
+  // Draw X, then discard Y (Spike SD01A-U03: "Draw 2 cards, discard 1 card.")
   const drawDiscardMatch = text.match(
     /draw\s+(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?discard\s+(\d+|a|an)\s+cards?/i
   );
@@ -509,10 +581,11 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       kind: 'DRAW_THEN_DISCARD',
       amount: dRaw === 'a' || dRaw === 'an' ? 1 : parseInt(dRaw, 10) || 1,
       secondaryAmount: discRaw === 'a' || discRaw === 'an' ? 1 : parseInt(discRaw, 10) || 1,
+      requiresChoice: true,
     };
   }
 
-  // 0C. Discard X, then draw Y
+  // Discard X, then draw Y
   const discardDrawMatch = text.match(
     /discard\s+(?:up\s+to\s+)?(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?draw\s+(\d+|a|an)\s+cards?/i
   );
@@ -524,32 +597,35 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       amount: discRaw === 'a' || discRaw === 'an' ? 1 : parseInt(discRaw, 10) || 1,
       secondaryAmount: dRaw === 'a' || dRaw === 'an' ? 1 : parseInt(dRaw, 10) || 1,
       requiredNameFilter: nameFilter,
+      requiresChoice: true,
     };
   }
 
-  // 0D. Standalone Discard from Hand
+  // Standalone Discard from Hand
   const soloDiscardMatch = text.match(/discard\s+(\d+|a|an)\s+cards?\s+from\s+(?:your\s+)?hand/i);
   if (soloDiscardMatch) {
     const discRaw = soloDiscardMatch[1].toLowerCase();
     return {
       kind: 'DISCARD_HAND',
       amount: discRaw === 'a' || discRaw === 'an' ? 1 : parseInt(discRaw, 10) || 1,
+      requiresChoice: true,
     };
   }
 
-  // 0E. Untap / Ready Scenes in Scene Area
+  // Untap / Ready Scenes in Scene Area (Winona SD01D-U04: "Choose 1 Scene in your Scene Area, untap it.")
   const untapSceneMatch = text.match(
-    /(?:choose|ready|untap)\s+(\d+|a|an)\s+(?:face-down\s+|exhausted\s+|tapped\s+)?scenes?\s+in\s+your\s+scene\s+area/i
+    /(?:choose|select|ready|untap)\s+(\d+|a|an)\s+(?:face-down\s+|exhausted\s+|tapped\s+)?scenes?\s+in\s+your\s+scene\s+area/i
   );
   if (untapSceneMatch) {
     const raw = untapSceneMatch[1].toLowerCase();
     return {
       kind: 'UNTAP_SCENES',
       amount: raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10) || 1,
+      requiresChoice: /choose|select/i.test(text),
     };
   }
 
-  // 0F. Reveal top X cards of Deck, choose 1 matching card to add to Hand
+  // Reveal top X cards of Deck, choose 1 matching card to add to Hand
   const revealPickMatch = text.match(
     /reveal\s+the\s+top\s+(\d+)\s+cards?\s+of\s+(?:your|the)\s+deck.*?choose\s+1\s+(Item|Event|Character|Scene|card|[｢\[「][^｣\]」]+[｣\]」])/i
   );
@@ -563,10 +639,11 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       amount: count,
       requiredTypeFilter: isCardType ? rawTarget : undefined,
       requiredNameFilter: !isCardType && !isAnyCard ? rawTarget : nameFilter,
+      requiresChoice: true,
     };
   }
 
-  // 1. Treat for you!
+  // Treat for you!
   if (/treat for you!|put\s+\d+\s+treat/i.test(text)) {
     const countMatch = text.match(/put\s+(\d+)\s+treat/i);
     const isGlobal = /each\s+/i.test(text);
@@ -581,10 +658,11 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       isGlobal,
       targetSide,
       requiredNameFilter: nameFilter,
+      requiresChoice: !isGlobal,
     };
   }
 
-  // 2. Unwrap Present
+  // Unwrap Present
   if (/unwrap\s+(?:1\s+)?present/i.test(text)) {
     const targetSide: 'SELF' | 'OPPONENT' | 'ANY' = /rival'?s\s+adventure/i.test(text)
       ? 'OPPONENT'
@@ -596,10 +674,11 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       amount: 1,
       targetSide,
       requiredNameFilter: nameFilter,
+      requiresChoice: true,
     };
   }
 
-  // 3. Deliver Present
+  // Deliver Present
   if (/deliver\s+present|put\s+\d+\s+present/i.test(text)) {
     const countMatch = text.match(/put\s+(\d+)\s+present/i);
     const isGlobal = /each\s+/i.test(text);
@@ -614,10 +693,11 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       isGlobal,
       targetSide,
       requiredNameFilter: nameFilter,
+      requiresChoice: !isGlobal,
     };
   }
 
-  // 4. Switch Positions
+  // Switch Positions
   if (/switch(?:es)?\s+positions/i.test(text)) {
     const targetSide: 'SELF' | 'OPPONENT' = /rival'?s\s+adventure/i.test(text)
       ? 'OPPONENT'
@@ -627,26 +707,28 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       amount: 1,
       targetSide,
       requiredNameFilter: nameFilter,
+      requiresChoice: true,
     };
   }
 
-  // 5. Negative Inspiration debuff on Rival character
+  // Negative Inspiration debuff on Rival character
   const debuffMatch = text.match(/(?:–|-)\s*(\d+)\s*(?:Inspiration|Power)/i);
   if (debuffMatch && /rival|opponent/i.test(text)) {
     return {
       kind: 'TARGET_DEBUFF_OPPONENT',
       amount: parseInt(debuffMatch[1], 10) || 1,
+      requiresChoice: true,
     };
   }
 
-  // 6. Move friendly Character to empty slot
+  // Move friendly Character to empty slot
   if (/move\s+(?:1\s+of\s+your\s+|a\s+|an?\s+|it\s+to\s+1\s+empty)/i.test(text)) {
-    return { kind: 'TARGET_MOVE_FRIENDLY', amount: 1 };
+    return { kind: 'TARGET_MOVE_FRIENDLY', amount: 1, requiresChoice: true };
   }
 
-  // 7. Retire opponent Character
+  // Retire opponent Character
   if (
-    /retire\s+(?:1\s+of\s+your\s+opponent|an?\s+opponent)|choose\s+1\s+character.*?(?:rival|opponent).*?to\s+retire/i.test(
+    /retire\s+(?:1\s+of\s+your\s+opponent|an?\s+opponent)|(?:choose|select)\s+1\s+character.*?(?:rival|opponent).*?to\s+retire/i.test(
       text
     )
   ) {
@@ -654,27 +736,32 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       kind: 'TARGET_RETIRE_OPPONENT',
       amount: 1,
       maxLimit: parsedMaxLimit,
+      requiresChoice: true,
     };
   }
 
-  // 8. Ready / Untap Character
+  // Ready / Untap Character
   if (/ready|untap/i.test(text) && /character/i.test(text)) {
-    return { kind: 'TARGET_READY_FRIENDLY', amount: 1 };
+    return { kind: 'TARGET_READY_FRIENDLY', amount: 1, requiresChoice: true };
   }
 
-  // 9. Recover from Retirement Area
-  if (/retirement\s+(?:area|pile)/i.test(text) && /add\s+(?:it|them)\s+to\s+(?:your\s+)?hand/i.test(text)) {
-    const typeMatch = text.match(/choose\s+1\s+(Item|Event|Character|Scene)/i);
+  // Recover from Retirement Area
+  if (
+    /retirement\s+(?:area|pile)/i.test(text) &&
+    /add\s+(?:it|them)\s+to\s+(?:your\s+)?hand/i.test(text)
+  ) {
+    const typeMatch = text.match(/(?:choose|select)\s+(?:1|any)\s+(Item|Event|Character|Scene)/i);
     return {
       kind: 'RECOVER_RETIREMENT',
       amount: 1,
       maxLimit: parsedMaxLimit,
       requiredTypeFilter: typeMatch ? typeMatch[1] : undefined,
       requiredNameFilter: nameFilter,
+      requiresChoice: true,
     };
   }
 
-  // 10. Draw cards
+  // Draw cards
   const drawMatch = text.match(/draw\s+(\d+|a|an)\s+card/i);
   if (drawMatch) {
     const rawCount = drawMatch[1].toLowerCase();
@@ -682,7 +769,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     return { kind: 'DRAW', amount: count };
   }
 
-  // 11. Global / trait buff to friendly Characters
+  // Global / trait buff to friendly Characters
   const globalMatch = text.match(
     /(?:all|each)\s+(?:of\s+)?(?:your\s+)?(?:characters?|[｢\[「][^｣\]」]+[｣\]」])\s+(?:in\s+your\s+adventure\s+area\s+)?get[s]?\s*\+(\d+)/i
   );
@@ -694,16 +781,17 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // 12. Single-target or self +Inspiration buff
+  // Single-target or self +Inspiration buff
   const buffMatch = text.match(/\+(\d+)\s*(?:Inspiration|Power)/i);
   if (buffMatch) {
     const isTargeted =
-      /choose|target|1\s+of\s+your|another/i.test(text) || Boolean(nameBracket);
+      /choose|select|target|1\s+of\s+your|another/i.test(text) || Boolean(nameBracket);
     return {
       kind: 'TARGET_BUFF_POWER',
       amount: parseInt(buffMatch[1], 10) || 1,
       isSelfOnly: !isTargeted,
       requiredNameFilter: nameFilter,
+      requiresChoice: isTargeted,
     };
   }
 
@@ -720,9 +808,8 @@ export function parseActivatedCardEffect(card: CardDefinition): ParsedActivatedE
   const parsed = parseEffectClause(adventureClause || text);
   if (parsed) return parsed;
 
-  const buffMatch = text.match(/\+(\d+)\s*(?:Inspiration|Power)/i);
   return {
-    kind: 'TARGET_BUFF_POWER',
-    amount: buffMatch ? parseInt(buffMatch[1], 10) : 2,
+    kind: 'NONE_PASSIVE',
+    amount: 0,
   };
 }

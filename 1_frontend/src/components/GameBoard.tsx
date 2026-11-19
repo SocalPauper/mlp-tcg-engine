@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { soundFX } from '../utils/soundEffects';
 import './GameBoard.css';
 
 const CARD_BACK_URL = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp';
@@ -66,11 +67,14 @@ interface PendingTargetSelection {
 
 interface PendingHandChoice {
   sourceCard: CardDefinition;
+  playerId?: '0' | '1';
   choiceType:
     | 'DISCARD_FROM_HAND'
     | 'DISCARD_THEN_DRAW'
     | 'RECOVER_FROM_RETIREMENT'
     | 'PICK_REVEALED_TO_HAND'
+    | 'TOP_OR_BOTTOM_DECK'
+    | 'CHOOSE_SCENE_TO_UNTAP'
     | 'END_PHASE_HAND_LIMIT';
   count: number;
   secondaryDrawCount?: number;
@@ -90,6 +94,32 @@ interface DelayedTriggerEntry {
   conditionText?: string;
   effectClause: string;
   createdTurn: number;
+}
+
+interface ManeSpeechBubble {
+  id: string;
+  text: string;
+  tone: 'INFO' | 'EFFECT' | 'CHOICE' | 'WARNING';
+  timestamp: number;
+}
+
+interface CardFlightAnimation {
+  id: string;
+  playerId: '0' | '1';
+  kind: 'DRAW' | 'DISCARD' | 'RETIRE';
+  count: number;
+  cardName?: string;
+  timestamp: number;
+}
+
+interface MatchRewardSummary {
+  queueTier: 'QUICK_PLAY' | 'CASUAL' | 'RANKED' | 'PRIVATE';
+  basePoints: number;
+  firstWinBonus: number;
+  streakBonus: number;
+  totalEarned: number;
+  newBalance: number;
+  note: string;
 }
 
 interface ActionSpotlightEvent {
@@ -136,6 +166,7 @@ interface PlayerState {
   turnsTaken: number;
   actedLanesThisTurn: ('left' | 'center' | 'right')[];
   isConnected?: boolean;
+  speechBubble?: ManeSpeechBubble | null;
 }
 
 export interface LiveGameState {
@@ -155,6 +186,7 @@ export interface LiveGameState {
     | 'END_PHASE'
     | 'GAME_OVER';
   firstPlayerId: '0' | '1';
+  wheelSpinDegrees?: number;
   turnPlayerId: '0' | '1';
   turnNumber: number;
   winnerId: '0' | '1' | null;
@@ -203,8 +235,11 @@ export interface LiveGameState {
     isGameWinningStage: boolean;
   } | null;
   lastActionBanner?: ActionSpotlightEvent | null;
+  lastCardFlight?: CardFlightAnimation | null;
+  rewardSummary?: Partial<Record<'0' | '1', MatchRewardSummary>>;
   announcements: { type: string; message: string; timestamp: number }[];
   actionLog?: ActionLogEntry[];
+  debugTrace?: any[];
 }
 
 interface PowerBreakdownDetails {
@@ -221,6 +256,16 @@ interface GameBoardProps {
   seat: '0' | '1' | 'spectator';
   isReconnecting?: boolean;
   onLeaveMatch: () => void;
+}
+
+function getCardFoilClass(card: CardDefinition | null | undefined): string {
+  if (!card) return '';
+  const id = String(card.id || '').toUpperCase();
+  const rar = String(card.rarity || '').toUpperCase();
+  if (id.endsWith('-S') || rar === 'GR') return 'foil-shining';
+  if (rar === 'UR' || rar === 'CR') return 'foil-ur';
+  if (rar === 'SR' || rar === 'SSR') return 'foil-sr';
+  return '';
 }
 
 function isStoryCard(card: CardDefinition | null): boolean {
@@ -288,6 +333,14 @@ function computeClientPowerDetails(
     if (/center\s+lane/i.test(text) && laneKey !== 'center') return 0;
     if (/right\s+lane/i.test(text) && laneKey !== 'right') return 0;
     if (/your\s+friend/i.test(text) && !String(char.type || '').toLowerCase().includes('friend')) return 0;
+    if (
+      /while\s+there\s+(?:is|are)\s+(?:any\s+)?untapped\s+scenes?\s+in\s+your\s+scene\s+area/i.test(
+        text
+      ) &&
+      !player.sceneArea.some((sc) => !sc.isExhausted)
+    ) {
+      return 0;
+    }
     return parseInt(m[1], 10) || 0;
   };
 
@@ -423,11 +476,22 @@ export default function GameBoard({
   const [powerBreakdown, setPowerBreakdown] = useState<PowerBreakdownDetails | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number>(180);
 
-  // Collapsible Action Log Drawer + Onboarding Bubble + Visual Spotlight Banner
+  // Audio mute state
+  const [isMuted, setIsMuted] = useState<boolean>(() => soundFX.isMuted());
+
+  // Spin wheel animation state during VS_INTRO
+  const [wheelAngle, setWheelAngle] = useState<number>(0);
+  const [wheelSettled, setWheelSettled] = useState<boolean>(false);
+
+  // Collapsible Action Log Drawer + Debug Trace Tab + Spotlight + Card Flight Toast
   const [isLogOpen, setIsLogOpen] = useState<boolean>(false);
+  const [logTab, setLogTab] = useState<'LOG' | 'DEBUG'>('LOG');
   const [showLogOnboardingBubble, setShowLogOnboardingBubble] = useState<boolean>(true);
   const [spotlightBanner, setSpotlightBanner] = useState<ActionSpotlightEvent | null>(null);
+  const [cardFlightToast, setCardFlightToast] = useState<CardFlightAnimation | null>(null);
   const lastSeenSpotlightIdRef = useRef<string | null>(null);
+  const lastSeenFlightIdRef = useRef<string | null>(null);
+  const lastSeenClashIdRef = useRef<number | null>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
   // Interactive Hand / Retirement Choice Selections
@@ -453,23 +517,55 @@ export default function GameBoard({
     return () => clearTimeout(timer);
   }, []);
 
-  // Trigger prominent visual Action Spotlight Banner & Comic Lane Burst whenever a major game action occurs
+  // Trigger Action Spotlight Banner + Audio Cue
   useEffect(() => {
     const banner = gameState.lastActionBanner;
     if (!banner) return;
     if (lastSeenSpotlightIdRef.current !== banner.id) {
       lastSeenSpotlightIdRef.current = banner.id;
       setSpotlightBanner(banner);
+      if (banner.actionType === 'TRIGGER_KEYWORD' || banner.actionType === 'DELAYED_TRIGGER') {
+        soundFX.playKeywordChime();
+      } else {
+        soundFX.playCardSnap();
+      }
       const timer = setTimeout(() => setSpotlightBanner(null), 4000);
       return () => clearTimeout(timer);
     }
   }, [gameState.lastActionBanner?.id]);
 
+  // Trigger Deck Draw / Discard / Retire Flight Toast + Audio Cue
+  useEffect(() => {
+    const flight = gameState.lastCardFlight;
+    if (!flight) return;
+    if (lastSeenFlightIdRef.current !== flight.id) {
+      lastSeenFlightIdRef.current = flight.id;
+      setCardFlightToast(flight);
+      if (flight.kind === 'DRAW') {
+        soundFX.playCardDraw(flight.count);
+      } else {
+        soundFX.playCardSnap();
+      }
+      const timer = setTimeout(() => setCardFlightToast(null), 1450);
+      return () => clearTimeout(timer);
+    }
+  }, [gameState.lastCardFlight?.id]);
+
+  // Trigger Clash Impact Sound
+  useEffect(() => {
+    if (gameState.phase === 'CLASH_HOLD' && gameState.lastClashEvent) {
+      if (lastSeenClashIdRef.current !== gameState.lastClashEvent.id) {
+        lastSeenClashIdRef.current = gameState.lastClashEvent.id;
+        soundFX.playClashImpact();
+      }
+    }
+  }, [gameState.phase, gameState.lastClashEvent?.id]);
+
   useEffect(() => {
     if (isLogOpen) {
       logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [isLogOpen, gameState.actionLog?.length]);
+  }, [isLogOpen, gameState.actionLog?.length, gameState.debugTrace?.length, logTab]);
 
   useEffect(() => {
     setPickedChoiceIndices([]);
@@ -518,14 +614,36 @@ export default function GameBoard({
     }
   }, [gameState.turnPlayerId, gameState.turnNumber, gameState.phase, mySeat, isSpectator]);
 
+  // Animate 50/50 Spin Wheel during VS_INTRO before advancing to Mulligan
   useEffect(() => {
-    if (gameState.phase === 'VS_INTRO' && !isSpectator) {
-      const timer = setTimeout(() => {
-        sendAction('ACK_VS_INTRO');
-      }, 3400);
-      return () => clearTimeout(timer);
+    if (gameState.phase === 'VS_INTRO') {
+      setWheelSettled(false);
+      setWheelAngle(0);
+      soundFX.playWheelSpin();
+
+      const targetAngle =
+        gameState.wheelSpinDegrees || (gameState.firstPlayerId === '0' ? 1890 : 2070);
+      const kickTimer = setTimeout(() => {
+        setWheelAngle(targetAngle);
+      }, 80);
+
+      const settleTimer = setTimeout(() => {
+        setWheelSettled(true);
+      }, 3200);
+
+      const ackTimer = !isSpectator
+        ? setTimeout(() => {
+            sendAction('ACK_VS_INTRO');
+          }, 4300)
+        : undefined;
+
+      return () => {
+        clearTimeout(kickTimer);
+        clearTimeout(settleTimer);
+        if (ackTimer) clearTimeout(ackTimer);
+      };
     }
-  }, [gameState.phase, isSpectator]);
+  }, [gameState.phase, gameState.wheelSpinDegrees, gameState.firstPlayerId, isSpectator]);
 
   useEffect(() => {
     if (gameState.phase === 'CLASH_HOLD' && gameState.lastClashEvent && !isSpectator) {
@@ -564,7 +682,6 @@ export default function GameBoard({
     if (ownerSide === 'SELF' && gameState.phase === 'MAIN_PHASE' && selectedHandCard) {
       const slot = me.adventureArea[lane];
       const normType = String(selectedHandCard.type || '').toLowerCase();
-      // Rules v1.3.0 (503.2.1): Character cards only deploy to empty slots; Items only adorn occupied slots
       if (normType.includes('character') && slot.character !== null) return;
       if (normType === 'item' && slot.character === null) return;
 
@@ -600,8 +717,10 @@ export default function GameBoard({
   const showHandChoiceModalForMe =
     !isSpectator &&
     gameState.phase === 'PENDING_HAND_CHOICE' &&
-    gameState.turnPlayerId === mySeat &&
-    Boolean(gameState.pendingHandChoice);
+    Boolean(gameState.pendingHandChoice) &&
+    (gameState.pendingHandChoice?.playerId
+      ? gameState.pendingHandChoice.playerId === mySeat
+      : gameState.turnPlayerId === mySeat);
 
   const activeClashLaneForModal = gameState.contactState?.activeLane;
   const myCharacterInClashLane = activeClashLaneForModal
@@ -614,7 +733,6 @@ export default function GameBoard({
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
-  // Map current GamePhase to the 4-step Rules v1.3.0 Phase Stepper
   const activeStepIndex = (() => {
     if (gameState.phase === 'VS_INTRO' || gameState.phase === 'MULLIGAN') return 0;
     if (
@@ -633,7 +751,7 @@ export default function GameBoard({
     ) {
       return 3;
     }
-    return 1; // MAIN_PHASE / PENDING_TARGET / PENDING_HAND_CHOICE
+    return 1;
   })();
 
   const renderLaneStrip = (player: PlayerState, isOpponent: boolean) => {
@@ -642,7 +760,9 @@ export default function GameBoard({
     return (
       <div className={`lane-strip-band ${isOpponent ? 'opponent-band' : 'self-band'}`}>
         <span className={`lane-band-tag ${isOpponent ? 'opponent-tag' : 'self-tag'}`}>
-          {isOpponent ? `👑 ${player.displayName}'s Adventure Area` : `✨ ${player.displayName}'s Adventure Area`}
+          {isOpponent
+            ? `👑 ${player.displayName}'s Adventure Area`
+            : `✨ ${player.displayName}'s Adventure Area`}
         </span>
 
         <div className="adventure-area-row">
@@ -724,7 +844,11 @@ export default function GameBoard({
                       </span>
                     </div>
 
-                    <div className={`deployed-char-card ${slot.isExhausted ? 'exhausted' : ''}`}>
+                    <div
+                      className={`deployed-char-card ${
+                        slot.isExhausted ? 'exhausted' : ''
+                      } ${getCardFoilClass(slot.character)}`}
+                    >
                       <img src={slot.character.imageUrl} alt={slot.character.name} />
                       {slot.items.length > 0 && (
                         <div
@@ -746,7 +870,10 @@ export default function GameBoard({
                       {slot.preventRetireInContact && (
                         <div
                           className="item-count-tag"
-                          style={{ top: slot.items.length > 0 ? '26px' : '4px', borderColor: '#fde047' }}
+                          style={{
+                            top: slot.items.length > 0 ? '26px' : '4px',
+                            borderColor: '#fde047',
+                          }}
                         >
                           🛡️ Contact Shield
                         </div>
@@ -754,7 +881,13 @@ export default function GameBoard({
                       {(hasActedThisTurn || slot.isExhausted) && (
                         <div
                           className="item-count-tag"
-                          style={{ top: 'auto', bottom: '4px', left: '4px', right: 'auto', color: '#fde047' }}
+                          style={{
+                            top: 'auto',
+                            bottom: '4px',
+                            left: '4px',
+                            right: 'auto',
+                            color: '#fde047',
+                          }}
                         >
                           {slot.isExhausted ? 'Tapped ↷' : 'Acted ✓'}
                         </div>
@@ -848,7 +981,7 @@ export default function GameBoard({
           </div>
         </div>
 
-        {/* Row: Main Character + 4 Landscape Story Stages + Retirement Area */}
+        {/* Row: Main Character (with Speech Bubble) + 4 Landscape Story Stages + Retirement Area */}
         <div className="core-story-row">
           <div
             className="side-portrait-zone"
@@ -856,10 +989,23 @@ export default function GameBoard({
             onTouchStart={() => handleTouchStartInspect(player.leader)}
             onTouchEnd={handleTouchEndInspect}
           >
+            {player.speechBubble && (
+              <div
+                key={player.speechBubble.id}
+                className={`mane-speech-bubble tone-${player.speechBubble.tone}`}
+              >
+                💬 {player.speechBubble.text}
+              </div>
+            )}
+
             {player.leader?.imageUrl ? (
               <img src={player.leader.imageUrl} alt={player.leader.name} />
             ) : (
-              <img src={CARD_BACK_URL} alt="Main Character Card Back" className="kayou-card-back-img" />
+              <img
+                src={CARD_BACK_URL}
+                alt="Main Character Card Back"
+                className="kayou-card-back-img"
+              />
             )}
             {canActivateMane && (
               <button
@@ -886,15 +1032,23 @@ export default function GameBoard({
                 <div
                   key={st.stage}
                   className="story-stage-box"
-                  onContextMenu={(e) => handleContextMenu(e, st.isStoryCompleted ? st.storyCard : null)}
-                  onTouchStart={() => handleTouchStartInspect(st.isStoryCompleted ? st.storyCard : null)}
+                  onContextMenu={(e) =>
+                    handleContextMenu(e, st.isStoryCompleted ? st.storyCard : null)
+                  }
+                  onTouchStart={() =>
+                    handleTouchStartInspect(st.isStoryCompleted ? st.storyCard : null)
+                  }
                   onTouchEnd={handleTouchEndInspect}
                 >
                   {st.isStoryCompleted && st.storyCard?.imageUrl ? (
                     <img src={st.storyCard.imageUrl} alt={st.storyCard.name} />
                   ) : (
                     <div className="story-uncompleted-overlay">
-                      <img src={CARD_BACK_URL} alt={`Story Stage ${st.stage}`} className="kayou-card-back-img" />
+                      <img
+                        src={CARD_BACK_URL}
+                        alt={`Story Stage ${st.stage}`}
+                        className="kayou-card-back-img"
+                      />
                       <span className="story-stage-label-pill">Story Stage {st.stage}</span>
                     </div>
                   )}
@@ -971,7 +1125,9 @@ export default function GameBoard({
               player.sceneArea.map((sc, idx) => (
                 <div
                   key={`${sc.card.id}-${idx}`}
-                  className={`scene-card-slot ${sc.isExhausted ? 'exhausted' : ''}`}
+                  className={`scene-card-slot ${sc.isExhausted ? 'exhausted' : ''} ${
+                    sc.isFaceUp ? getCardFoilClass(sc.card) : ''
+                  }`}
                   title={
                     sc.isLockedFaceDown
                       ? 'First-Turn Locked Scene (Cannot be used for Inspiration Boost)'
@@ -1012,13 +1168,31 @@ export default function GameBoard({
 
   const winnerPlayer = gameState.winnerId ? gameState.players[gameState.winnerId] : null;
   const actionLogs = gameState.actionLog || [];
+  const debugTraces = gameState.debugTrace || [];
   const delayedTriggers = gameState.delayedTriggers || [];
+  const myReward = !isSpectator ? gameState.rewardSummary?.[mySeat] : undefined;
 
   return (
     <div className="kayou-playmat-wrapper">
       {isReconnecting && (
         <div className="reconnecting-banner">
           🔄 Connection interrupted — Reconnecting to match room...
+        </div>
+      )}
+
+      {/* Card Flight Animation Toast (Draw / Discard / Retire) */}
+      {cardFlightToast && (
+        <div key={cardFlightToast.id} className="card-flight-toast">
+          <img src={CARD_BACK_URL} alt="Card Motion" />
+          <span>
+            {cardFlightToast.kind === 'DRAW'
+              ? `🃏 ${gameState.players[cardFlightToast.playerId]?.displayName} drew ${cardFlightToast.count} card${
+                  cardFlightToast.count === 1 ? '' : 's'
+                }!`
+              : cardFlightToast.kind === 'DISCARD'
+              ? `🪦 Discarded ${cardFlightToast.cardName || `${cardFlightToast.count} card(s)`}`
+              : `🪦 ${cardFlightToast.cardName} retired`}
+          </span>
         </div>
       )}
 
@@ -1029,7 +1203,14 @@ export default function GameBoard({
             <img src={spotlightBanner.card.imageUrl} alt={spotlightBanner.card.name} />
           )}
           <div>
-            <div style={{ fontSize: '12px', fontWeight: 900, color: '#fde047', textTransform: 'uppercase' }}>
+            <div
+              style={{
+                fontSize: '12px',
+                fontWeight: 900,
+                color: '#fde047',
+                textTransform: 'uppercase',
+              }}
+            >
               {spotlightBanner.comicWord && (
                 <span className="spotlight-comic-tag">{spotlightBanner.comicWord}</span>
               )}
@@ -1042,18 +1223,71 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Collapsible Action Log Drawer + Onboarding Bubble */}
+      {/* Collapsible Action Log & Debug Trace Drawer */}
       <div className="action-log-dock">
         {showLogOnboardingBubble && !isLogOpen && (
           <div className="action-log-onboarding-bubble">
-            💬 <strong>Tip:</strong> All card abilities, Story promotions, and clash logs are recorded right here!
+            💬 <strong>Tip:</strong> View live card logs &amp; the 🐞 Debug Trace right here!
           </div>
         )}
 
         {isLogOpen && (
-          <div className="action-log-drawer">
+          <div className="action-log-drawer" style={{ width: '430px', maxHeight: '360px' }}>
             <div className="action-log-drawer-header">
-              <span>📜 Match Action Log ({actionLogs.length})</span>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setLogTab('LOG')}
+                  style={{
+                    background: logTab === 'LOG' ? '#fde047' : 'rgba(255,255,255,0.12)',
+                    color: logTab === 'LOG' ? '#4a148c' : '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '2px 8px',
+                    fontWeight: 900,
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  📜 Log ({actionLogs.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLogTab('DEBUG')}
+                  style={{
+                    background: logTab === 'DEBUG' ? '#fde047' : 'rgba(255,255,255,0.12)',
+                    color: logTab === 'DEBUG' ? '#4a148c' : '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '2px 8px',
+                    fontWeight: 900,
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  🐞 Debug ({debugTraces.length})
+                </button>
+                {logTab === 'DEBUG' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(JSON.stringify(debugTraces, null, 2));
+                    }}
+                    style={{
+                      background: '#38bdf8',
+                      color: '#0f172a',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '2px 8px',
+                      fontWeight: 900,
+                      fontSize: '10.5px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    📋 Copy JSON
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setIsLogOpen(false)}
@@ -1069,12 +1303,56 @@ export default function GameBoard({
               </button>
             </div>
             <div className="action-log-entries">
-              {actionLogs.map((entry) => (
-                <div key={entry.id} className={`action-log-item cat-${entry.category}`}>
-                  <strong style={{ color: '#fde047' }}>[T{entry.turn}] {entry.actor}:</strong>{' '}
-                  <span>{entry.text}</span>
-                </div>
-              ))}
+              {logTab === 'LOG'
+                ? actionLogs.map((entry) => (
+                    <div key={entry.id} className={`action-log-item cat-${entry.category}`}>
+                      <strong style={{ color: '#fde047' }}>
+                        [T{entry.turn}] {entry.actor}:
+                      </strong>{' '}
+                      <span>{entry.text}</span>
+                    </div>
+                  ))
+                : debugTraces.map((dbg: any) => (
+                    <div
+                      key={dbg.id}
+                      className="action-log-item cat-EFFECT"
+                      style={{ fontSize: '10.8px' }}
+                    >
+                      <div style={{ color: '#fde047', fontWeight: 900 }}>
+                        [T{dbg.turn} • {dbg.phase}] Turn: {dbg.turnPlayer} | Actor: {dbg.actor}
+                      </div>
+                      <div>
+                        <strong>Card:</strong> {dbg.cardName} ({dbg.cardId}) |{' '}
+                        <strong>Trigger:</strong> {dbg.triggerType}
+                      </div>
+                      <div style={{ color: '#fbcfe8' }}>
+                        <strong>Text:</strong> {dbg.cardText}
+                      </div>
+                      <div>
+                        <strong>Kind:</strong> {dbg.parsedKind} | <strong>Status:</strong>{' '}
+                        <span
+                          style={{
+                            color:
+                              dbg.status === 'RESOLVED'
+                                ? '#34d399'
+                                : dbg.status === 'SKIPPED'
+                                ? '#fb7185'
+                                : '#38bdf8',
+                          }}
+                        >
+                          {dbg.status}
+                        </span>
+                      </div>
+                      <div>
+                        <strong>Targets/Choice:</strong> {dbg.targetsOrChoice}
+                      </div>
+                      {dbg.detectedKeywords?.length > 0 && (
+                        <div style={{ color: '#c084fc' }}>
+                          <strong>Keywords:</strong> {dbg.detectedKeywords.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  ))}
               <div ref={logEndRef} />
             </div>
           </div>
@@ -1088,7 +1366,9 @@ export default function GameBoard({
             setShowLogOnboardingBubble(false);
           }}
         >
-          <span>📜 Action Log ({actionLogs.length})</span>
+          <span>
+            📜 Log ({actionLogs.length}) • 🐞 ({debugTraces.length})
+          </span>
           <span>{isLogOpen ? '▼' : '▲'}</span>
         </button>
       </div>
@@ -1099,17 +1379,19 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 1. VS Intro Splash */}
+      {/* 1. VS Intro Splash with 2-Player 50/50 Animated Spin Wheel */}
       {gameState.phase === 'VS_INTRO' && (
         <div className="vs-intro-overlay">
-          <div className="vs-fighters-stage">
+          <div className="vs-fighters-stage" style={{ gap: '28px', flexWrap: 'wrap' }}>
             <div className="vs-fighter-card">
-              {gameState.firstPlayerId === '0' ? (
+              {wheelSettled && gameState.firstPlayerId === '0' ? (
                 <div className="vs-first-crown">👑 Goes First!</div>
               ) : (
                 <div className="vs-first-crown-placeholder" />
               )}
-              <div className="vs-player-name">{gameState.players['0'].displayName}</div>
+              <div className="vs-player-name" style={{ color: '#7dd3fc' }}>
+                {gameState.players['0'].displayName}
+              </div>
               <img
                 src={gameState.players['0'].leader?.imageUrl}
                 alt={gameState.players['0'].leader?.name}
@@ -1117,15 +1399,32 @@ export default function GameBoard({
               <div className="vs-leader-name">{gameState.players['0'].leader?.name}</div>
             </div>
 
-            <div className="vs-emblem">VS</div>
+            {/* 50/50 Spin Wheel */}
+            <div className="spin-wheel-arena">
+              <div className="spin-wheel-pointer" />
+              <div
+                className="spin-wheel-disc"
+                style={{ transform: `rotate(${wheelAngle}deg)` }}
+              >
+                <span className="wheel-slice-label slice-p0">
+                  {gameState.players['0'].displayName}
+                </span>
+                <span className="wheel-slice-label slice-p1">
+                  {gameState.players['1'].displayName}
+                </span>
+                <div className="spin-wheel-hub">VS</div>
+              </div>
+            </div>
 
             <div className="vs-fighter-card">
-              {gameState.firstPlayerId === '1' ? (
+              {wheelSettled && gameState.firstPlayerId === '1' ? (
                 <div className="vs-first-crown">👑 Goes First!</div>
               ) : (
                 <div className="vs-first-crown-placeholder" />
               )}
-              <div className="vs-player-name">{gameState.players['1'].displayName}</div>
+              <div className="vs-player-name" style={{ color: '#f9a8d4' }}>
+                {gameState.players['1'].displayName}
+              </div>
               <img
                 src={gameState.players['1'].leader?.imageUrl}
                 alt={gameState.players['1'].leader?.name}
@@ -1135,11 +1434,17 @@ export default function GameBoard({
           </div>
 
           <div className="vs-first-banner">
-            👑{' '}
-            {gameState.firstPlayerId === '0'
-              ? gameState.players['0'].displayName
-              : gameState.players['1'].displayName}{' '}
-            Plays First!
+            {wheelSettled ? (
+              <>
+                👑{' '}
+                {gameState.firstPlayerId === '0'
+                  ? gameState.players['0'].displayName
+                  : gameState.players['1'].displayName}{' '}
+                Won the Spin &amp; Plays First!
+              </>
+            ) : (
+              '🎡 Spinning 50/50 Wheel to Select First Player...'
+            )}
           </div>
         </div>
       )}
@@ -1158,7 +1463,7 @@ export default function GameBoard({
             {me.hand.map((c, idx) => (
               <div
                 key={`${c.id}-${idx}`}
-                className="mulligan-card-slot"
+                className={`mulligan-card-slot ${getCardFoilClass(c)}`}
                 onContextMenu={(e) => handleContextMenu(e, c)}
                 onTouchStart={() => handleTouchStartInspect(c)}
                 onTouchEnd={handleTouchEndInspect}
@@ -1191,7 +1496,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 2B. Interactive Hand / Retirement / Reveal Choice Prompt Modal */}
+      {/* 2B. Interactive Hand / Retirement / Reveal / Top-or-Bottom Deck Choice Modal */}
       {showHandChoiceModalForMe && gameState.pendingHandChoice && (
         <div className="inspector-backdrop">
           <div className="hand-choice-modal">
@@ -1202,51 +1507,94 @@ export default function GameBoard({
               {gameState.pendingHandChoice.promptText}
             </p>
 
-            <div className="hand-choice-grid">
-              {gameState.pendingHandChoice.candidateCards.map((card, idx) => {
-                const isPicked = pickedChoiceIndices.includes(idx);
-                const validList = gameState.pendingHandChoice!.validIndices;
-                const isValidChoice = !validList || validList.includes(idx);
-
-                return (
-                  <div
-                    key={`${card.id}-${idx}`}
-                    className={`hand-choice-card ${isValidChoice ? 'valid-choice' : 'invalid-choice'} ${
-                      isPicked ? 'picked' : ''
-                    }`}
-                    onClick={() => {
-                      if (!isValidChoice) return;
-                      const maxNeeded = gameState.pendingHandChoice!.count;
-                      if (isPicked) {
-                        setPickedChoiceIndices((prev) => prev.filter((i) => i !== idx));
-                      } else if (maxNeeded === 1) {
-                        setPickedChoiceIndices([idx]);
-                      } else if (pickedChoiceIndices.length < maxNeeded) {
-                        setPickedChoiceIndices((prev) => [...prev, idx]);
-                      }
-                    }}
-                    onContextMenu={(e) => handleContextMenu(e, card)}
+            {gameState.pendingHandChoice.choiceType === 'TOP_OR_BOTTOM_DECK' ? (
+              <>
+                <div className="hand-choice-grid">
+                  {gameState.pendingHandChoice.candidateCards.map((card, idx) => (
+                    <div
+                      key={`${card.id}-${idx}`}
+                      className={`hand-choice-card picked ${getCardFoilClass(card)}`}
+                      onContextMenu={(e) => handleContextMenu(e, card)}
+                    >
+                      <img src={card.imageUrl || CARD_BACK_URL} alt={card.name} />
+                      <span style={{ fontSize: '11.5px', fontWeight: 900, textAlign: 'center' }}>
+                        {card.name} ({card.id})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="action-bar-btn gold"
+                    style={{ fontSize: '15px', padding: '12px 26px' }}
+                    onClick={() => sendAction('RESOLVE_HAND_CHOICE', { selectedIndices: [0] })}
                   >
-                    <img src={card.imageUrl || CARD_BACK_URL} alt={card.name} />
-                    <span style={{ fontSize: '11px', fontWeight: 800, textAlign: 'center' }}>
-                      {isPicked ? '✅ Selected' : isValidChoice ? card.name : 'Not Eligible'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+                    ⬆️ Put on Top of Deck
+                  </button>
+                  <button
+                    type="button"
+                    className="action-bar-btn primary"
+                    style={{ fontSize: '15px', padding: '12px 26px' }}
+                    onClick={() => sendAction('RESOLVE_HAND_CHOICE', { selectedIndices: [1] })}
+                  >
+                    ⬇️ Put on Bottom of Deck
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="hand-choice-grid">
+                  {gameState.pendingHandChoice.candidateCards.map((card, idx) => {
+                    const isPicked = pickedChoiceIndices.includes(idx);
+                    const validList = gameState.pendingHandChoice!.validIndices;
+                    const isValidChoice = !validList || validList.includes(idx);
 
-            <button
-              type="button"
-              className="action-bar-btn gold"
-              style={{ fontSize: '15px', padding: '12px 32px' }}
-              disabled={pickedChoiceIndices.length < gameState.pendingHandChoice.count}
-              onClick={() =>
-                sendAction('RESOLVE_HAND_CHOICE', { selectedIndices: pickedChoiceIndices })
-              }
-            >
-              Confirm Selection ({pickedChoiceIndices.length}/{gameState.pendingHandChoice.count}) ✓
-            </button>
+                    return (
+                      <div
+                        key={`${card.id}-${idx}`}
+                        className={`hand-choice-card ${
+                          isValidChoice ? 'valid-choice' : 'invalid-choice'
+                        } ${isPicked ? 'picked' : ''}`}
+                        onClick={() => {
+                          if (!isValidChoice) return;
+                          const maxNeeded = gameState.pendingHandChoice!.count;
+                          if (isPicked) {
+                            setPickedChoiceIndices((prev) => prev.filter((i) => i !== idx));
+                          } else if (maxNeeded === 1) {
+                            setPickedChoiceIndices([idx]);
+                          } else if (pickedChoiceIndices.length < maxNeeded) {
+                            setPickedChoiceIndices((prev) => [...prev, idx]);
+                          }
+                        }}
+                        onContextMenu={(e) => handleContextMenu(e, card)}
+                      >
+                        <img src={card.imageUrl || CARD_BACK_URL} alt={card.name} />
+                        <span style={{ fontSize: '11px', fontWeight: 800, textAlign: 'center' }}>
+                          {isPicked
+                            ? '✅ Selected'
+                            : isValidChoice
+                            ? `${card.name} (${card.id})`
+                            : 'Not Eligible'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  className="action-bar-btn gold"
+                  style={{ fontSize: '15px', padding: '12px 32px' }}
+                  disabled={pickedChoiceIndices.length < gameState.pendingHandChoice.count}
+                  onClick={() =>
+                    sendAction('RESOLVE_HAND_CHOICE', { selectedIndices: pickedChoiceIndices })
+                  }
+                >
+                  Confirm Selection ({pickedChoiceIndices.length}/{gameState.pendingHandChoice.count}) ✓
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1385,7 +1733,9 @@ export default function GameBoard({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
               <div
                 style={{
-                  background: gameState.lastPlanRevealEvent.hasPrePlanTrigger ? '#f59e0b' : '#ec4899',
+                  background: gameState.lastPlanRevealEvent.hasPrePlanTrigger
+                    ? '#f59e0b'
+                    : '#ec4899',
                   color: gameState.lastPlanRevealEvent.hasPrePlanTrigger ? '#4a148c' : '#fff',
                   fontSize: '12px',
                   fontWeight: 900,
@@ -1480,7 +1830,8 @@ export default function GameBoard({
                   alignSelf: 'flex-start',
                 }}
               >
-                ✨ {gameState.lastStoryRevealEvent.attackerName} PROGRESSED STORY ({gameState.lastStoryRevealEvent.stage}/4)
+                ✨ {gameState.lastStoryRevealEvent.attackerName} PROGRESSED STORY (
+                {gameState.lastStoryRevealEvent.stage}/4)
               </div>
 
               <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '21px' }}>
@@ -1534,7 +1885,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 6. Fanfare Winner Screen with Confetti */}
+      {/* 6. Fanfare Winner Screen with Confetti + Pony Points Reward Breakdown */}
       {gameState.phase === 'GAME_OVER' && winnerPlayer && (
         <div className="victory-fanfare-overlay">
           <div className="confetti-container">
@@ -1555,7 +1906,7 @@ export default function GameBoard({
           <h1 className="victory-trophy-banner">
             🎉🏆 {winnerPlayer.displayName} WINS! 🏆🎉
           </h1>
-          <p style={{ fontSize: '16px', color: '#fbcfe8', margin: '0 0 16px', zIndex: 10 }}>
+          <p style={{ fontSize: '16px', color: '#fbcfe8', margin: '0 0 14px', zIndex: 10 }}>
             {gameState.winReason || 'Completed all 4 Story Stages in Equestria Clash!'}
           </p>
 
@@ -1567,6 +1918,60 @@ export default function GameBoard({
               {winnerPlayer.leader?.name || winnerPlayer.displayName}
             </strong>
           </div>
+
+          {myReward && (
+            <div className="match-reward-card">
+              <div
+                style={{
+                  fontSize: '14px',
+                  fontWeight: 900,
+                  color: '#fde047',
+                  marginBottom: '6px',
+                  textTransform: 'uppercase',
+                }}
+              >
+                🪙 Match Rewards ({myReward.queueTier.replace('_', ' ')})
+              </div>
+              {myReward.totalEarned > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13.5px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Match Payout:</span>
+                    <strong>+{myReward.basePoints} PP</strong>
+                  </div>
+                  {myReward.firstWinBonus > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#34d399' }}>
+                      <span>✨ First Win of the Day:</span>
+                      <strong>+{myReward.firstWinBonus} PP</strong>
+                    </div>
+                  )}
+                  {myReward.streakBonus > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#38bdf8' }}>
+                      <span>🔥 Win Streak Bonus:</span>
+                      <strong>+{myReward.streakBonus} PP</strong>
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      borderTop: '1px solid rgba(255,255,255,0.2)',
+                      paddingTop: '6px',
+                      marginTop: '4px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      color: '#fde047',
+                      fontSize: '15px',
+                    }}
+                  >
+                    <span>Total Earned:</span>
+                    <strong>
+                      +{myReward.totalEarned} 🪙 (Balance: {myReward.newBalance})
+                    </strong>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: '12.5px', color: '#fbcfe8' }}>{myReward.note}</div>
+              )}
+            </div>
+          )}
 
           <button
             type="button"
@@ -1646,14 +2051,12 @@ export default function GameBoard({
       {/* Viewable Retirement Area Container Modal */}
       {viewedRetirement && (
         <div className="inspector-backdrop" onClick={() => setViewedRetirement(null)}>
-          <div
-            className="retirement-viewer-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="retirement-viewer-modal" onClick={(e) => e.stopPropagation()}>
             <div className="retirement-viewer-header">
               <div>
                 <h3 style={{ margin: 0, color: '#fde047', fontSize: '20px' }}>
-                  🪦 {viewedRetirement.ownerName}&apos;s Retirement Area ({viewedRetirement.cards.length})
+                  🪦 {viewedRetirement.ownerName}&apos;s Retirement Area (
+                  {viewedRetirement.cards.length})
                 </h3>
                 <span style={{ fontSize: '13px', color: '#e9d5ff' }}>
                   Ordered newest (top of pile) to oldest • Click any card to inspect rules text
@@ -1680,7 +2083,9 @@ export default function GameBoard({
                     className={`retirement-card-entry ${isStoryCard(card) ? 'story-entry' : ''}`}
                     onClick={() => setInspectedCard(card)}
                   >
-                    <span className="retirement-order-tag">#{viewedRetirement.cards.length - idx}</span>
+                    <span className="retirement-order-tag">
+                      #{viewedRetirement.cards.length - idx}
+                    </span>
                     <img src={card.imageUrl || CARD_BACK_URL} alt={card.name} />
                     <div className="retirement-card-name">{card.name}</div>
                     <div className="retirement-card-sub">{card.type}</div>
@@ -1696,14 +2101,19 @@ export default function GameBoard({
       {inspectedCard && (
         <div className="inspector-backdrop" onClick={() => setInspectedCard(null)}>
           <div
-            className={`inspector-card-box ${isStoryCard(inspectedCard) ? 'story-landscape' : ''}`}
+            className={`inspector-card-box ${
+              isStoryCard(inspectedCard) ? 'story-landscape' : ''
+            } ${getCardFoilClass(inspectedCard)}`}
             onClick={(e) => e.stopPropagation()}
           >
             <img src={inspectedCard.imageUrl} alt={inspectedCard.name} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '23px' }}>{inspectedCard.name}</h3>
+              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '23px' }}>
+                {inspectedCard.name}
+              </h3>
               <div style={{ fontSize: '14px', color: '#fde047', fontWeight: 800 }}>
-                {inspectedCard.type} • {inspectedCard.element} • Cost: {inspectedCard.cost} • Inspiration: {inspectedCard.power}
+                {inspectedCard.type} • {inspectedCard.element} • Cost: {inspectedCard.cost} •
+                Inspiration: {inspectedCard.power}
               </div>
               <p style={{ fontSize: '16px', lineHeight: 1.55, color: '#f3e8ff', margin: 0 }}>
                 {cleanCardText(inspectedCard.effectText) || 'No special ability text.'}
@@ -1721,7 +2131,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Dedicated Top Action Bar with 4-Step Rules v1.3.0 Turn-Phase Indicator */}
+      {/* Dedicated Top Action Bar with 4-Step Rules v1.3.0 Turn-Phase Indicator & Sound Toggle */}
       <div
         className={`center-action-bar ${
           isMyTurn ? 'my-turn-bar' : isOppTurn ? 'opp-turn-bar' : ''
@@ -1822,6 +2232,15 @@ export default function GameBoard({
           <button
             type="button"
             className="action-bar-btn secondary"
+            title={isMuted ? 'Unmute Tabletop Sound Effects' : 'Mute Tabletop Sound Effects'}
+            onClick={() => setIsMuted(soundFX.toggleMute())}
+          >
+            {isMuted ? '🔇' : '🔊'}
+          </button>
+
+          <button
+            type="button"
+            className="action-bar-btn secondary"
             onClick={() => {
               if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'LEAVE_ROOM' }));
@@ -1837,7 +2256,9 @@ export default function GameBoard({
       {/* Delayed Triggers Queue Dock (Shows End-of-Turn Scheduled Effects) */}
       {delayedTriggers.length > 0 && (
         <div className="delayed-triggers-strip">
-          <strong style={{ color: '#fde047' }}>⏳ Queued End-of-Turn Triggers ({delayedTriggers.length}):</strong>
+          <strong style={{ color: '#fde047' }}>
+            ⏳ Queued End-of-Turn Triggers ({delayedTriggers.length}):
+          </strong>
           {delayedTriggers.map((trig) => (
             <div
               key={trig.id}
@@ -1886,7 +2307,7 @@ export default function GameBoard({
                 <div
                   key={`${card.id}-${idx}`}
                   className={`hand-card-item ${isSelected ? 'selected' : ''} ${
-                    !canAfford ? 'unaffordable' : ''
+                    !canAfford ? 'unaffordable' : getCardFoilClass(card)
                   }`}
                   onClick={() => {
                     if (!isMyTurn || gameState.phase !== 'MAIN_PHASE') return;

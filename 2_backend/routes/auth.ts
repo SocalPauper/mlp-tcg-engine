@@ -12,9 +12,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'mlp_tcg_super_secret_key_2026';
 // CURRENT SESSION ENDPOINT
 router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
-    const result = await pool.query('SELECT id, username, display_name, email, is_safe_mode, is_verified, is_admin, reward_points FROM auth.users WHERE id = $1', [req.user?.id]);
+    const result = await pool.query(
+      'SELECT id, username, display_name, email, is_safe_mode, is_verified, is_admin, reward_points, win_streak FROM auth.users WHERE id = $1',
+      [req.user?.id]
+    );
     if (result.rows.length === 0) return res.status(404).json({ success: false });
-    
+
     const user = result.rows[0];
     return res.json({
       success: true,
@@ -26,8 +29,9 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
         isSafeMode: user.is_safe_mode,
         isVerified: user.is_verified,
         isAdmin: user.is_admin,
-        reward_points: user.reward_points ?? 500
-      }
+        reward_points: user.reward_points ?? 500,
+        win_streak: user.win_streak ?? 0,
+      },
     });
   } catch (err) {
     return res.status(500).json({ success: false });
@@ -37,7 +41,10 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res) => {
 // GET USER CARD COLLECTION
 router.get('/me/collection', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
-    const result = await pool.query('SELECT card_id, quantity, user_alerted FROM auth.user_cards WHERE user_id = $1', [req.user?.id]);
+    const result = await pool.query(
+      'SELECT card_id, quantity, user_alerted FROM auth.user_cards WHERE user_id = $1',
+      [req.user?.id]
+    );
     return res.json(result.rows);
   } catch (err) {
     console.error('Error fetching collection:', err);
@@ -48,7 +55,10 @@ router.get('/me/collection', authenticateToken, async (req: AuthenticatedRequest
 // ACKNOWLEDGE NEW UNLOCKS
 router.post('/me/collection/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
-    await pool.query('UPDATE auth.user_cards SET user_alerted = TRUE WHERE user_id = $1 AND user_alerted = FALSE', [req.user?.id]);
+    await pool.query(
+      'UPDATE auth.user_cards SET user_alerted = TRUE WHERE user_id = $1 AND user_alerted = FALSE',
+      [req.user?.id]
+    );
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false });
@@ -84,7 +94,6 @@ router.post('/register', async (req, res) => {
     const isVerified = !email;
     const isSafeMode = !(age >= 13);
 
-    // Insert new user with default 500 reward points and explicitly restrict is_admin to FALSE
     const insertResult = await client.query(
       `INSERT INTO auth.users (username, display_name, email, password_hash, age, verification_token, is_verified, is_safe_mode, reward_points, is_admin)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 500, FALSE) 
@@ -94,28 +103,29 @@ router.post('/register', async (req, res) => {
 
     const newUser = insertResult.rows[0];
 
-    // Seed starter collection in auth.user_cards (all C, U, R rarities, SD01 starter deck cards, & Everyday scenes)
-    const starterCardsRes = await client.query(
-      `SELECT id FROM game.cards
-       WHERE rarity IN ('C', 'U', 'R')
-          OR id LIKE 'SD01%'
-          OR element = 'Everyday'`
+    // Seed starter collection: 4x playset (1x for Mane Characters) of C, U, R, SPR, SD01*, & Everyday scenes
+    await client.query(
+      `INSERT INTO auth.user_cards (user_id, card_id, quantity, user_alerted)
+       SELECT $1, id,
+         CASE WHEN card_type ILIKE '%Mane%' THEN 1 ELSE 4 END,
+         TRUE
+       FROM game.cards
+       WHERE (rarity IN ('C', 'U', 'R', 'SPR') OR id ILIKE 'SD01%' OR element = 'Everyday')
+         AND id NOT ILIKE '%-S'
+       ON CONFLICT (user_id, card_id) DO NOTHING`,
+      [newUser.id]
     );
-    
-    for (const card of starterCardsRes.rows) {
-      await client.query(
-        `INSERT INTO auth.user_cards (user_id, card_id, quantity, user_alerted)
-         VALUES ($1, $2, 3, TRUE)
-         ON CONFLICT (user_id, card_id) DO NOTHING`,
-        [newUser.id, card.id]
-      );
-    }
 
     await client.query('COMMIT');
 
-    // Issue token upon registration with explicitly restricted admin rights
     const token = jwt.sign(
-      { id: newUser.id, username: newUser.username, isSafeMode: newUser.is_safe_mode, isVerifiedAdult: false, isAdmin: false },
+      {
+        id: newUser.id,
+        username: newUser.username,
+        isSafeMode: newUser.is_safe_mode,
+        isVerifiedAdult: false,
+        isAdmin: false,
+      },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -130,7 +140,9 @@ router.post('/register', async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: email ? 'Registration successful! Please check your email to verify your account.' : 'Registration successful!',
+      message: email
+        ? 'Registration successful! Please check your email to verify your account.'
+        : 'Registration successful!',
       token,
       user: {
         id: newUser.id,
@@ -140,10 +152,9 @@ router.post('/register', async (req, res) => {
         isSafeMode: newUser.is_safe_mode,
         isVerified: newUser.is_verified,
         isAdmin: newUser.is_admin,
-        reward_points: newUser.reward_points ?? 500
-      }
+        reward_points: newUser.reward_points ?? 500,
+      },
     });
-
   } catch (err: any) {
     await client.query('ROLLBACK');
     console.error('Registration error:', err);
@@ -162,10 +173,9 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const result = await pool.query(
-      'SELECT * FROM auth.users WHERE username = $1 OR email = $1',
-      [username]
-    );
+    const result = await pool.query('SELECT * FROM auth.users WHERE username = $1 OR email = $1', [
+      username,
+    ]);
 
     if (result.rows.length === 0) {
       return res.status(401).json({ success: false, message: 'Invalid username or password.' });
@@ -185,12 +195,12 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { 
-        id: user.id, 
-        username: user.username, 
+      {
+        id: user.id,
+        username: user.username,
         isSafeMode: currentSafeMode,
         isVerifiedAdult: user.is_verified_adult,
-        isAdmin: user.is_admin
+        isAdmin: user.is_admin,
       },
       JWT_SECRET,
       { expiresIn: '7d' }
@@ -208,8 +218,8 @@ router.post('/login', async (req, res) => {
         isSafeMode: currentSafeMode,
         isVerified: user.is_verified,
         isAdmin: user.is_admin,
-        reward_points: user.reward_points ?? 500
-      }
+        reward_points: user.reward_points ?? 500,
+      },
     });
   } catch (err: any) {
     console.error('Login error:', err);
@@ -225,8 +235,12 @@ router.get('/verify', async (req, res) => {
   if (typeof token !== 'string') return res.status(400).json({ success: false, message: 'Invalid token format.' });
 
   try {
-    const userResult = await pool.query('SELECT id, age, is_verified FROM auth.users WHERE verification_token = $1', [token]);
-    if (userResult.rows.length === 0) return res.status(400).json({ success: false, message: 'Token invalid or expired.' });
+    const userResult = await pool.query(
+      'SELECT id, age, is_verified FROM auth.users WHERE verification_token = $1',
+      [token]
+    );
+    if (userResult.rows.length === 0)
+      return res.status(400).json({ success: false, message: 'Token invalid or expired.' });
 
     const user = userResult.rows[0];
     const removeSafeMode = user.age >= 13;

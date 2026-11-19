@@ -15,6 +15,7 @@ interface CardItem extends PreviewableCard {
   power: number;
   effect_text?: string;
   image_url?: string;
+  convertedToDust?: number;
 }
 
 interface WeeklyDeal {
@@ -34,9 +35,19 @@ interface WeeklyDeal {
 
 const CARD_BACK_URL = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp';
 
+function getFoilClass(id: string, rarity: string): string {
+  const upId = String(id || '').toUpperCase();
+  const upRar = String(rarity || '').toUpperCase();
+  if (upId.endsWith('-S') || upRar === 'GR') return 'foil-shining';
+  if (upRar === 'UR' || upRar === 'CR') return 'foil-ur';
+  if (upRar === 'SR' || upRar === 'SSR') return 'foil-sr';
+  return '';
+}
+
 export default function ShopView() {
   const { user, updateUserPoints } = useAuth();
   const [points, setPoints] = useState<number>(user?.reward_points ?? 0);
+  const [pityCounter, setPityCounter] = useState<number>(0);
   const [weekId, setWeekId] = useState<string>('');
   const [deals, setDeals] = useState<WeeklyDeal[]>([]);
   const [tiers, setTiers] = useState<Record<string, any>>({});
@@ -54,6 +65,7 @@ export default function ShopView() {
   const [activePackTier, setActivePackTier] = useState<{ key: string; name: string } | null>(null);
   const [packStage, setPackStage] = useState<'SEALED' | 'RIPPING' | 'REVEALING'>('SEALED');
   const [pulledCards, setPulledCards] = useState<CardItem[] | null>(null);
+  const [autoDustBanner, setAutoDustBanner] = useState<number>(0);
   const [flippedIndices, setFlippedIndices] = useState<Record<number, boolean>>({});
   const [previewCard, setPreviewCard] = useState<PreviewableCard | null>(null);
 
@@ -83,6 +95,7 @@ export default function ShopView() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       syncPoints(data.reward_points);
+      setPityCounter(data.pityCounter ?? 0);
       setWeekId(data.weekId || '');
       setDeals(data.weeklyDeals || []);
       setTiers(data.tiers || {});
@@ -102,11 +115,12 @@ export default function ShopView() {
 
   const handleBuyPack = async (tierKey: string, cost: number, tierName: string) => {
     if (points < cost) {
-      setMessage('Not enough Pony Points! Play more matches or trade in extra copies to earn points.');
+      setMessage('Not enough Pony Points! Play public matches or trade in extra copies to earn points.');
       return;
     }
     setPurchasing(true);
     setMessage(null);
+    setAutoDustBanner(0);
     try {
       const token = localStorage.getItem('token');
       const { data } = await axios.post(
@@ -115,7 +129,9 @@ export default function ShopView() {
         { headers: token ? { Authorization: `Bearer ${token}` } : {} }
       );
       syncPoints(data.remainingPoints);
+      if (data.pityCounter !== undefined) setPityCounter(data.pityCounter);
       if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
+      if (data.autoDustEarned > 0) setAutoDustBanner(data.autoDustEarned);
       setPulledCards(data.cards);
       setActivePackTier({ key: tierKey, name: tierName });
       setPackStage('SEALED');
@@ -158,6 +174,7 @@ export default function ShopView() {
     setPackStage('SEALED');
     setFlippedIndices({});
     setPreviewCard(null);
+    setAutoDustBanner(0);
   };
 
   const handleBuyDeal = async (dealId: number, price: number) => {
@@ -189,7 +206,7 @@ export default function ShopView() {
     if (tradeInSummary.extraCardsCount <= 0) return;
     if (
       !window.confirm(
-        `Trade in ${tradeInSummary.extraCardsCount} extra card(s) beyond your 3-card playsets for +${tradeInSummary.totalPointsValue} Pony Points?`
+        `Trade in ${tradeInSummary.extraCardsCount} extra card(s) beyond your 4-card playsets for +${tradeInSummary.totalPointsValue} Pony Points?`
       )
     ) {
       return;
@@ -207,7 +224,7 @@ export default function ShopView() {
       syncPoints(data.remainingPoints);
       setTradeInSummary(data.tradeInSummary || { extraCardsCount: 0, totalPointsValue: 0 });
       setMessage(
-        `♻️ Traded in ${data.tradedCount} extra copy/copies for +${data.pointsEarned} Pony Points!`
+        `♻️ Traded in ${data.tradedCount} extra copy/copies beyond 4x playsets for +${data.pointsEarned} Pony Points!`
       );
     } catch (err: any) {
       setMessage(err.response?.data?.error || 'Failed to trade in extra cards.');
@@ -232,6 +249,13 @@ export default function ShopView() {
   const formatRate = (prob: number) => {
     const pct = prob * 100;
     return Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(1)}%`;
+  };
+
+  const getPackVisualClass = (key: string) => {
+    const k = key.toLowerCase();
+    if (k === 'shining') return 'tier-harmony';
+    if (k === 'bundle') return 'tier-royal';
+    return 'tier-sparkle';
   };
 
   return (
@@ -259,21 +283,25 @@ export default function ShopView() {
           <div>
             <h2>✨ The Pony Point Shop ✨</h2>
             <span className="shop-subtitle">
-              Redeem match rewards for guaranteed weekly singles &amp; shiny foil booster packs
+              All C, U, R &amp; SPR cards are free! Spend Pony Points on high-rarity chase packs &amp; Shining foils
             </span>
           </div>
 
           <div className="shop-header-actions">
+            <span className="week-tag" title="Guaranteed CR, Shining (-S), or GR every 10th Standard chase slot">
+              ✨ CR+ Pity: {pityCounter}/10
+            </span>
+
             <button
               type="button"
               className="trade-in-btn"
               disabled={purchasing || tradeInSummary.extraCardsCount <= 0}
               onClick={handleTradeInExtras}
-              title="Convert any cards with more than 3 copies in your collection into Pony Points"
+              title="Convert any cards with more than 4 copies in your collection into Pony Points"
             >
               {tradeInSummary.extraCardsCount > 0
                 ? `♻️ Trade-In ${tradeInSummary.extraCardsCount} Extra(s) (+${tradeInSummary.totalPointsValue} 🪙)`
-                : '♻️ No Extras (>3 Copies)'}
+                : '♻️ 4x Playset Protection Active'}
             </button>
 
             <div className="shop-points-badge">
@@ -298,12 +326,14 @@ export default function ShopView() {
             {deals.map((deal) => (
               <div key={deal.id} className="easel-stage">
                 <div className="easel-spotlight-beam" aria-hidden="true" />
-                <span className="easel-rarity-pill">{deal.rarity}</span>
+                <span className="easel-rarity-pill">
+                  {deal.card_id.endsWith('-S') ? `✨ ${deal.rarity}-S` : deal.rarity}
+                </span>
 
                 <div className="mini-easel-assembly">
                   <div className="easel-top-finial" />
                   <div
-                    className="easel-card-canvas"
+                    className={`easel-card-canvas ${getFoilClass(deal.card_id, deal.rarity)}`}
                     onClick={() =>
                       setPreviewCard({
                         id: deal.card_id,
@@ -349,18 +379,17 @@ export default function ShopView() {
         {/* ROW 2: 3 SHINY FOIL BOOSTER PACK OBJECTS + DISTRIBUTION BOXES */}
         <div className="shop-section">
           <div className="shop-section-header">
-            <h3>🎁 Shiny Foil Booster Packs (SR &amp; Above Only)</h3>
+            <h3>🎁 Shiny Foil Booster Packs (SR, UR, CR, GR &amp; Shining -S)</h3>
           </div>
           <p className="shop-section-desc">
-            All Commons, Uncommons, and Rares are already unlocked in your Stable. Every pack guarantees{' '}
-            <strong>SR, SSR, UR, GR, CR, or SPR</strong> pulls!
+            Excess copies beyond a <strong>4-card playset</strong> automatically convert into Pony Points dust!
           </p>
 
           <div className="packs-showcase-grid">
             {Object.entries(tiers).map(([key, tier]) => (
               <div key={key} className="pack-showcase-column">
                 <div
-                  className={`shiny-foil-pack tier-${key.toLowerCase()}`}
+                  className={`shiny-foil-pack ${getPackVisualClass(key)}`}
                   onClick={() => !purchasing && handleBuyPack(key, tier.cost, tier.name)}
                   role="button"
                   tabIndex={0}
@@ -440,7 +469,7 @@ export default function ShopView() {
                   <div
                     className={`booster-foil-wrapper ${
                       packStage === 'RIPPING' ? 'ripping-active' : 'sealed-idle'
-                    } tier-${(activePackTier?.key || 'sparkle').toLowerCase()}`}
+                    } ${getPackVisualClass(activePackTier?.key || 'standard')}`}
                     onClick={handleRipPack}
                   >
                     <div className="booster-foil-top-flap">
@@ -467,12 +496,20 @@ export default function ShopView() {
               ) : (
                 <>
                   <h3>🎉 Tap to Flip — Click Revealed Cards to Preview!</h3>
-                  <p>Click a face-down card to flip it, or click an open card to inspect its rules text.</p>
+                  <p>
+                    Click a face-down card to flip it, or click an open card to inspect its rules text.
+                    {autoDustBanner > 0 && (
+                      <strong style={{ color: '#fde047', display: 'block', marginTop: '4px' }}>
+                        ♻️ Excess 5th+ copies converted into +{autoDustBanner} 🪙 Pony Points!
+                      </strong>
+                    )}
+                  </p>
 
                   <div className="pulled-cards-row">
                     {pulledCards.map((card, idx) => {
                       const isFlipped = Boolean(flippedIndices[idx]);
-                      const isUltra = ['UR', 'GR', 'CR', 'SPR'].includes(card.rarity);
+                      const foilCls = getFoilClass(card.id, card.rarity);
+                      const isUltra = Boolean(foilCls);
                       return (
                         <div
                           key={idx}
@@ -488,13 +525,17 @@ export default function ShopView() {
                               <span className="tap-to-flip-pill">Tap to Flip ✨</span>
                             </div>
 
-                            <div className="flip-card-face flip-card-front">
+                            <div className={`flip-card-face flip-card-front ${foilCls}`}>
                               <span className={`pulled-rarity rarity-${card.rarity.toLowerCase()}`}>
-                                {card.rarity}
+                                {card.id.endsWith('-S') ? `✨ ${card.rarity}-S` : card.rarity}
                               </span>
                               <img src={card.image_url || CARD_BACK_URL} alt={card.name} />
                               <h5>{card.name}</h5>
-                              <span>🔍 Click to Preview</span>
+                              <span>
+                                {card.convertedToDust
+                                  ? `♻️ +${card.convertedToDust} 🪙 Dust`
+                                  : '🔍 Click to Preview'}
+                              </span>
                             </div>
                           </div>
                         </div>

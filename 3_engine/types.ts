@@ -121,6 +121,8 @@ export interface PendingHandChoice {
     | 'DISCARD_THEN_DRAW'
     | 'RECOVER_FROM_RETIREMENT'
     | 'PICK_REVEALED_TO_HAND'
+    | 'TOP_OR_BOTTOM_DECK'
+    | 'CHOOSE_SCENE_TO_UNTAP'
     | 'END_PHASE_HAND_LIMIT';
   count: number;
   secondaryDrawCount?: number;
@@ -128,6 +130,17 @@ export interface PendingHandChoice {
   candidateCards: CardDefinition[];
   validIndices?: number[];
   filterLabel?: string;
+  resumeAttackQueue?: LaneKey[] | null;
+  resumeEndTurnForPlayer?: '0' | '1' | null;
+}
+
+export interface QueuedEffectItem {
+  id: string;
+  ownerId: '0' | '1';
+  sourceCard: CardDefinition;
+  sourceLane?: LaneKey;
+  triggerType: 'Appear' | 'Farewell' | 'Adventure' | 'Pre-Plan' | 'StoryPromotion' | 'DelayedTrigger';
+  effectClause: string;
   resumeAttackQueue?: LaneKey[] | null;
   resumeEndTurnForPlayer?: '0' | '1' | null;
 }
@@ -142,6 +155,50 @@ export interface DelayedTriggerEntry {
   conditionText?: string;
   effectClause: string;
   createdTurn: number;
+}
+
+export interface ManeSpeechBubble {
+  id: string;
+  text: string;
+  tone: 'INFO' | 'EFFECT' | 'CHOICE' | 'WARNING';
+  timestamp: number;
+}
+
+export interface CardFlightAnimation {
+  id: string;
+  playerId: '0' | '1';
+  kind: 'DRAW' | 'DISCARD' | 'RETIRE';
+  count: number;
+  cardName?: string;
+  timestamp: number;
+}
+
+export interface MatchRewardSummary {
+  queueTier: 'QUICK_PLAY' | 'CASUAL' | 'RANKED' | 'PRIVATE';
+  basePoints: number;
+  firstWinBonus: number;
+  streakBonus: number;
+  totalEarned: number;
+  newBalance: number;
+  note: string;
+}
+
+export interface DebugTraceEntry {
+  id: string;
+  turn: number;
+  phase: GamePhase;
+  turnPlayer: string;
+  actor: string;
+  cardId: string;
+  cardName: string;
+  cardText: string;
+  triggerType: string;
+  detectedKeywords: string[];
+  parsedKind: string;
+  targetsOrChoice: string;
+  status: 'RESOLVED' | 'QUEUED_DELAYED' | 'QUEUED_STACK' | 'AWAITING_INPUT' | 'SKIPPED';
+  notes: string;
+  timestamp: number;
 }
 
 export interface ActionSpotlightEvent {
@@ -197,6 +254,7 @@ export interface PlayerState {
   turnsTaken: number;
   actedLanesThisTurn: LaneKey[];
   isConnected?: boolean;
+  speechBubble?: ManeSpeechBubble | null;
 }
 
 export type GamePhase =
@@ -275,6 +333,7 @@ export interface KayouGameState {
   roomId: string;
   phase: GamePhase;
   firstPlayerId: '0' | '1';
+  wheelSpinDegrees?: number;
   turnPlayerId: '0' | '1';
   turnNumber: number;
   winnerId: '0' | '1' | null;
@@ -285,11 +344,15 @@ export interface KayouGameState {
   pendingTarget: PendingTargetSelection | null;
   pendingHandChoice?: PendingHandChoice | null;
   pendingLaneQueueAfterReveal: LaneKey[] | null;
+  effectResolutionQueue?: QueuedEffectItem[];
   delayedTriggers?: DelayedTriggerEntry[];
   lastClashEvent: ClashAnimationEvent | null;
   lastPlanRevealEvent: PlanRevealEvent | null;
   lastStoryRevealEvent: StoryRevealEvent | null;
   lastActionBanner?: ActionSpotlightEvent | null;
+  lastCardFlight?: CardFlightAnimation | null;
+  rewardSummary?: Partial<Record<'0' | '1', MatchRewardSummary>>;
   announcements: PublicAnnouncement[];
   actionLog: ActionLogEntry[];
+  debugTrace?: DebugTraceEntry[];
 }

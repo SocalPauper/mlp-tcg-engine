@@ -14,7 +14,7 @@ const startermaps: any[] = JSON.parse(
 
 async function getCardLookupMap() {
   const res = await pool.query(
-    `SELECT id, name, card_type, element, image_url FROM game.cards;`
+    `SELECT id, name, card_type, element, rarity, image_url FROM game.cards;`
   );
   const map = new Map();
   for (const row of res.rows) {
@@ -23,11 +23,42 @@ async function getCardLookupMap() {
   return map;
 }
 
-function findRealManeCard(
-  cardMap: any,
-  maneId: string | null,
-  ponyHint?: string
-) {
+// Rules v1.3.0 (102.1.0 - 102.1.2): Max 4 copies per base ID (ignoring ※ and -S stamps), unlimited for "Everyday"
+function validateRulesV130Deck(
+  cardMap: Map<string, any>,
+  storyIds: string[],
+  sceneIds: string[],
+  mainIds: string[]
+): string | null {
+  if (storyIds.length > 4) return 'Story Deck cannot exceed 4 cards (Rules v1.3.0 Rule 102.1.3).';
+  if (sceneIds.length > 15) return 'Scene Deck cannot exceed 15 cards (Rules v1.3.0 Rule 102.0.0).';
+  if (mainIds.length > 50) return 'Main Deck cannot exceed 50 cards (Rules v1.3.0 Rule 102.0.0).';
+
+  const counts = new Map<string, number>();
+  for (const rawId of [...storyIds, ...sceneIds, ...mainIds]) {
+    const card = cardMap.get(String(rawId).toLowerCase());
+    if (!card) continue;
+    const isEveryday =
+      String(card.element || '').toLowerCase() === 'everyday' ||
+      /everyday/i.test(String(card.name || '')) ||
+      /-EV/i.test(String(card.id || ''));
+    if (isEveryday) continue;
+
+    // Strip ※ promo stamp and -S alternate art suffix to group shared card IDs (Rule 102.1.1)
+    const canonicalId = String(card.id)
+      .replace(/^※/, '')
+      .replace(/-S$/i, '')
+      .toUpperCase();
+    const nextCount = (counts.get(canonicalId) || 0) + 1;
+    if (nextCount > 4) {
+      return `Deck exceeds the 4-copy limit for ${card.name} (${canonicalId}) under Rules v1.3.0 Rule 102.1.0.`;
+    }
+    counts.set(canonicalId, nextCount);
+  }
+  return null;
+}
+
+function findRealManeCard(cardMap: any, maneId: string | null, ponyHint?: string) {
   if (maneId) {
     const direct = cardMap.get(String(maneId).toLowerCase());
     if (direct && direct.image_url) return direct;
@@ -96,10 +127,7 @@ function normalizeDeckRow(row: any, cardMap: any) {
 
   const realMane = findRealManeCard(cardMap, parsedMane);
   const resolvedBanner =
-    parsedCards.deck_banner_url ||
-    row.deck_banner_url ||
-    realMane?.image_url ||
-    null;
+    parsedCards.deck_banner_url || row.deck_banner_url || realMane?.image_url || null;
 
   return {
     ...row,
@@ -108,8 +136,7 @@ function normalizeDeckRow(row: any, cardMap: any) {
     mane_character: parsedMane || null,
     mane_image_url: resolvedBanner,
     deck_banner_url: resolvedBanner,
-    banner_crop_position:
-      parsedCards.banner_crop_position || row.banner_crop_position || '50% 25%',
+    banner_crop_position: parsedCards.banner_crop_position || row.banner_crop_position || '50% 25%',
     banner_zoom: Number(parsedCards.banner_zoom || 100),
     story_deck: row.story_deck || parsedCards.story_deck || parsedCards.stories || [],
     scene_deck: row.scene_deck || parsedCards.scene_deck || parsedCards.scenes || [],
@@ -195,6 +222,16 @@ router.post('/decks', async (req, res) => {
 
   try {
     const cardMap = await getCardLookupMap();
+    const validationErr = validateRulesV130Deck(
+      cardMap,
+      resolvedStories,
+      resolvedScenes,
+      resolvedMain
+    );
+    if (validationErr) {
+      return res.status(400).json({ success: false, message: validationErr });
+    }
+
     const query = `
       INSERT INTO auth.decks (id, name, author, author_id, is_public, mane_character, cards)
       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
@@ -268,6 +305,16 @@ router.put('/decks/:id', async (req, res) => {
 
   try {
     const cardMap = await getCardLookupMap();
+    const validationErr = validateRulesV130Deck(
+      cardMap,
+      resolvedStories,
+      resolvedScenes,
+      resolvedMain
+    );
+    if (validationErr) {
+      return res.status(400).json({ success: false, message: validationErr });
+    }
+
     const query = `
       UPDATE auth.decks
       SET name = $1,
