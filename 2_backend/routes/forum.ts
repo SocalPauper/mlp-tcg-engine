@@ -202,7 +202,7 @@ router.get('/posts/:id', async (req, res) => {
 
 // POST /api/forum/posts
 router.post('/posts', requireRegisteredNonSafeUser, async (req: any, res) => {
-  const { title, body, category, image_url } = req.body;
+  const { title, body, category, image_url, link_url } = req.body;
   const user = req.forumUser;
 
   const titleCheck = moderateForumContent(title);
@@ -210,7 +210,22 @@ router.post('/posts', requireRegisteredNonSafeUser, async (req: any, res) => {
     return res.status(400).json({ success: false, message: titleCheck.reason });
   }
 
-  const bodyCheck = moderateForumContent(body);
+  let finalBody = String(body || '').trim();
+  if (link_url && String(link_url).trim()) {
+    let cleanLink = String(link_url).trim();
+    if (!/^https?:\/\//i.test(cleanLink)) {
+      cleanLink = `https://${cleanLink}`;
+    }
+    const linkCheck = moderateForumContent(cleanLink);
+    if (!linkCheck.allowed) {
+      return res.status(400).json({ success: false, message: linkCheck.reason });
+    }
+    if (!finalBody.includes(cleanLink)) {
+      finalBody = `${finalBody}\n\n🔗 ${cleanLink}`;
+    }
+  }
+
+  const bodyCheck = moderateForumContent(finalBody);
   if (!bodyCheck.allowed) {
     return res.status(400).json({ success: false, message: bodyCheck.reason });
   }
@@ -224,9 +239,9 @@ router.post('/posts', requireRegisteredNonSafeUser, async (req: any, res) => {
       if (!/^https?:\/\//i.test(rawImg)) {
         rawImg = `https://${rawImg}`;
       }
-      const linkCheck = moderateForumContent(rawImg);
-      if (!linkCheck.allowed) {
-        return res.status(400).json({ success: false, message: linkCheck.reason });
+      const imgLinkCheck = moderateForumContent(rawImg);
+      if (!imgLinkCheck.allowed) {
+        return res.status(400).json({ success: false, message: imgLinkCheck.reason });
       }
     }
     cleanImageUrl = rawImg;
@@ -249,7 +264,7 @@ router.post('/posts', requireRegisteredNonSafeUser, async (req: any, res) => {
       authorName,
       category || 'General',
       String(title).trim(),
-      String(body).trim(),
+      finalBody,
       cleanImageUrl,
       imageStatus,
     ]);

@@ -46,14 +46,17 @@ interface FanPageHubProps {
 const CATEGORIES = ['ALL', 'General', 'Deck Tech', 'Pulls & Binder', 'Fan Art', 'Rules Q&A'];
 
 function renderTextWithLinks(text: string) {
-  const urlRegex = /(https?:\/\/[^\s<>"')]+)/gi;
+  const urlRegex = /((?:https?:\/\/|www\.)[^\s<>"')]+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|dev|gg|tv|co|app|me)(?:\/[^\s<>"')]*)?)/gi;
   const parts = String(text || '').split(urlRegex);
   return parts.map((part, idx) => {
-    if (/^https?:\/\//i.test(part)) {
+    if (!part) return null;
+    if (urlRegex.test(part)) {
+      urlRegex.lastIndex = 0;
+      const href = /^https?:\/\//i.test(part) ? part : `https://${part}`;
       return (
         <a
           key={idx}
-          href={part}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           style={{ color: '#ffd700', textDecoration: 'underline', fontWeight: 800 }}
@@ -63,6 +66,7 @@ function renderTextWithLinks(text: string) {
         </a>
       );
     }
+    urlRegex.lastIndex = 0;
     return <React.Fragment key={idx}>{part}</React.Fragment>;
   });
 }
@@ -78,6 +82,7 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('General');
   const [newBody, setNewBody] = useState('');
+  const [newLinkUrl, setNewLinkUrl] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -212,6 +217,11 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
       normalizedImg = `https://${normalizedImg}`;
     }
 
+    let normalizedLink = newLinkUrl.trim();
+    if (normalizedLink && !/^https?:\/\//i.test(normalizedLink)) {
+      normalizedLink = `https://${normalizedLink}`;
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/forum/posts`, {
@@ -222,6 +232,7 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
           title: newTitle,
           category: newCategory,
           body: newBody,
+          link_url: normalizedLink || null,
           image_url: normalizedImg || null,
         }),
       });
@@ -238,6 +249,7 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
 
       setNewTitle('');
       setNewBody('');
+      setNewLinkUrl('');
       setNewImageUrl('');
       setShowCreateModal(false);
       fetchPosts();
@@ -866,6 +878,17 @@ export default function FanPageHub({ currentUser }: FanPageHubProps) {
               value={newBody}
               onChange={(e) => setNewBody(e.target.value)}
               placeholder="Share your thoughts, decklist insights, or story..."
+            />
+
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '4px' }}>
+              Optional Website / Resource Link
+            </label>
+            <input
+              type="text"
+              className="forum-input"
+              value={newLinkUrl}
+              onChange={(e) => setNewLinkUrl(e.target.value)}
+              placeholder="e.g. https://socalpauper.com or mainphasecollectibles.com"
             />
 
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, marginBottom: '4px' }}>
