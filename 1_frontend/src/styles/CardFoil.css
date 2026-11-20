@@ -1,5 +1,5 @@
 /* ========================================================================= */
-/* HIGH-RARITY & SHINING (-S) FOIL & GLIMMER SHADERS                         */
+/* HIGH-RARITY, SHINING (-S), GOLD RARE (GR) & DIAMOND RARE (DR) SHADERS     */
 /* ========================================================================= */
 
 .foil-sr,
@@ -9,7 +9,7 @@
   overflow: hidden;
 }
 
-/* SR: Subtle Silver/Pearl Diagonal Sheen on Hover */
+/* SR & SSR: Silver/Pearl Diagonal Sheen on Hover */
 .foil-sr::after {
   content: '';
   position: absolute;
@@ -61,7 +61,7 @@
   background: linear-gradient(
     to right,
     transparent 0%,
-    rgba(255, 255, 255, 0.46) 50%,
+    rgba(255, 255, 255, 0.48) 50%,
     transparent 100%
   );
   transform: rotate(24deg);
@@ -70,12 +70,12 @@
   z-index: 6;
 }
 
-/* SHINING (-S) & GR: Gold Starlight Foil Border + Continuous Dual Shimmer */
+/* SHINING (-S), DIAMOND RARE (DR) & GOLD RARE (GR): Prismatic Diamond Facets + Continuous Starlight */
 .foil-shining {
   border: 2px solid #fde047 !important;
   box-shadow:
-    0 0 14px rgba(253, 224, 71, 0.8),
-    0 0 24px rgba(236, 72, 153, 0.45);
+    0 0 15px rgba(253, 224, 71, 0.85),
+    0 0 26px rgba(56, 189, 248, 0.5);
 }
 
 .foil-shining::before {
@@ -83,18 +83,25 @@
   position: absolute;
   inset: 0;
   background-image:
-    radial-gradient(circle at 22% 28%, rgba(255, 255, 255, 0.85) 0 1.5px, transparent 2.5px),
-    radial-gradient(circle at 76% 22%, rgba(253, 224, 71, 0.9) 0 2px, transparent 3px),
-    radial-gradient(circle at 64% 74%, rgba(255, 255, 255, 0.85) 0 1.5px, transparent 2.5px),
-    radial-gradient(circle at 30% 80%, rgba(56, 189, 248, 0.85) 0 1.8px, transparent 3px),
+    radial-gradient(circle at 20% 25%, rgba(255, 255, 255, 0.92) 0 1.8px, transparent 3px),
+    radial-gradient(circle at 78% 20%, rgba(253, 224, 71, 0.95) 0 2.2px, transparent 3.4px),
+    radial-gradient(circle at 66% 74%, rgba(255, 255, 255, 0.9) 0 1.8px, transparent 3px),
+    radial-gradient(circle at 28% 80%, rgba(56, 189, 248, 0.95) 0 2px, transparent 3.4px),
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.08) 0px,
+      rgba(255, 255, 255, 0.08) 6px,
+      rgba(56, 189, 248, 0.1) 6px,
+      rgba(56, 189, 248, 0.1) 12px
+    ),
     linear-gradient(
       125deg,
-      rgba(253, 224, 71, 0.16) 0%,
-      rgba(244, 114, 182, 0.2) 50%,
-      rgba(56, 189, 248, 0.18) 100%
+      rgba(253, 224, 71, 0.18) 0%,
+      rgba(244, 114, 182, 0.22) 50%,
+      rgba(56, 189, 248, 0.22) 100%
     );
   mix-blend-mode: screen;
-  animation: starlightTwinkle 2.6s ease-in-out infinite alternate;
+  animation: starlightTwinkle 2.4s ease-in-out infinite alternate;
   pointer-events: none;
   z-index: 6;
 }
@@ -104,16 +111,16 @@
   position: absolute;
   top: -50%;
   left: -85%;
-  width: 65%;
+  width: 68%;
   height: 200%;
   background: linear-gradient(
     to right,
     transparent 0%,
-    rgba(254, 249, 195, 0.65) 50%,
+    rgba(254, 249, 195, 0.72) 50%,
     transparent 100%
   );
   transform: rotate(22deg);
-  animation: foilBeamSweep 3.1s ease-in-out infinite;
+  animation: foilBeamSweep 3s ease-in-out infinite;
   pointer-events: none;
   z-index: 7;
 }
@@ -129,7 +136,7 @@
 
 @keyframes starlightTwinkle {
   0% {
-    opacity: 0.65;
+    opacity: 0.68;
   }
   100% {
     opacity: 1;
