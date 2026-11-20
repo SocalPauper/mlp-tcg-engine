@@ -42,18 +42,45 @@ export function matchesCardKeywordExact(card: CardDefinition, filterText: string
   const cardName = String(card.name || '').trim().toLowerCase();
   if (cardName === target) return true;
 
-  const rawTraits = String(card.traits || '').toLowerCase();
-  const traitTokens = rawTraits
-    .split(/[,/|•·]+|\s{2,}/)
+  // Check traits AND card.type (e.g. "Pet", "Earth Pony", "Unicorn", "Pegasus", "Dragon")
+  const combinedKeywords = `${card.traits || ''} ${card.type || ''}`.toLowerCase();
+  const traitTokens = combinedKeywords
+    .split(/[,/|•·\s]+/)
     .map((t) => t.trim())
     .filter(Boolean);
-  if (traitTokens.includes(target)) return true;
+
+  if (!target.includes(' ') && traitTokens.includes(target)) {
+    return true;
+  }
 
   const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const wordBoundaryRegex = new RegExp(`(?:^|\\s)${escaped}(?:$|\\s)`, 'i');
-  if (wordBoundaryRegex.test(rawTraits)) return true;
+  if (wordBoundaryRegex.test(combinedKeywords)) return true;
 
   return false;
+}
+
+export function canPlayCardRestrictions(
+  state: KayouGameState,
+  playerId: '0' | '1',
+  card: CardDefinition
+): { allowed: boolean; reason?: string } {
+  const text = sanitizeCardText(card.effectText);
+  if (!text) return { allowed: true };
+
+  // Check "Only use when <condition>." (e.g., Dress for Competition: "Only use when there is any 「Rarity」 in your Adventure Area.")
+  const onlyMatch = text.match(/^only\s+(?:use|play|activate)\s+when\s+([^.]+)\./i);
+  if (onlyMatch) {
+    const cond = onlyMatch[1].trim();
+    if (!evaluateBoardCondition(state, playerId, cond)) {
+      return {
+        allowed: false,
+        reason: `Requirement not met: ${cond}`,
+      };
+    }
+  }
+
+  return { allowed: true };
 }
 
 export function getEffectiveCardCost(player: PlayerState, card: CardDefinition): number {
@@ -182,7 +209,6 @@ function doesPassiveTextApplyToCharacter(
     return 0;
   }
 
-  // Applejack SD01D-U01: "While there is any untapped Scene in your Scene Area, this Character gets +2 Inspiration."
   if (
     /while\s+there\s+(?:is|are)\s+(?:any\s+)?untapped\s+scenes?\s+in\s+your\s+scene\s+area/i.test(
       text
@@ -533,6 +559,8 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     return { kind: 'NONE_PASSIVE', amount: 0 };
   }
 
+  // Strip leading "Only use when <condition>." or "If <condition>, " before parsing the action
+  text = text.replace(/^only\s+(?:use|play|activate)\s+when\s+[^.]+\.\s*/i, '').trim();
   const leadingIf = text.match(/^if\s+[^,]+,\s*([\s\S]+)$/i);
   if (leadingIf) {
     text = leadingIf[1].trim();
@@ -542,7 +570,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   const nameFilter = nameBracket ? nameBracket[1].trim() : undefined;
 
   const limitMatch = text.match(
-    /(?:cost(?:\s+of\s+Force\s+of\s+Harmony)?|power|inspiration)\s*(\d+)\s*or\s*less/i
+    /(?:cost(?:\s+of\s+Force\s+of\s+Harmony)?|power|inspiration|harmony(?:\s+level)?)\s*(\d+)\s*or\s*less/i
   );
   const parsedMaxLimit = limitMatch ? parseInt(limitMatch[1], 10) : undefined;
 
@@ -559,8 +587,8 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Prevent Retire in Contact
-  if (/won'?t\s+retire\s+in\s+contact|cannot\s+retire\s+in\s+contact/i.test(text)) {
+  // Prevent Retire in Contact (e.g., Tailor-made SD01F-SPR01: "Choose 1 「Rarity」 with Inspiration 3 or less in your Adventure Area, it won't retire in Contact until the end of turn.")
+  if (/(?:won'?t|cannot|can'?t)\s+(?:be\s+)?retired?\s+in\s+contact/i.test(text)) {
     return {
       kind: 'PREVENT_RETIRE_IN_CONTACT',
       amount: 1,
@@ -570,7 +598,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Draw X, then discard Y (Spike SD01A-U03: "Draw 2 cards, discard 1 card.")
+  // Draw X, then discard Y
   const drawDiscardMatch = text.match(
     /draw\s+(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?discard\s+(\d+|a|an)\s+cards?/i
   );
@@ -612,7 +640,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Untap / Ready Scenes in Scene Area (Winona SD01D-U04: "Choose 1 Scene in your Scene Area, untap it.")
+  // Untap / Ready Scenes in Scene Area
   const untapSceneMatch = text.match(
     /(?:choose|select|ready|untap)\s+(\d+|a|an)\s+(?:face-down\s+|exhausted\s+|tapped\s+)?scenes?\s+in\s+your\s+scene\s+area/i
   );

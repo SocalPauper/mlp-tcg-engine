@@ -476,14 +476,11 @@ export default function GameBoard({
   const [powerBreakdown, setPowerBreakdown] = useState<PowerBreakdownDetails | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number>(180);
 
-  // Audio mute state
   const [isMuted, setIsMuted] = useState<boolean>(() => soundFX.isMuted());
 
-  // Spin wheel animation state during VS_INTRO
   const [wheelAngle, setWheelAngle] = useState<number>(0);
   const [wheelSettled, setWheelSettled] = useState<boolean>(false);
 
-  // Collapsible Action Log Drawer + Debug Trace Tab + Spotlight + Card Flight Toast
   const [isLogOpen, setIsLogOpen] = useState<boolean>(false);
   const [logTab, setLogTab] = useState<'LOG' | 'DEBUG'>('LOG');
   const [showLogOnboardingBubble, setShowLogOnboardingBubble] = useState<boolean>(true);
@@ -494,7 +491,6 @@ export default function GameBoard({
   const lastSeenClashIdRef = useRef<number | null>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Interactive Hand / Retirement Choice Selections
   const [pickedChoiceIndices, setPickedChoiceIndices] = useState<number[]>([]);
 
   const [turnBannerText, setTurnBannerText] = useState<string | null>(null);
@@ -517,7 +513,6 @@ export default function GameBoard({
     return () => clearTimeout(timer);
   }, []);
 
-  // Trigger Action Spotlight Banner + Audio Cue
   useEffect(() => {
     const banner = gameState.lastActionBanner;
     if (!banner) return;
@@ -534,7 +529,6 @@ export default function GameBoard({
     }
   }, [gameState.lastActionBanner?.id]);
 
-  // Trigger Deck Draw / Discard / Retire Flight Toast + Audio Cue
   useEffect(() => {
     const flight = gameState.lastCardFlight;
     if (!flight) return;
@@ -551,7 +545,6 @@ export default function GameBoard({
     }
   }, [gameState.lastCardFlight?.id]);
 
-  // Trigger Clash Impact Sound
   useEffect(() => {
     if (gameState.phase === 'CLASH_HOLD' && gameState.lastClashEvent) {
       if (lastSeenClashIdRef.current !== gameState.lastClashEvent.id) {
@@ -614,7 +607,6 @@ export default function GameBoard({
     }
   }, [gameState.turnPlayerId, gameState.turnNumber, gameState.phase, mySeat, isSpectator]);
 
-  // Animate 50/50 Spin Wheel during VS_INTRO before advancing to Mulligan
   useEffect(() => {
     if (gameState.phase === 'VS_INTRO') {
       setWheelSettled(false);
@@ -622,7 +614,7 @@ export default function GameBoard({
       soundFX.playWheelSpin();
 
       const targetAngle =
-        gameState.wheelSpinDegrees || (gameState.firstPlayerId === '0' ? 1890 : 2070);
+        gameState.wheelSpinDegrees || (gameState.firstPlayerId === '0' ? 2070 : 1890);
       const kickTimer = setTimeout(() => {
         setWheelAngle(targetAngle);
       }, 80);
@@ -753,6 +745,84 @@ export default function GameBoard({
     }
     return 1;
   })();
+
+  const renderDualManePresenceBar = () => {
+    const canActivateMyMane =
+      isMyTurn &&
+      gameState.phase === 'MAIN_PHASE' &&
+      !me.leaderAbilityUsedThisTurn &&
+      hasManeActivatedAbility(me.leader);
+
+    return (
+      <div className="dual-mane-presence-bar">
+        {/* Player (Self) Mane Character & Live Speech Bubble */}
+        <div
+          className={`mane-presence-card self-mane ${
+            gameState.turnPlayerId === mySeat ? 'is-active' : ''
+          }`}
+        >
+          <img
+            src={me.leader?.imageUrl || CARD_BACK_URL}
+            alt={me.leader?.name || 'Your Mane'}
+            className="mane-presence-avatar"
+            onContextMenu={(e) => handleContextMenu(e, me.leader)}
+            onTouchStart={() => handleTouchStartInspect(me.leader)}
+            onTouchEnd={handleTouchEndInspect}
+          />
+          <div className="mane-presence-info">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <strong style={{ fontSize: '12px', color: '#0369a1' }}>
+                ✨ {me.displayName} ({me.leader?.name || 'Mane'})
+              </strong>
+              {canActivateMyMane && (
+                <button
+                  type="button"
+                  className="action-bar-btn gold"
+                  style={{ padding: '2px 8px', fontSize: '10.5px' }}
+                  onClick={() => sendAction('ACTIVATE_MANE_ABILITY')}
+                >
+                  ✨ Activate Mane
+                </button>
+              )}
+            </div>
+            <div
+              key={me.speechBubble?.id || 'me-idle'}
+              className={`mane-inline-bubble tone-${me.speechBubble?.tone || 'INFO'}`}
+            >
+              💬 {me.speechBubble?.text || 'Ready for our next move!'}
+            </div>
+          </div>
+        </div>
+
+        {/* Opponent Mane Character & Live Speech Bubble */}
+        <div
+          className={`mane-presence-card opp-mane ${
+            gameState.turnPlayerId === oppSeat ? 'is-active' : ''
+          }`}
+        >
+          <img
+            src={opp.leader?.imageUrl || CARD_BACK_URL}
+            alt={opp.leader?.name || 'Opponent Mane'}
+            className="mane-presence-avatar"
+            onContextMenu={(e) => handleContextMenu(e, opp.leader)}
+            onTouchStart={() => handleTouchStartInspect(opp.leader)}
+            onTouchEnd={handleTouchEndInspect}
+          />
+          <div className="mane-presence-info">
+            <strong style={{ fontSize: '12px', color: '#be123c' }}>
+              👑 {opp.displayName} ({opp.leader?.name || 'Rival Mane'})
+            </strong>
+            <div
+              key={opp.speechBubble?.id || 'opp-idle'}
+              className={`mane-inline-bubble tone-${opp.speechBubble?.tone || 'INFO'}`}
+            >
+              💬 {opp.speechBubble?.text || 'Watching the board...'}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderLaneStrip = (player: PlayerState, isOpponent: boolean) => {
     const ownerSide: 'SELF' | 'OPPONENT' = isOpponent ? 'OPPONENT' : 'SELF';
@@ -981,7 +1051,7 @@ export default function GameBoard({
           </div>
         </div>
 
-        {/* Row: Main Character (with Speech Bubble) + 4 Landscape Story Stages + Retirement Area */}
+        {/* Row: Main Character + 4 Landscape Story Stages + Retirement Area */}
         <div className="core-story-row">
           <div
             className="side-portrait-zone"
@@ -989,15 +1059,6 @@ export default function GameBoard({
             onTouchStart={() => handleTouchStartInspect(player.leader)}
             onTouchEnd={handleTouchEndInspect}
           >
-            {player.speechBubble && (
-              <div
-                key={player.speechBubble.id}
-                className={`mane-speech-bubble tone-${player.speechBubble.tone}`}
-              >
-                💬 {player.speechBubble.text}
-              </div>
-            )}
-
             {player.leader?.imageUrl ? (
               <img src={player.leader.imageUrl} alt={player.leader.name} />
             ) : (
@@ -1399,7 +1460,6 @@ export default function GameBoard({
               <div className="vs-leader-name">{gameState.players['0'].leader?.name}</div>
             </div>
 
-            {/* 50/50 Spin Wheel */}
             <div className="spin-wheel-arena">
               <div className="spin-wheel-pointer" />
               <div
@@ -2131,7 +2191,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Dedicated Top Action Bar with 4-Step Rules v1.3.0 Turn-Phase Indicator & Sound Toggle */}
+      {/* Dedicated Top Action Bar with 4-Step Rules v1.3.0 Turn-Phase Indicator, Cast Event Button & Sound Toggle */}
       <div
         className={`center-action-bar ${
           isMyTurn ? 'my-turn-bar' : isOppTurn ? 'opp-turn-bar' : ''
@@ -2182,6 +2242,24 @@ export default function GameBoard({
 
           {isMyTurn && gameState.phase === 'MAIN_PHASE' && (
             <>
+              {selectedHandCard &&
+                String(selectedHandCard.type || '').toLowerCase() === 'event' && (
+                  <button
+                    type="button"
+                    className="action-bar-btn primary"
+                    style={{
+                      boxShadow: '0 0 18px rgba(253, 224, 71, 0.85)',
+                      border: '1.5px solid #fde047',
+                    }}
+                    onClick={() => {
+                      sendAction('PLAY_CARD', { cardId: selectedHandCard.id });
+                      setSelectedHandCardId(null);
+                    }}
+                  >
+                    ✨ Cast Event: {selectedHandCard.name}
+                  </button>
+                )}
+
               {me.turnsTaken > 1 ? (
                 <button
                   type="button"
@@ -2252,6 +2330,9 @@ export default function GameBoard({
           </button>
         </div>
       </div>
+
+      {/* Both Mane Characters & Speech Bubbles Always Visible */}
+      {renderDualManePresenceBar()}
 
       {/* Delayed Triggers Queue Dock (Shows End-of-Turn Scheduled Effects) */}
       {delayedTriggers.length > 0 && (

@@ -41,7 +41,7 @@ const startermaps: any[] = JSON.parse(
 
 const TURN_DURATION_MS = 180_000;
 const DISCONNECT_GRACE_MS = 180_000;
-const RANKED_REMATCH_COOLDOWN_MS = 10 * 60 * 1000; // 10-minute anti-back-to-back Ranked pairing window
+const RANKED_REMATCH_COOLDOWN_MS = 10 * 60 * 1000;
 
 interface SeatConnection {
   ws: WebSocket | null;
@@ -166,7 +166,6 @@ export class GameManager {
                 lastForCandidate.opponentId === incomingKey &&
                 now - lastForCandidate.timestamp < RANKED_REMATCH_COOLDOWN_MS);
 
-            // Prevent immediate back-to-back Ranked pairings (unless opponent has waited > 60s)
             if (isRecentRematch && now - candidate.queuedAt < 60_000) {
               continue;
             }
@@ -521,7 +520,6 @@ export class GameManager {
   private async finalizeMatchOutcome(room: GameRoom) {
     if (room.state.phase !== 'GAME_OVER' || !room.state.winnerId) return;
 
-    // 1. Record Ranked ELO if applicable
     if (room.isRanked && !room.rankedRecorded) {
       room.rankedRecorded = true;
       const winnerSeat = room.state.winnerId;
@@ -572,7 +570,6 @@ export class GameManager {
       }
     }
 
-    // 2. Grant Tiered Pony Points Rewards (Random Public Matchmaking Only)
     if (room.rewardsGranted) return;
     room.rewardsGranted = true;
 
@@ -712,13 +709,14 @@ export class GameManager {
 
   private async hydrateDeckFromDatabase(deckId: string): Promise<HydratedDeckPayload> {
     const cleanDeckId = String(deckId || 'starter-sd01').trim();
-    const res = await pool.query(
-      `SELECT id, name, card_type, element, cost, power, defense, traits, effect_text, image_url, rarity, set_code
-       FROM game.cards;`
-    );
+    const res = await pool.query(`SELECT * FROM game.cards;`);
 
     const cardMap = new Map<string, CardDefinition>();
     for (const row of res.rows) {
+      const combinedTraits = [row.traits, row.sub_type, row.race]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
       const def: CardDefinition = {
         id: row.id,
         cardNumber: row.id,
@@ -728,7 +726,7 @@ export class GameManager {
         cost: Number(row.cost) || 0,
         power: Number(row.power) || 0,
         defense: Number(row.defense) || 0,
-        traits: row.traits || '',
+        traits: combinedTraits,
         effectText: row.effect_text || '',
         imageUrl: row.image_url || '',
         rarity: row.rarity || 'C',

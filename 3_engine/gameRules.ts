@@ -21,6 +21,7 @@ import {
   sanitizeCardText,
   detectEffectKeywords,
   matchesCardKeywordExact,
+  canPlayCardRestrictions,
   canPayHarmonyCost,
   getEffectiveCardCost,
   exhaustScenesWithElementPriority,
@@ -223,7 +224,7 @@ export function createWaitingMatch(): KayouGameState {
     roomId: 'waiting-room',
     phase: 'WAITING_FOR_PLAYERS',
     firstPlayerId: '0',
-    wheelSpinDegrees: 1890,
+    wheelSpinDegrees: 2070,
     turnPlayerId: '0',
     turnNumber: 1,
     winnerId: null,
@@ -258,9 +259,10 @@ export function startSeatedMatch(
   // True unbiased 50/50 cryptographic coin/wheel toss
   const coinFlip = crypto.randomInt(0, 2);
   const firstPlayerId: '0' | '1' = coinFlip === 0 ? '0' : '1';
-  // 5 full rotations (1800deg) + landing angle inside Player 0's half (25..155deg) or Player 1's half (205..335deg)
-  const sliceJitter = crypto.randomInt(28, 152);
-  const wheelSpinDegrees = 1800 + (firstPlayerId === '0' ? sliceJitter : 180 + sliceJitter);
+  // Blue (Player 0) occupies 0..180deg clockwise, so rotating 1800 + (210..330)deg puts Blue under the top pointer!
+  // Pink (Player 1) occupies 180..360deg clockwise, so rotating 1800 + (30..150)deg puts Pink under the top pointer!
+  const sliceJitter = crypto.randomInt(30, 150);
+  const wheelSpinDegrees = 1800 + (firstPlayerId === '0' ? 180 + sliceJitter : sliceJitter);
 
   const setupPlayer = (id: '0' | '1', name: string, deck: HydratedDeckPayload): PlayerState => {
     const shuffledMain = secureShuffle(deck.mainDeck);
@@ -1338,7 +1340,6 @@ function drainEffectQueue(
     resumeEndTurn
   );
 
-  // If resolving head opened a modal/target prompt or ended the game, pause draining until user resolves it
   if (
     workingState.phase === 'PENDING_HAND_CHOICE' ||
     workingState.phase === 'PENDING_TARGET' ||
@@ -1347,7 +1348,6 @@ function drainEffectQueue(
     return workingState;
   }
 
-  // Otherwise continue draining remaining queued effects
   return drainEffectQueue(workingState, resumeQueue, resumeEndTurn);
 }
 
@@ -1644,8 +1644,24 @@ export function playCardFromHand(
   const card = player.hand[cardIdx];
 
   if (!canPayHarmonyCost(player, card)) return state;
-  const effectiveCost = getEffectiveCardCost(player, card);
+  const restriction = canPlayCardRestrictions(state, playerId, card);
+  if (!restriction.allowed) {
+    const blocked = appendActionLog(
+      state,
+      player.displayName,
+      `cannot play ${card.name} (${card.id}): ${restriction.reason}.`,
+      'SYSTEM',
+      card.name
+    );
+    return setManeSpeechBubble(
+      blocked,
+      playerId,
+      `Can't play ${card.name}: ${restriction.reason}`,
+      'WARNING'
+    );
+  }
 
+  const effectiveCost = getEffectiveCardCost(player, card);
   const normalizedType = String(card.type || '').toLowerCase();
 
   if (normalizedType.includes('character')) {
@@ -1821,7 +1837,7 @@ export function playCardFromHand(
     card.name
   );
 
-  nextState = setManeSpeechBubble(nextState, playerId, `I play Event: ${card.name}!`, 'EFFECT');
+  nextState = setManeSpeechBubble(nextState, playerId, `I cast Event: ${card.name}!`, 'EFFECT');
 
   nextState = setActionSpotlight(
     nextState,
@@ -1901,7 +1917,7 @@ export function playCardFromHand(
     card,
     triggerType: 'EVENT_PLAY',
     parsedKind: parsed.kind,
-    targetsOrChoice: 'Automatic / No Target Needed',
+    targetsOrChoice: parsed.requiresChoice ? '0 valid targets found' : 'Automatic / No Target Needed',
     status: parsed.requiresChoice ? 'SKIPPED' : 'RESOLVED',
     notes: eventText,
   });
@@ -3173,7 +3189,6 @@ export function acknowledgeClashAnimation(
     pendingLaneQueueAfterReveal: null,
   };
 
-  // Drain any queued Farewell effects (e.g. Spike: Draw 2, Discard 1) before advancing to the next lane!
   return drainEffectQueue(clearedState, queueToResume, null);
 }
 
