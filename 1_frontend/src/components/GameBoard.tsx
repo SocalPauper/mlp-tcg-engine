@@ -649,10 +649,49 @@ export default function GameBoard({
     ws.send(JSON.stringify({ type: 'GAME_ACTION', action, payload }));
   };
 
-  const handleSubmitMatchBug = async (e: React.FormEvent) => {
+const handleSubmitMatchBug = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inMatchBugSummary.trim()) return;
     setSubmittingMatchBug(true);
+
+    const compactSnapshot = {
+      roomId: gameState.roomId,
+      phase: gameState.phase,
+      turnNumber: gameState.turnNumber,
+      turnPlayerId: gameState.turnPlayerId,
+      firstPlayerId: gameState.firstPlayerId,
+      contactState: gameState.contactState,
+      pendingTarget: gameState.pendingTarget,
+      pendingHandChoice: gameState.pendingHandChoice,
+      delayedTriggers: gameState.delayedTriggers,
+      players: {
+        '0': {
+          displayName: gameState.players['0'].displayName,
+          leader: gameState.players['0'].leader,
+          storyProgress: gameState.players['0'].storyProgress,
+          storyStages: gameState.players['0'].storyStages,
+          sceneArea: gameState.players['0'].sceneArea,
+          adventureArea: gameState.players['0'].adventureArea,
+          handCount: gameState.players['0'].hand.length,
+          hand: gameState.players['0'].hand,
+          retirement: gameState.players['0'].retirement,
+        },
+        '1': {
+          displayName: gameState.players['1'].displayName,
+          leader: gameState.players['1'].leader,
+          storyProgress: gameState.players['1'].storyProgress,
+          storyStages: gameState.players['1'].storyStages,
+          sceneArea: gameState.players['1'].sceneArea,
+          adventureArea: gameState.players['1'].adventureArea,
+          handCount: gameState.players['1'].hand.length,
+          hand: gameState.players['1'].hand,
+          retirement: gameState.players['1'].retirement,
+        },
+      },
+      actionLog: gameState.actionLog || [],
+      debugTrace: gameState.debugTrace || [],
+    };
+
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE_URL}/api/bug-reports`, {
@@ -667,19 +706,36 @@ export default function GameBoard({
           seat,
           reporterName: me?.displayName || 'Duelist',
           summary: inMatchBugSummary.trim(),
-          boardSnapshot: gameState,
+          boardSnapshot: compactSnapshot,
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         alert(`🐞 Match Bug Report #${data.reportId} saved with full board state & debug trace!`);
         setInMatchBugSummary('');
         setShowInMatchBugModal(false);
-      } else {
-        alert(data.error || 'Failed to submit bug report.');
+        return;
       }
+      throw new Error(data.error || `HTTP ${res.status}`);
     } catch {
-      alert('Network error submitting match bug report.');
+      // Fallback over the active match WebSocket so reports never fail during live gameplay
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            type: 'REPORT_BUG',
+            roomCode: gameState.roomId,
+            seat,
+            reporterName: me?.displayName || 'Duelist',
+            summary: inMatchBugSummary.trim(),
+            boardSnapshot: compactSnapshot,
+          })
+        );
+        alert('🐞 Match Bug Report submitted via live match connection!');
+        setInMatchBugSummary('');
+        setShowInMatchBugModal(false);
+      } else {
+        alert('Unable to reach server to submit bug report. Please check your connection.');
+      }
     } finally {
       setSubmittingMatchBug(false);
     }

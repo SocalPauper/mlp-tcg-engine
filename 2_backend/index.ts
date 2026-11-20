@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
 import { initDatabase, pool } from '../4_data/db.js';
+import { optionalAuthenticateToken, AuthenticatedRequest } from './middleware/authMiddleware.js';
 
 import authRouter from './routes/auth.js';
 import cardsRouter from './routes/cards.js';
@@ -14,13 +15,55 @@ import rankedRouter from './routes/ranked.js';
 import { GameManager } from './websocket/gameManager.js';
 
 const app = express();
+app.set('trust proxy', 1);
 
-app.use(cors({
-  origin: ['https://equestria-clash.pages.dev', 'http://localhost:5173', 'http://localhost:3000'],
-  credentials: true
-}));
+const allowedOrigins = [
+  'https://equestria-clash.pages.dev',
+  'https://mlp-tcg-engine.onrender.com',
+  'http://localhost:5173',
+  'http://localhost:3000',
+];
 
-app.use(express.json());
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.pages.dev')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  })
+);
+
+app.use(express.json({ limit: '10mb' }));
+
+// Lightweight IP rate limiter to prevent brute-force logins, shop spam, or bug-report floods
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+function createRateLimiter(maxRequests: number, windowMs: number, prefix: string) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const key = `${prefix}:${req.ip || 'unknown'}`;
+    const now = Date.now();
+    const entry = rateBuckets.get(key);
+    if (!entry || now > entry.resetAt) {
+      rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    if (entry.count >= maxRequests) {
+      return res.status(429).json({ error: 'Too many requests. Please slow down and try again shortly.' });
+    }
+    entry.count += 1;
+    next();
+  };
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of rateBuckets.entries()) {
+    if (now > v.resetAt) rateBuckets.delete(k);
+  }
+}, 60_000);
 
 const PORT = process.env.PORT || 3001;
 
@@ -28,13 +71,11 @@ async function startServer() {
   try {
     await initDatabase();
 
-    // 1. Ensure schemas exist
     await pool.query(`
       CREATE SCHEMA IF NOT EXISTS auth;
       CREATE SCHEMA IF NOT EXISTS game;
     `);
 
-    // 2. Provision auth.users with UUID primary key
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth.users (
         id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -53,21 +94,6 @@ async function startServer() {
       );
     `);
 
-    // Safety check: If auth.users was previously created as integer (serial), convert it to UUID safely
-    await pool.query(`
-      DO $$ 
-      BEGIN
-        IF EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_schema = 'auth' AND table_name = 'users' AND column_name = 'id' AND data_type = 'integer'
-        ) THEN
-          ALTER TABLE auth.user_cards DROP CONSTRAINT IF EXISTS user_cards_user_id_fkey;
-          ALTER TABLE auth.users ALTER COLUMN id TYPE UUID USING gen_random_uuid();
-        END IF;
-      END $$;
-    `);
-
-    // 3. Deck structure
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth.decks (
         id VARCHAR(255) PRIMARY KEY,
@@ -81,7 +107,6 @@ async function startServer() {
       );
     `);
 
-    // 4. Game inventory table matching DBeaver schema (auth.user_cards)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth.user_cards (
         user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -93,7 +118,6 @@ async function startServer() {
       );
     `);
 
-    // 5. Weekly shop deals table for guaranteed weekly rotations
     await pool.query(`
       CREATE TABLE IF NOT EXISTS game.weekly_shop_deals (
         id SERIAL PRIMARY KEY,
@@ -105,7 +129,6 @@ async function startServer() {
       );
     `);
 
-    // 6. Persistent Global Site Settings (Wallpapers, Opacity, Live Announcements)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth.site_settings (
         setting_key VARCHAR(100) PRIMARY KEY,
@@ -115,7 +138,6 @@ async function startServer() {
       );
     `);
 
-    // 7. Persistent Media Registry (R2 uploads for Admin Themes & Fan Page)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth.uploaded_media (
         id SERIAL PRIMARY KEY,
@@ -131,7 +153,6 @@ async function startServer() {
       ALTER TABLE auth.uploaded_media ADD COLUMN IF NOT EXISTS title VARCHAR(255);
     `);
 
-    // 8. Fan Page Forum Tables (Threads, Nested Comments, Votes)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth.forum_posts (
         id VARCHAR(255) PRIMARY KEY,
@@ -168,7 +189,6 @@ async function startServer() {
       );
     `);
 
-    // 9. Ranked Mode Ratings & Match History Tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth.player_ratings (
         user_id VARCHAR(255) PRIMARY KEY,
@@ -200,10 +220,10 @@ async function startServer() {
     console.error('[DATABASE INIT ERROR]', err.message);
   }
 
-  // Mount Routes
-  app.use('/api/auth', authRouter);
-  app.use('/api/users', authRouter);
-  app.use('/api/shop', shopsRouter);
+  // Mount Routes with Rate Limiters on sensitive endpoints
+  app.use('/api/auth', createRateLimiter(25, 60_000, 'auth'), authRouter);
+  app.use('/api/users', createRateLimiter(25, 60_000, 'users'), authRouter);
+  app.use('/api/shop', createRateLimiter(40, 60_000, 'shop'), shopsRouter);
   app.use('/api/media', mediaRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/forum', forumRouter);
@@ -211,21 +231,84 @@ async function startServer() {
   app.use('/api', cardsRouter);
   app.use('/api', decksRouter);
 
-  app.get('/api/health', (req, res) => {
+  // Public / In-Match Bug Report Submission Endpoint
+// Public / In-Match Bug Report Submission Endpoint
+  app.post(
+    '/api/bug-reports',
+    createRateLimiter(15, 60_000, 'bugs'),
+    optionalAuthenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      const { category, roomCode, seat, summary, boardSnapshot, reporterName } = req.body || {};
+      const cleanSummary = String(summary || '').trim().slice(0, 2000);
+      if (!cleanSummary) {
+        return res.status(400).json({ error: 'Please describe the issue before submitting.' });
+      }
+
+      const finalReporterId = req.user?.id || null;
+      const finalReporterName = String(
+        req.user?.username || reporterName || 'Alpha Tester'
+      ).slice(0, 100);
+
+      try {
+        await pool.query(`
+          CREATE SCHEMA IF NOT EXISTS game;
+          CREATE TABLE IF NOT EXISTS game.bug_reports (
+            id SERIAL PRIMARY KEY,
+            reporter_id VARCHAR(100),
+            reporter_name VARCHAR(120) NOT NULL,
+            category VARCHAR(50) DEFAULT 'IN_MATCH',
+            room_code VARCHAR(50),
+            seat VARCHAR(20),
+            summary TEXT NOT NULL,
+            board_snapshot JSONB,
+            status VARCHAR(30) DEFAULT 'OPEN',
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
+        `);
+
+        const { rows } = await pool.query(
+          `INSERT INTO game.bug_reports (reporter_id, reporter_name, category, room_code, seat, summary, board_snapshot)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+           RETURNING id, created_at`,
+          [
+            finalReporterId,
+            finalReporterName,
+            String(category || 'GENERAL').slice(0, 40),
+            roomCode ? String(roomCode).slice(0, 40) : null,
+            seat ? String(seat).slice(0, 20) : null,
+            cleanSummary,
+            boardSnapshot ? JSON.stringify(boardSnapshot) : null,
+          ]
+        );
+        res.status(201).json({ success: true, reportId: rows[0].id });
+      } catch (err: any) {
+        console.error('[BUG REPORT SAVE ERROR]', err.message);
+        res.status(500).json({ error: `Database error saving report: ${err.message}` });
+      }
+    }
+  );
+
+  app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', engine: 'MLP TCG Engine online' });
   });
 
   app.get('/api/site/announcement', async (_req, res) => {
     try {
       const { rows } = await pool.query(
-        `SELECT setting_value FROM auth.site_settings WHERE setting_key = 'site_announcement'`
+        `SELECT setting_key, setting_value FROM auth.site_settings WHERE setting_key IN ('site_announcement', 'maintenance_mode')`
       );
+      const map = new Map(rows.map((r: any) => [r.setting_key, r.setting_value]));
       res.json({
         success: true,
-        announcement: rows[0]?.setting_value || 'Welcome to Equestria Clash TCG Online!',
+        announcement: map.get('site_announcement') || 'Welcome to Equestria Clash TCG Online!',
+        maintenanceMode: map.get('maintenance_mode') === 'true',
       });
     } catch {
-      res.json({ success: true, announcement: 'Welcome to Equestria Clash TCG Online!' });
+      res.json({
+        success: true,
+        announcement: 'Welcome to Equestria Clash TCG Online!',
+        maintenanceMode: false,
+      });
     }
   });
 

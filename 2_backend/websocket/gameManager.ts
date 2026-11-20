@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { pool } from '../../4_data/db.js';
+import { verifyJwtToken } from '../middleware/authMiddleware.js';
 import {
   KayouGameState,
   CardDefinition,
@@ -42,6 +43,7 @@ const startermaps: any[] = JSON.parse(
 const TURN_DURATION_MS = 180_000;
 const DISCONNECT_GRACE_MS = 180_000;
 const RANKED_REMATCH_COOLDOWN_MS = 10 * 60 * 1000;
+const STALE_ROOM_TTL_MS = 20 * 60 * 1000;
 
 interface SeatConnection {
   ws: WebSocket | null;
@@ -55,17 +57,22 @@ interface SeatConnection {
 
 interface GameRoom {
   roomCode: string;
+  roomName: string;
   mode: string;
   isRandomMatch: boolean;
   isRanked: boolean;
   isPrivate: boolean;
+  allowSpectators: boolean;
   password?: string;
+  createdAt: number;
   state: KayouGameState;
   seats: Partial<Record<'0' | '1', SeatConnection>>;
   spectators: Set<WebSocket>;
   turnTimer?: ReturnType<typeof setTimeout>;
+  forfeitedBySeat?: '0' | '1';
   rankedRecorded?: boolean;
   rewardsGranted?: boolean;
+  matchArchived?: boolean;
 }
 
 interface QueuedPlayer {
@@ -91,16 +98,63 @@ export class GameManager {
   private rooms: Map<string, GameRoom> = new Map();
   private quickPlayQueue: QueuedPlayer[] = [];
   private recentRankedOpponents: Map<string, { opponentId: string; timestamp: number }> = new Map();
+  private socketActionTimestamps: WeakMap<WebSocket, number[]> = new WeakMap();
 
   constructor(server: http.Server) {
     this.wss = new WebSocketServer({ server });
     this.setupListeners();
+    this.startGarbageCollector();
+  }
+
+  private startGarbageCollector() {
+    setInterval(() => {
+      const now = Date.now();
+      this.quickPlayQueue = this.quickPlayQueue.filter((q) => q.ws.readyState === WebSocket.OPEN);
+      for (const [code, room] of this.rooms.entries()) {
+        if (
+          room.state.phase === 'WAITING_FOR_PLAYERS' &&
+          now - room.createdAt > STALE_ROOM_TTL_MS
+        ) {
+          this.clearRoomTimers(room);
+          this.rooms.delete(code);
+        }
+      }
+    }, 60_000);
+  }
+
+  private isSocketRateLimited(ws: WebSocket): boolean {
+    const now = Date.now();
+    const recent = (this.socketActionTimestamps.get(ws) || []).filter((t) => now - t < 1000);
+    if (recent.length >= 18) return true;
+    recent.push(now);
+    this.socketActionTimestamps.set(ws, recent);
+    return false;
+  }
+
+  private resolveVerifiedUserId(msg: any): string | undefined {
+    if (msg.token) {
+      const decoded = verifyJwtToken(String(msg.token));
+      if (decoded?.id) return String(decoded.id);
+    }
+    return undefined;
+  }
+
+  private async isMaintenanceModeActive(): Promise<boolean> {
+    try {
+      const { rows } = await pool.query(
+        `SELECT setting_value FROM auth.site_settings WHERE setting_key = 'maintenance_mode'`
+      );
+      return rows[0]?.setting_value === 'true';
+    } catch {
+      return false;
+    }
   }
 
   private setupListeners() {
     this.wss.on('connection', (ws: WebSocket) => {
       ws.on('message', async (rawData: string) => {
         try {
+          if (this.isSocketRateLimited(ws)) return;
           const message = JSON.parse(rawData.toString());
           await this.handleMessage(ws, message);
         } catch (err) {
@@ -118,6 +172,72 @@ export class GameManager {
     return String((ws as any)?._socket?.remoteAddress || 'unknown');
   }
 
+  private async verifyDeckOwnership(
+    userId: string | undefined,
+    deckId: string
+  ): Promise<{ valid: boolean; reason?: string }> {
+    const cleanId = String(deckId || 'starter-sd01').trim();
+    if (cleanId.startsWith('starter-')) return { valid: true };
+    if (!userId) {
+      return { valid: false, reason: 'Sign in to play custom decks in public matchmaking.' };
+    }
+
+    const deckRes = await pool.query('SELECT cards FROM auth.decks WHERE id = $1', [cleanId]);
+    if (deckRes.rows.length === 0) {
+      return { valid: false, reason: 'Selected custom deck was not found.' };
+    }
+
+    const parsedCards =
+      typeof deckRes.rows[0].cards === 'string'
+        ? JSON.parse(deckRes.rows[0].cards)
+        : deckRes.rows[0].cards || {};
+
+    const neededCounts = new Map<string, number>();
+    for (const section of ['story_deck', 'scene_deck', 'main_deck']) {
+      for (const entry of parsedCards[section] || []) {
+        const cid = typeof entry === 'string' ? entry : entry?.card_id || entry?.id;
+        if (!cid) continue;
+        const up = String(cid).toUpperCase();
+        if (up.startsWith('SD')) continue;
+        neededCounts.set(up, (neededCounts.get(up) || 0) + 1);
+      }
+    }
+
+    if (neededCounts.size === 0) return { valid: true };
+
+    const catalogRes = await pool.query(
+      `SELECT id, rarity, element, card_type FROM game.cards WHERE UPPER(id) = ANY($1)`,
+      [Array.from(neededCounts.keys())]
+    );
+    const ownedRes = await pool.query(
+      `SELECT UPPER(card_id) AS cid, quantity FROM auth.user_cards WHERE user_id = $1`,
+      [userId]
+    );
+    const ownedMap = new Map<string, number>(
+      ownedRes.rows.map((r: any) => [String(r.cid), Number(r.quantity) || 0])
+    );
+
+    for (const row of catalogRes.rows) {
+      const upId = String(row.id).toUpperCase();
+      const rar = String(row.rarity || 'C').toUpperCase();
+      const isFreePool =
+        (['C', 'U', 'R', 'SPR'].includes(rar) && !upId.endsWith('-S')) ||
+        (String(row.element || '').toLowerCase() === 'everyday' && !upId.endsWith('-S'));
+      if (isFreePool) continue;
+
+      const needed = neededCounts.get(upId) || 0;
+      const owned = ownedMap.get(upId) || 0;
+      if (owned < needed) {
+        return {
+          valid: false,
+          reason: `Deck contains unowned wishlist cards (${upId}). Unlock them in the Pony Shop or choose another deck!`,
+        };
+      }
+    }
+
+    return { valid: true };
+  }
+
   private async handleMessage(ws: WebSocket, msg: any) {
     switch (msg.type) {
       case 'PING': {
@@ -127,23 +247,45 @@ export class GameManager {
         break;
       }
 
+      case 'GET_ROOMS':
       case 'GET_OPEN_ROOMS': {
         this.sendOpenRooms(ws);
         break;
       }
 
       case 'QUICK_PLAY': {
-        const mode = msg.mode || 'Standard';
-        const userId = msg.userId ? String(msg.userId) : undefined;
-        const displayName = msg.displayName || 'Guest Pony';
-        const deckId = msg.deckId || 'starter-sd01';
+        if (await this.isMaintenanceModeActive()) {
+          ws.send(
+            JSON.stringify({
+              type: 'ERROR',
+              message: '🔧 Patch rollout in progress! New matchmaking queues are temporarily paused.',
+            })
+          );
+          return;
+        }
+
+        const mode = msg.mode || 'Casual';
+        const verifiedUserId = this.resolveVerifiedUserId(msg);
+        const displayName = String(msg.username || msg.displayName || 'Guest Pony').slice(0, 40);
+        const deckId = String(msg.deckId || 'starter-sd01').trim();
+        const isRankedQueue = String(mode).toLowerCase() === 'ranked';
+
+        if (isRankedQueue && !verifiedUserId) {
+          ws.send(JSON.stringify({ type: 'ERROR', message: 'You must be signed in to play Ranked.' }));
+          return;
+        }
+
+        const ownershipCheck = await this.verifyDeckOwnership(verifiedUserId, deckId);
+        if (!ownershipCheck.valid) {
+          ws.send(JSON.stringify({ type: 'ERROR', message: ownershipCheck.reason }));
+          return;
+        }
 
         this.quickPlayQueue = this.quickPlayQueue.filter(
           (q) => q.ws !== ws && q.ws.readyState === WebSocket.OPEN
         );
 
-        const incomingKey = userId || `${displayName}:${this.getClientIp(ws)}`;
-        const isRankedQueue = String(mode).toLowerCase() === 'ranked';
+        const incomingKey = verifiedUserId || `${displayName}:${this.getClientIp(ws)}`;
 
         let matchIdx = -1;
         for (let i = 0; i < this.quickPlayQueue.length; i++) {
@@ -189,10 +331,13 @@ export class GameManager {
 
           const room: GameRoom = {
             roomCode,
+            roomName: `${mode} Match`,
             mode,
             isRandomMatch: true,
             isRanked: isRankedQueue,
             isPrivate: false,
+            allowSpectators: true,
+            createdAt: Date.now(),
             state: createWaitingMatch(),
             seats: {},
             spectators: new Set(),
@@ -200,13 +345,20 @@ export class GameManager {
           room.state.roomId = roomCode;
           this.rooms.set(roomCode, room);
 
-          await this.seatPlayer(room, '0', opponent.ws, opponent.userId, opponent.displayName, opponent.deckId);
-          await this.seatPlayer(room, '1', ws, userId, displayName, deckId);
+          await this.seatPlayer(
+            room,
+            '0',
+            opponent.ws,
+            opponent.userId,
+            opponent.displayName,
+            opponent.deckId
+          );
+          await this.seatPlayer(room, '1', ws, verifiedUserId, displayName, deckId);
           this.broadcastRoomList();
         } else {
           this.quickPlayQueue.push({
             ws,
-            userId,
+            userId: verifiedUserId,
             displayName,
             deckId,
             mode,
@@ -224,14 +376,19 @@ export class GameManager {
 
       case 'CREATE_ROOM': {
         const roomCode = this.generateRoomCode();
-        const isPrivate = Boolean(msg.isPrivate);
+        const verifiedUserId = this.resolveVerifiedUserId(msg);
+        const displayName = String(msg.username || msg.displayName || 'Host Pony').slice(0, 40);
+        const isPrivate = Boolean(msg.password || msg.isPrivate);
         const room: GameRoom = {
           roomCode,
-          mode: msg.mode || 'Standard',
+          roomName: String(msg.roomName || `${displayName}'s Room`).slice(0, 60),
+          mode: msg.mode || 'Casual',
           isRandomMatch: false,
           isRanked: false,
           isPrivate,
+          allowSpectators: msg.allowSpectators !== false,
           password: msg.password || undefined,
+          createdAt: Date.now(),
           state: createWaitingMatch(),
           seats: {},
           spectators: new Set(),
@@ -243,34 +400,38 @@ export class GameManager {
           room,
           '0',
           ws,
-          msg.userId ? String(msg.userId) : undefined,
-          msg.displayName || 'Host Pony',
+          verifiedUserId,
+          displayName,
           msg.deckId || 'starter-sd01'
         );
         this.broadcastRoomList();
         break;
       }
 
-      case 'JOIN_ROOM': {
+      case 'JOIN_ROOM':
+      case 'SPECTATE_ROOM': {
         const roomCode = String(msg.roomCode || '').trim().toUpperCase();
         const room = this.rooms.get(roomCode);
         if (!room) {
           ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found.' }));
           return;
         }
-        if (room.isPrivate && room.password && room.password !== msg.password) {
+        if (room.password && room.password !== msg.password) {
           ws.send(JSON.stringify({ type: 'ERROR', message: 'Incorrect room password.' }));
           return;
         }
 
-        const asSpectator = Boolean(msg.asSpectator);
+        const asSpectator = msg.type === 'SPECTATE_ROOM' || Boolean(msg.asSpectator);
+        const verifiedUserId = this.resolveVerifiedUserId(msg);
+        const displayName = String(msg.username || msg.displayName || 'Duelist').slice(0, 40);
+
         if (!asSpectator && !room.seats['0']) {
           await this.seatPlayer(
             room,
             '0',
             ws,
-            msg.userId ? String(msg.userId) : undefined,
-            msg.displayName || 'Player 1',
+            verifiedUserId,
+            displayName,
             msg.deckId || 'starter-sd01'
           );
         } else if (!asSpectator && !room.seats['1']) {
@@ -278,11 +439,15 @@ export class GameManager {
             room,
             '1',
             ws,
-            msg.userId ? String(msg.userId) : undefined,
-            msg.displayName || 'Player 2',
+            verifiedUserId,
+            displayName,
             msg.deckId || 'starter-sd01'
           );
         } else {
+          if (!room.allowSpectators) {
+            ws.send(JSON.stringify({ type: 'ERROR', message: 'Spectators are disabled in this room.' }));
+            return;
+          }
           room.spectators.add(ws);
           ws.send(
             JSON.stringify({
@@ -384,11 +549,7 @@ export class GameManager {
             room.state = acknowledgeClashAnimation(room.state, seat);
             break;
           case 'BREAKTHROUGH_CHOICE':
-            room.state = resolveBreakthroughChoice(
-              room.state,
-              seat,
-              msg.payload?.choice
-            );
+            room.state = resolveBreakthroughChoice(room.state, seat, msg.payload?.choice);
             break;
           case 'ACK_PLAN_REVEAL':
             room.state = acknowledgePlanReveal(room.state, seat);
@@ -420,6 +581,7 @@ export class GameManager {
         if (seat === '0' || seat === '1') {
           this.clearRoomTimers(room);
           if (room.state.phase !== 'WAITING_FOR_PLAYERS' && room.state.phase !== 'GAME_OVER') {
+            room.forfeitedBySeat = seat;
             room.state = forfeitMatch(
               room.state,
               seat,
@@ -436,6 +598,51 @@ export class GameManager {
           this.rooms.delete(room.roomCode);
         }
         this.broadcastRoomList();
+        break;
+      }
+	  
+	  case 'REPORT_BUG': {
+        const found = this.findRoomBySocket(ws);
+        const roomCode = found?.room.roomCode || String(msg.roomCode || 'UNKNOWN');
+        const seat = found?.seat || String(msg.seat || 'unknown');
+        const summary = String(msg.summary || '').trim().slice(0, 2000);
+        if (!summary) return;
+
+        const reporterName =
+          found && (found.seat === '0' || found.seat === '1')
+            ? found.room.state.players[found.seat].displayName
+            : String(msg.reporterName || 'Duelist').slice(0, 100);
+
+        try {
+          await pool.query(`
+            CREATE SCHEMA IF NOT EXISTS game;
+            CREATE TABLE IF NOT EXISTS game.bug_reports (
+              id SERIAL PRIMARY KEY,
+              reporter_id VARCHAR(100),
+              reporter_name VARCHAR(120) NOT NULL,
+              category VARCHAR(50) DEFAULT 'IN_MATCH',
+              room_code VARCHAR(50),
+              seat VARCHAR(20),
+              summary TEXT NOT NULL,
+              board_snapshot JSONB,
+              status VARCHAR(30) DEFAULT 'OPEN',
+              created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+          `);
+
+          const snapshot = found ? found.room.state : msg.boardSnapshot || null;
+          const { rows } = await pool.query(
+            `INSERT INTO game.bug_reports (reporter_name, category, room_code, seat, summary, board_snapshot)
+             VALUES ($1, 'IN_MATCH_GAMEPLAY', $2, $3, $4, $5::jsonb)
+             RETURNING id`,
+            [reporterName, roomCode, seat, summary, snapshot ? JSON.stringify(snapshot) : null]
+          );
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'BUG_REPORT_SAVED', reportId: rows[0].id }));
+          }
+        } catch (err: any) {
+          console.error('[WS BUG REPORT ERROR]', err.message);
+        }
         break;
       }
     }
@@ -486,6 +693,7 @@ export class GameManager {
     room.turnTimer = setTimeout(async () => {
       if (room.state.phase === 'GAME_OVER' || room.state.phase === 'WAITING_FOR_PLAYERS') return;
       const idleSeat = room.state.turnPlayerId;
+      room.forfeitedBySeat = idleSeat;
       room.state = forfeitMatch(
         room.state,
         idleSeat,
@@ -517,8 +725,39 @@ export class GameManager {
     return 'CASUAL';
   }
 
+  private async archiveCompletedMatchLog(room: GameRoom, queueTier: string) {
+    if (room.matchArchived) return;
+    room.matchArchived = true;
+    try {
+      const winnerName = room.state.winnerId
+        ? room.state.players[room.state.winnerId]?.displayName || 'Unknown'
+        : null;
+      await pool.query(
+        `INSERT INTO game.match_logs (room_code, queue_tier, player0_name, player1_name, winner_name, win_reason, total_turns, action_log, debug_trace)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)
+         ON CONFLICT (room_code) DO NOTHING`,
+        [
+          room.roomCode,
+          queueTier,
+          room.state.players['0'].displayName,
+          room.state.players['1'].displayName,
+          winnerName,
+          room.state.winReason || '',
+          room.state.turnNumber,
+          JSON.stringify(room.state.actionLog || []),
+          JSON.stringify(room.state.debugTrace || []),
+        ]
+      );
+    } catch (err) {
+      console.error('[MATCH ARCHIVE ERROR]', err);
+    }
+  }
+
   private async finalizeMatchOutcome(room: GameRoom) {
     if (room.state.phase !== 'GAME_OVER' || !room.state.winnerId) return;
+
+    const queueTier = this.getQueueTier(room);
+    await this.archiveCompletedMatchLog(room, queueTier);
 
     if (room.isRanked && !room.rankedRecorded) {
       room.rankedRecorded = true;
@@ -573,7 +812,6 @@ export class GameManager {
     if (room.rewardsGranted) return;
     room.rewardsGranted = true;
 
-    const queueTier = this.getQueueTier(room);
     const rewardSummary: Partial<Record<'0' | '1', MatchRewardSummary>> = {};
 
     if (queueTier === 'PRIVATE') {
@@ -596,9 +834,9 @@ export class GameManager {
     const winnerSeat = room.state.winnerId;
     const loserSeat: '0' | '1' = winnerSeat === '0' ? '1' : '0';
     const reachedTurn4 = room.state.turnNumber >= 4;
-    const isForfeitOrDisconnect = /forfeit|disconnected|inactivity/i.test(
-      room.state.winReason || ''
-    );
+    const isForfeitOrDisconnect =
+      Boolean(room.forfeitedBySeat) ||
+      /forfeit|disconnected|inactivity/i.test(room.state.winReason || '');
 
     const client = await pool.connect();
     try {
@@ -607,6 +845,7 @@ export class GameManager {
       for (const seat of [winnerSeat, loserSeat] as ('0' | '1')[]) {
         const userId = room.seats[seat]?.userId;
         const isWinner = seat === winnerSeat;
+        const didThisSeatForfeit = room.forfeitedBySeat === seat;
 
         if (!userId) {
           rewardSummary[seat] = {
@@ -638,7 +877,7 @@ export class GameManager {
         let nextStreak = 0;
         let note = '';
 
-        if (isWinner) {
+        if (isWinner && !didThisSeatForfeit) {
           basePoints = tierRates.win;
           nextStreak = currentStreak + 1;
           if (!claimedToday) {
@@ -650,11 +889,13 @@ export class GameManager {
           note = `Victory in ${queueTier.replace('_', ' ')}!`;
         } else {
           nextStreak = 0;
-          if (reachedTurn4 && !isForfeitOrDisconnect) {
+          if (!didThisSeatForfeit && reachedTurn4 && !isForfeitOrDisconnect) {
             basePoints = tierRates.loss;
             note = `Completed match (Turn ${room.state.turnNumber}) consolation reward.`;
           } else {
-            note = 'Loss rewards require reaching Turn 4 without forfeiting/disconnecting.';
+            note = didThisSeatForfeit
+              ? 'Forfeited / timed-out players earn 0 Pony Points.'
+              : 'Loss rewards require reaching Turn 4 without forfeiting/disconnecting.';
           }
         }
 
@@ -879,18 +1120,19 @@ export class GameManager {
   }
 
   private sendOpenRooms(ws: WebSocket) {
-    const openRooms = Array.from(this.rooms.values()).map((r) => ({
+    const roomsList = Array.from(this.rooms.values()).map((r) => ({
+      code: r.roomCode,
       roomCode: r.roomCode,
+      name: r.roomName,
+      host: r.seats['0']?.displayName || 'Host',
       mode: r.mode,
-      isPrivate: r.isPrivate,
       hasPassword: Boolean(r.password),
-      player0: r.seats['0']?.displayName || null,
-      player1: r.seats['1']?.displayName || null,
-      spectatorCount: r.spectators.size,
-      status: r.seats['0'] && r.seats['1'] ? 'IN_PROGRESS' : 'WAITING',
+      allowSpectators: r.allowSpectators,
+      playerCount: (r.seats['0'] ? 1 : 0) + (r.seats['1'] ? 1 : 0),
+      status: r.seats['0'] && r.seats['1'] ? 'In-Progress' : 'Waiting',
     }));
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'OPEN_ROOMS', rooms: openRooms }));
+      ws.send(JSON.stringify({ type: 'ROOMS_LIST', rooms: roomsList }));
     }
   }
 
@@ -941,6 +1183,7 @@ export class GameManager {
 
     seatConn.disconnectTimer = setTimeout(async () => {
       if (room.state.phase !== 'GAME_OVER') {
+        room.forfeitedBySeat = seat;
         room.state = forfeitMatch(
           room.state,
           seat,
