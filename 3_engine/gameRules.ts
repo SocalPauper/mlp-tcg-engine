@@ -256,11 +256,8 @@ export function startSeatedMatch(
   p0Name = 'Player 1',
   p1Name = 'Player 2'
 ): KayouGameState {
-  // True unbiased 50/50 cryptographic coin/wheel toss
   const coinFlip = crypto.randomInt(0, 2);
   const firstPlayerId: '0' | '1' = coinFlip === 0 ? '0' : '1';
-  // Blue (Player 0) occupies 0..180deg clockwise, so rotating 1800 + (210..330)deg puts Blue under the top pointer!
-  // Pink (Player 1) occupies 180..360deg clockwise, so rotating 1800 + (30..150)deg puts Pink under the top pointer!
   const sliceJitter = crypto.randomInt(30, 150);
   const wheelSpinDegrees = 1800 + (firstPlayerId === '0' ? 180 + sliceJitter : sliceJitter);
 
@@ -793,7 +790,7 @@ function buildPendingTargetFromParsed(
         if (!c) return false;
         if (parsed.maxLimit !== undefined) {
           const totalPwr = calculateLanePowerBreakdown(state, oppId, l).totalPower;
-          return (Number(c.cost) || 0) <= parsed.maxLimit || totalPwr <= parsed.maxLimit;
+          return totalPwr <= parsed.maxLimit || (Number(c.cost) || 0) <= parsed.maxLimit;
         }
         return true;
       })
@@ -1644,7 +1641,7 @@ export function playCardFromHand(
   const card = player.hand[cardIdx];
 
   if (!canPayHarmonyCost(player, card)) return state;
-  const restriction = canPlayCardRestrictions(state, playerId, card);
+  const restriction = canPlayCardRestrictions(state, playerId, card, targetLane);
   if (!restriction.allowed) {
     const blocked = appendActionLog(
       state,
@@ -1910,6 +1907,16 @@ export function playCardFromHand(
       phase: 'PENDING_TARGET',
       pendingTarget: pending,
     };
+  }
+
+  if (parsed.requiresChoice) {
+    immediateState = appendActionLog(
+      immediateState,
+      player.displayName,
+      `*EFFECT* Event (${card.name} • ${card.id}): no valid target available (${eventText}).`,
+      'EFFECT',
+      card.name
+    );
   }
 
   return appendDebugTrace(immediateState, {
@@ -3106,7 +3113,6 @@ export function passInspireInContact(
     'CLASH'
   );
 
-  // Queue Farewell triggers onto effectResolutionQueue so they resolve visually AFTER CLASH_HOLD!
   if (outcome === 'ATTACKER_WINS') {
     if (!defSlot.preventRetireInContact) {
       workingState = retireCharacterWithFarewell(workingState, defenderId, lane, true);
@@ -3739,7 +3745,6 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     phase: 'END_PHASE',
   };
 
-  // 1. Resolve Delayed Triggers scheduled for End of Turn (Rules 504.6.0: Active Player's triggers resolve first)
   const allDelayed = workingState.delayedTriggers || [];
   const activeMatchingIdx = allDelayed.findIndex(
     (t) =>
@@ -3802,7 +3807,6 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     );
   }
 
-  // 2. Rules v1.3.0 (405.2.0): Enforce 10-card maximum Hand size at End Phase
   const endingPlayerCheck = workingState.players[playerId];
   if (endingPlayerCheck.hand.length > 10) {
     const excess = endingPlayerCheck.hand.length - 10;
@@ -3830,7 +3834,6 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     };
   }
 
-  // 3. Expire "until the end of turn" effects and pass turn
   const nextPlayerId: '0' | '1' = playerId === '0' ? '1' : '0';
   const nextTurnNumber = workingState.turnNumber + 1;
 

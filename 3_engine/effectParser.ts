@@ -9,6 +9,18 @@ import {
   SceneCardInPlay,
 } from './types.js';
 
+const KNOWN_PET_NAMES = new Set([
+  'angel',
+  'winona',
+  'philomena',
+  'turtle',
+  'tank',
+  'owlowiscious',
+  'opal',
+  'opalescence',
+  'gummy',
+]);
+
 export function sanitizeCardText(raw?: string): string {
   if (!raw) return '';
   return raw.replace(/\{\{[^}]*$/g, '').replace(/\{\{|\}\}/g, '').trim();
@@ -42,8 +54,13 @@ export function matchesCardKeywordExact(card: CardDefinition, filterText: string
   const cardName = String(card.name || '').trim().toLowerCase();
   if (cardName === target) return true;
 
-  // Check traits AND card.type (e.g. "Pet", "Earth Pony", "Unicorn", "Pegasus", "Dragon")
-  const combinedKeywords = `${card.traits || ''} ${card.type || ''}`.toLowerCase();
+  const extraText = String((card as any).traitsText || '').toLowerCase();
+  const combinedKeywords = `${card.traits || ''} ${card.type || ''} ${extraText}`.toLowerCase();
+
+  if (target === 'pet' && KNOWN_PET_NAMES.has(cardName)) {
+    return true;
+  }
+
   const traitTokens = combinedKeywords
     .split(/[,/|•·\s]+/)
     .map((t) => t.trim())
@@ -54,21 +71,39 @@ export function matchesCardKeywordExact(card: CardDefinition, filterText: string
   }
 
   const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const wordBoundaryRegex = new RegExp(`(?:^|\\s)${escaped}(?:$|\\s)`, 'i');
+  const wordBoundaryRegex = new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, 'i');
   if (wordBoundaryRegex.test(combinedKeywords)) return true;
 
   return false;
 }
 
+export function extractAdornRestriction(card: CardDefinition): string | null {
+  const text = sanitizeCardText(card.effectText);
+  if (!text) return null;
+  const adornMatch = text.match(/only\s+adorn\s+[｢\[「]([^｣\]」]+)[｣\]」]/i);
+  return adornMatch ? adornMatch[1].trim() : null;
+}
+
 export function canPlayCardRestrictions(
   state: KayouGameState,
   playerId: '0' | '1',
-  card: CardDefinition
+  card: CardDefinition,
+  targetLane?: LaneKey
 ): { allowed: boolean; reason?: string } {
   const text = sanitizeCardText(card.effectText);
   if (!text) return { allowed: true };
 
-  // Check "Only use when <condition>." (e.g., Dress for Competition: "Only use when there is any 「Rarity」 in your Adventure Area.")
+  const adornRequired = extractAdornRestriction(card);
+  if (adornRequired && targetLane) {
+    const targetChar = state.players[playerId].adventureArea[targetLane]?.character;
+    if (!targetChar || !matchesCardKeywordExact(targetChar, adornRequired)) {
+      return {
+        allowed: false,
+        reason: `Only adorn 「${adornRequired}」`,
+      };
+    }
+  }
+
   const onlyMatch = text.match(/^only\s+(?:use|play|activate)\s+when\s+([^.]+)\./i);
   if (onlyMatch) {
     const cond = onlyMatch[1].trim();
@@ -192,7 +227,9 @@ function doesPassiveTextApplyToCharacter(
   ) {
     return 0;
   }
-  if (/Adventure\s*:\s*Tap/i.test(text)) {
+
+  const isContinuousAdventure = /^adventure\s*:\s*while\b/i.test(text);
+  if (/^adventure\s*:/i.test(text) && !isContinuousAdventure) {
     return 0;
   }
 
@@ -207,6 +244,18 @@ function doesPassiveTextApplyToCharacter(
   }
   if (/(?:during|in)\s+rival'?s\s+turn/i.test(text) && isOwnersTurn) {
     return 0;
+  }
+
+  const whileBracketInAdv = text.match(
+    /while\s+there\s+(?:is|are)\s+(?:any|a|an)\s+[｢\[「]([^｣\]」]+)[｣\]」]\s+in\s+your\s+adventure\s+area/i
+  );
+  if (whileBracketInAdv && ownerPlayer) {
+    const required = whileBracketInAdv[1].trim();
+    const hasMatch = (['left', 'center', 'right'] as LaneKey[]).some((l) => {
+      const c = ownerPlayer.adventureArea[l].character;
+      return c !== null && matchesCardKeywordExact(c, required);
+    });
+    if (!hasMatch) return 0;
   }
 
   if (
@@ -272,9 +321,9 @@ function doesPassiveTextApplyToCharacter(
     }
   }
 
-  const charBracketMatch = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
-  if (charBracketMatch && !isAttachedItem) {
-    if (!matchesCardKeywordExact(character, charBracketMatch[1])) {
+  if (!isContinuousAdventure && !isSelfCard && !isAttachedItem) {
+    const charBracketMatch = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
+    if (charBracketMatch && !matchesCardKeywordExact(character, charBracketMatch[1])) {
       return 0;
     }
   }
@@ -468,6 +517,22 @@ export function evaluateBoardCondition(
   const player = state.players[ownerId];
   const allLanes: LaneKey[] = ['left', 'center', 'right'];
 
+  const sceneMinMatch = cond.match(
+    /(?:there\s+are|you\s+have)\s+(\d+)\s+or\s+more\s+scenes?\s+in\s+your\s+scene\s+area/i
+  );
+  if (sceneMinMatch) {
+    const minScenes = parseInt(sceneMinMatch[1], 10) || 1;
+    return player.sceneArea.length >= minScenes;
+  }
+
+  const sceneMaxMatch = cond.match(
+    /(?:there\s+are|you\s+have)\s+(\d+)\s+or\s+(?:fewer|less)\s+scenes?\s+in\s+your\s+scene\s+area/i
+  );
+  if (sceneMaxMatch) {
+    const maxScenes = parseInt(sceneMaxMatch[1], 10) || 0;
+    return player.sceneArea.length <= maxScenes;
+  }
+
   const bracketInAdv = cond.match(
     /there\s+is\s+(?:any|a|an)\s+[｢\[「]([^｣\]」]+)[｣\]」]\s+in\s+your\s+adventure\s+area/i
   );
@@ -559,7 +624,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     return { kind: 'NONE_PASSIVE', amount: 0 };
   }
 
-  // Strip leading "Only use when <condition>." or "If <condition>, " before parsing the action
   text = text.replace(/^only\s+(?:use|play|activate)\s+when\s+[^.]+\.\s*/i, '').trim();
   const leadingIf = text.match(/^if\s+[^,]+,\s*([\s\S]+)$/i);
   if (leadingIf) {
@@ -574,7 +638,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   );
   const parsedMaxLimit = limitMatch ? parseInt(limitMatch[1], 10) : undefined;
 
-  // Owlowiscious (SD01A-C05): "Look/Reveal the top card of the Deck, put it at the top or the bottom of the Deck."
   if (
     /(?:look\s+at|reveal)\s+the\s+top\s+card\s+of\s+(?:your|the)\s+deck.*?(?:top\s+or\s+(?:the )?bottom)/i.test(
       text
@@ -587,7 +650,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Prevent Retire in Contact (e.g., Tailor-made SD01F-SPR01: "Choose 1 「Rarity」 with Inspiration 3 or less in your Adventure Area, it won't retire in Contact until the end of turn.")
   if (/(?:won'?t|cannot|can'?t)\s+(?:be\s+)?retired?\s+in\s+contact/i.test(text)) {
     return {
       kind: 'PREVENT_RETIRE_IN_CONTACT',
@@ -598,7 +660,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Draw X, then discard Y
   const drawDiscardMatch = text.match(
     /draw\s+(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?discard\s+(\d+|a|an)\s+cards?/i
   );
@@ -613,7 +674,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Discard X, then draw Y
   const discardDrawMatch = text.match(
     /discard\s+(?:up\s+to\s+)?(\d+|a|an)\s+cards?[,.]?\s*(?:then\s+)?draw\s+(\d+|a|an)\s+cards?/i
   );
@@ -629,7 +689,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Standalone Discard from Hand
   const soloDiscardMatch = text.match(/discard\s+(\d+|a|an)\s+cards?\s+from\s+(?:your\s+)?hand/i);
   if (soloDiscardMatch) {
     const discRaw = soloDiscardMatch[1].toLowerCase();
@@ -640,7 +699,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Untap / Ready Scenes in Scene Area
   const untapSceneMatch = text.match(
     /(?:choose|select|ready|untap)\s+(\d+|a|an)\s+(?:face-down\s+|exhausted\s+|tapped\s+)?scenes?\s+in\s+your\s+scene\s+area/i
   );
@@ -653,7 +711,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Reveal top X cards of Deck, choose 1 matching card to add to Hand
   const revealPickMatch = text.match(
     /reveal\s+the\s+top\s+(\d+)\s+cards?\s+of\s+(?:your|the)\s+deck.*?choose\s+1\s+(Item|Event|Character|Scene|card|[｢\[「][^｣\]」]+[｣\]」])/i
   );
@@ -671,7 +728,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Treat for you!
   if (/treat for you!|put\s+\d+\s+treat/i.test(text)) {
     const countMatch = text.match(/put\s+(\d+)\s+treat/i);
     const isGlobal = /each\s+/i.test(text);
@@ -690,7 +746,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Unwrap Present
   if (/unwrap\s+(?:1\s+)?present/i.test(text)) {
     const targetSide: 'SELF' | 'OPPONENT' | 'ANY' = /rival'?s\s+adventure/i.test(text)
       ? 'OPPONENT'
@@ -706,7 +761,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Deliver Present
   if (/deliver\s+present|put\s+\d+\s+present/i.test(text)) {
     const countMatch = text.match(/put\s+(\d+)\s+present/i);
     const isGlobal = /each\s+/i.test(text);
@@ -725,7 +779,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Switch Positions
   if (/switch(?:es)?\s+positions/i.test(text)) {
     const targetSide: 'SELF' | 'OPPONENT' = /rival'?s\s+adventure/i.test(text)
       ? 'OPPONENT'
@@ -739,7 +792,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Negative Inspiration debuff on Rival character
   const debuffMatch = text.match(/(?:–|-)\s*(\d+)\s*(?:Inspiration|Power)/i);
   if (debuffMatch && /rival|opponent/i.test(text)) {
     return {
@@ -749,12 +801,10 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Move friendly Character to empty slot
   if (/move\s+(?:1\s+of\s+your\s+|a\s+|an?\s+|it\s+to\s+1\s+empty)/i.test(text)) {
     return { kind: 'TARGET_MOVE_FRIENDLY', amount: 1, requiresChoice: true };
   }
 
-  // Retire opponent Character
   if (
     /retire\s+(?:1\s+of\s+your\s+opponent|an?\s+opponent)|(?:choose|select)\s+1\s+character.*?(?:rival|opponent).*?to\s+retire/i.test(
       text
@@ -768,12 +818,10 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Ready / Untap Character
   if (/ready|untap/i.test(text) && /character/i.test(text)) {
     return { kind: 'TARGET_READY_FRIENDLY', amount: 1, requiresChoice: true };
   }
 
-  // Recover from Retirement Area
   if (
     /retirement\s+(?:area|pile)/i.test(text) &&
     /add\s+(?:it|them)\s+to\s+(?:your\s+)?hand/i.test(text)
@@ -789,7 +837,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Draw cards
   const drawMatch = text.match(/draw\s+(\d+|a|an)\s+card/i);
   if (drawMatch) {
     const rawCount = drawMatch[1].toLowerCase();
@@ -797,7 +844,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     return { kind: 'DRAW', amount: count };
   }
 
-  // Global / trait buff to friendly Characters
   const globalMatch = text.match(
     /(?:all|each)\s+(?:of\s+)?(?:your\s+)?(?:characters?|[｢\[「][^｣\]」]+[｣\]」])\s+(?:in\s+your\s+adventure\s+area\s+)?get[s]?\s*\+(\d+)/i
   );
@@ -809,7 +855,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Single-target or self +Inspiration buff
   const buffMatch = text.match(/\+(\d+)\s*(?:Inspiration|Power)/i);
   if (buffMatch) {
     const isTargeted =
