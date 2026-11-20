@@ -1,4 +1,5 @@
 import React from 'react';
+import { getCardFoilClass } from '../styles/cardFoil';
 import './CardPreviewModal.css';
 
 export interface PreviewableCard {
@@ -34,7 +35,9 @@ export default function CardPreviewModal({ card, onClose, ownedCount }: CardPrev
     (card.name || '').includes(' – ');
 
   const rarityUpper = String(card.rarity || 'C').toUpperCase();
-  const isUltra = ['UR', 'GR', 'CR', 'SPR'].includes(rarityUpper);
+  const isShining = card.id.toUpperCase().endsWith('-S');
+  const isUltra = ['UR', 'GR', 'CR', 'DR', 'SPR'].includes(rarityUpper) || isShining;
+  const foilCls = getCardFoilClass(card);
 
   return (
     <div className="preview-overlay" onClick={onClose}>
@@ -44,11 +47,20 @@ export default function CardPreviewModal({ card, onClose, ownedCount }: CardPrev
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <button type="button" className="preview-close-btn" onClick={onClose} aria-label="Close preview">
+        <button
+          type="button"
+          className="preview-close-btn"
+          onClick={onClose}
+          aria-label="Close preview"
+        >
           ✕
         </button>
 
-        <div className={`preview-image-container ${isStory ? 'story-landscape-box' : ''}`}>
+        <div
+          className={`preview-image-container ${
+            isStory ? 'story-landscape-box' : ''
+          } ${foilCls}`}
+        >
           <img src={card.image_url || CARD_BACK_URL} alt={card.name} />
         </div>
 
@@ -67,7 +79,7 @@ export default function CardPreviewModal({ card, onClose, ownedCount }: CardPrev
             <div>
               <span className="preview-meta-label">RARITY</span>
               <span className={`preview-rarity-pill ${isUltra ? 'ultra' : ''}`}>
-                {rarityUpper}
+                {isShining ? `${rarityUpper}-S (Shining Foil)` : rarityUpper}
               </span>
             </div>
           </div>

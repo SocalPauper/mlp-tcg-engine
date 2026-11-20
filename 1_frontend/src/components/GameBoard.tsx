@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL } from '../config';
+import { getCardFoilClass } from '../styles/cardFoil';
 import { soundFX } from '../utils/soundEffects';
 import './GameBoard.css';
 
@@ -258,16 +260,6 @@ interface GameBoardProps {
   onLeaveMatch: () => void;
 }
 
-function getCardFoilClass(card: CardDefinition | null | undefined): string {
-  if (!card) return '';
-  const id = String(card.id || '').toUpperCase();
-  const rar = String(card.rarity || '').toUpperCase();
-  if (id.endsWith('-S') || rar === 'GR') return 'foil-shining';
-  if (rar === 'UR' || rar === 'CR') return 'foil-ur';
-  if (rar === 'SR' || rar === 'SSR') return 'foil-sr';
-  return '';
-}
-
 function isStoryCard(card: CardDefinition | null): boolean {
   if (!card) return false;
   return (
@@ -493,6 +485,10 @@ export default function GameBoard({
 
   const [pickedChoiceIndices, setPickedChoiceIndices] = useState<number[]>([]);
 
+  const [showInMatchBugModal, setShowInMatchBugModal] = useState(false);
+  const [inMatchBugSummary, setInMatchBugSummary] = useState('');
+  const [submittingMatchBug, setSubmittingMatchBug] = useState(false);
+
   const [turnBannerText, setTurnBannerText] = useState<string | null>(null);
   const prevTurnKeyRef = useRef<string | null>(null);
 
@@ -653,6 +649,42 @@ export default function GameBoard({
     ws.send(JSON.stringify({ type: 'GAME_ACTION', action, payload }));
   };
 
+  const handleSubmitMatchBug = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inMatchBugSummary.trim()) return;
+    setSubmittingMatchBug(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/bug-reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          category: 'IN_MATCH_GAMEPLAY',
+          roomCode: gameState.roomId,
+          seat,
+          reporterName: me?.displayName || 'Duelist',
+          summary: inMatchBugSummary.trim(),
+          boardSnapshot: gameState,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🐞 Match Bug Report #${data.reportId} saved with full board state & debug trace!`);
+        setInMatchBugSummary('');
+        setShowInMatchBugModal(false);
+      } else {
+        alert(data.error || 'Failed to submit bug report.');
+      }
+    } catch {
+      alert('Network error submitting match bug report.');
+    } finally {
+      setSubmittingMatchBug(false);
+    }
+  };
+
   const selectedHandCard = me.hand.find((c) => c.id === selectedHandCardId) || null;
 
   const handleAdventureSlotClick = (
@@ -755,7 +787,6 @@ export default function GameBoard({
 
     return (
       <div className="dual-mane-presence-bar">
-        {/* Player (Self) Mane Character & Live Speech Bubble */}
         <div
           className={`mane-presence-card self-mane ${
             gameState.turnPlayerId === mySeat ? 'is-active' : ''
@@ -794,7 +825,6 @@ export default function GameBoard({
           </div>
         </div>
 
-        {/* Opponent Mane Character & Live Speech Bubble */}
         <div
           className={`mane-presence-card opp-mane ${
             gameState.turnPlayerId === oppSeat ? 'is-active' : ''
@@ -1615,7 +1645,7 @@ export default function GameBoard({
                         key={`${card.id}-${idx}`}
                         className={`hand-choice-card ${
                           isValidChoice ? 'valid-choice' : 'invalid-choice'
-                        } ${isPicked ? 'picked' : ''}`}
+                        } ${isPicked ? 'picked' : ''} ${getCardFoilClass(card)}`}
                         onClick={() => {
                           if (!isValidChoice) return;
                           const maxNeeded = gameState.pendingHandChoice!.count;
@@ -1681,7 +1711,7 @@ export default function GameBoard({
                     key={`${sc.card.id}-${idx}`}
                     className={`inspire-modal-card ${
                       eligibility.eligible ? 'eligible' : 'ineligible'
-                    }`}
+                    } ${sc.isFaceUp ? getCardFoilClass(sc.card) : ''}`}
                     onClick={() => {
                       if (eligibility.eligible) {
                         sendAction('INSPIRE_SCENE', { sceneIndex: idx });
@@ -2140,7 +2170,9 @@ export default function GameBoard({
                 {viewedRetirement.cards.map((card, idx) => (
                   <div
                     key={`${card.id}-${idx}`}
-                    className={`retirement-card-entry ${isStoryCard(card) ? 'story-entry' : ''}`}
+                    className={`retirement-card-entry ${
+                      isStoryCard(card) ? 'story-entry' : ''
+                    } ${getCardFoilClass(card)}`}
                     onClick={() => setInspectedCard(card)}
                   >
                     <span className="retirement-order-tag">
@@ -2191,7 +2223,60 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Dedicated Top Action Bar with 4-Step Rules v1.3.0 Turn-Phase Indicator, Cast Event Button & Sound Toggle */}
+      {/* Live In-Match Bug Reporter Snapshot Modal */}
+      {showInMatchBugModal && (
+        <div
+          className="inspector-backdrop"
+          onClick={() => !submittingMatchBug && setShowInMatchBugModal(false)}
+        >
+          <form
+            className="inspector-card-box"
+            style={{ flexDirection: 'column', maxWidth: '500px', gap: '12px' }}
+            onSubmit={handleSubmitMatchBug}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: 0, color: '#fde047', fontSize: '20px' }}>
+              🐞 Report In-Match Gameplay Bug
+            </h3>
+            <p style={{ margin: 0, fontSize: '13px', color: '#fbcfe8' }}>
+              This automatically attaches a complete snapshot of Turn{' '}
+              <strong>{gameState.turnNumber}</strong> ({gameState.phase}), all lanes, hands, and all{' '}
+              <strong>{debugTraces.length}</strong> Debug Trace entries!
+            </p>
+            <textarea
+              rows={4}
+              required
+              placeholder="Which card or rule didn't trigger as expected?"
+              value={inMatchBugSummary}
+              onChange={(e) => setInMatchBugSummary(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px',
+                borderRadius: '10px',
+                background: '#12071c',
+                color: '#fff',
+                border: '2px solid #f472b6',
+                fontFamily: 'Nunito, sans-serif',
+              }}
+            />
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="action-bar-btn secondary"
+                onClick={() => setShowInMatchBugModal(false)}
+                disabled={submittingMatchBug}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="action-bar-btn gold" disabled={submittingMatchBug}>
+                {submittingMatchBug ? 'Capturing Snapshot...' : 'Submit Snapshot 🐞'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Dedicated Top Action Bar with 4-Step Rules v1.3.0 Turn-Phase Indicator, Cast Event, Report Bug & Sound Toggle */}
       <div
         className={`center-action-bar ${
           isMyTurn ? 'my-turn-bar' : isOppTurn ? 'opp-turn-bar' : ''
@@ -2306,6 +2391,16 @@ export default function GameBoard({
               )}
             </>
           )}
+
+          <button
+            type="button"
+            className="action-bar-btn secondary"
+            style={{ borderColor: '#38bdf8', color: '#7dd3fc' }}
+            title="Capture current board state & debug log to report a bug"
+            onClick={() => setShowInMatchBugModal(true)}
+          >
+            🐞 Report Bug
+          </button>
 
           <button
             type="button"

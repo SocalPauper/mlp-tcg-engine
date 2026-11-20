@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getCardFoilClass } from '../styles/cardFoil';
 import './DeckBuilder.css';
 
 interface Card {
@@ -52,15 +53,6 @@ function isStoryCard(c: Card): boolean {
     (c.name || '').includes(' - ') ||
     (c.name || '').includes(' – ')
   );
-}
-
-function getCardFoilClass(c: Card): string {
-  const id = String(c.id || '').toUpperCase();
-  const rar = String(c.rarity || '').toUpperCase();
-  if (id.endsWith('-S') || rar === 'GR') return 'foil-shining';
-  if (rar === 'UR' || rar === 'CR') return 'foil-ur';
-  if (rar === 'SR' || rar === 'SSR') return 'foil-sr';
-  return '';
 }
 
 export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps) {
@@ -436,7 +428,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
   const addCardToDeck = (card: Card) => {
     if (isStarter) return;
 
-    // Rules v1.3.0 (102.1.1): Strip ※ promo stamp and -S suffix to group shared card IDs
     const canonicalId = card.id.replace(/^※/, '').replace(/-S$/i, '');
 
     if (buildPhase === 'MANE') {
@@ -456,7 +447,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
         /everyday/i.test(card.name || '') ||
         /-EV/i.test(card.id);
 
-      // Rules v1.3.0 (102.1.0 & 102.1.2): Max 4 copies of non-Everyday Scenes; unlimited Everyday Scenes
       if (!isEveryday && copies >= 4) {
         return alert('Rules v1.3.0: You can include up to 4 copies of any non-Everyday Scene card.');
       }
@@ -472,7 +462,6 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
       const copies = mainDeck.filter(
         (c) => c.id.replace(/^※/, '').replace(/-S$/i, '') === canonicalId
       ).length;
-      // Rules v1.3.0 (102.1.0): Max 4 copies per card ID
       if (copies >= 4) {
         return alert('Rules v1.3.0: You can only include up to 4 copies of any card ID.');
       }
@@ -878,7 +867,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                 <div
                   key={c.id}
                   className={`unlocked-card-item ${getCardFoilClass(c)}`}
-                  style={{ cursor: 'pointer', position: 'relative' }}
+                  style={{ cursor: 'pointer', position: 'relative', borderRadius: '12px' }}
                   onClick={() => openInspector(c)}
                   title="Click to preview rules text"
                 >
@@ -1382,6 +1371,7 @@ export default function DeckBuilder({ deckId, mode, onClose }: DeckBuilderProps)
                 <option value="UR">Ultra Rare (UR)</option>
                 <option value="GR">Gold Rare (GR)</option>
                 <option value="CR">Crystal Rare (CR)</option>
+                <option value="DR">Diamond Rare (DR)</option>
                 <option value="SPR">Special Parallel (SPR)</option>
               </select>
 

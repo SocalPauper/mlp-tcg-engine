@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../App';
+import { getCardFoilClass } from '../styles/cardFoil';
 import CardPreviewModal, { PreviewableCard } from './CardPreviewModal';
 import './ShopView.css';
 
@@ -34,15 +35,6 @@ interface WeeklyDeal {
 }
 
 const CARD_BACK_URL = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp';
-
-function getFoilClass(id: string, rarity: string): string {
-  const upId = String(id || '').toUpperCase();
-  const upRar = String(rarity || '').toUpperCase();
-  if (upId.endsWith('-S') || upRar === 'GR') return 'foil-shining';
-  if (upRar === 'UR' || upRar === 'CR') return 'foil-ur';
-  if (upRar === 'SR' || upRar === 'SSR') return 'foil-sr';
-  return '';
-}
 
 export default function ShopView() {
   const { user, updateUserPoints } = useAuth();
@@ -288,7 +280,10 @@ export default function ShopView() {
           </div>
 
           <div className="shop-header-actions">
-            <span className="week-tag" title="Guaranteed CR, Shining (-S), or GR every 10th Standard chase slot">
+            <span
+              className="week-tag"
+              title="Guaranteed CR, Shining (-S), or GR every 10th Standard chase slot"
+            >
               ✨ CR+ Pity: {pityCounter}/10
             </span>
 
@@ -333,7 +328,10 @@ export default function ShopView() {
                 <div className="mini-easel-assembly">
                   <div className="easel-top-finial" />
                   <div
-                    className={`easel-card-canvas ${getFoilClass(deal.card_id, deal.rarity)}`}
+                    className={`easel-card-canvas ${getCardFoilClass({
+                      id: deal.card_id,
+                      rarity: deal.rarity,
+                    })}`}
                     onClick={() =>
                       setPreviewCard({
                         id: deal.card_id,
@@ -379,7 +377,7 @@ export default function ShopView() {
         {/* ROW 2: 3 SHINY FOIL BOOSTER PACK OBJECTS + DISTRIBUTION BOXES */}
         <div className="shop-section">
           <div className="shop-section-header">
-            <h3>🎁 Shiny Foil Booster Packs (SR, UR, CR, GR &amp; Shining -S)</h3>
+            <h3>🎁 Shiny Foil Booster Packs (SR, UR, CR, GR, DR &amp; Shining -S)</h3>
           </div>
           <p className="shop-section-desc">
             Excess copies beyond a <strong>4-card playset</strong> automatically convert into Pony Points dust!
@@ -508,7 +506,7 @@ export default function ShopView() {
                   <div className="pulled-cards-row">
                     {pulledCards.map((card, idx) => {
                       const isFlipped = Boolean(flippedIndices[idx]);
-                      const foilCls = getFoilClass(card.id, card.rarity);
+                      const foilCls = getCardFoilClass(card);
                       const isUltra = Boolean(foilCls);
                       return (
                         <div

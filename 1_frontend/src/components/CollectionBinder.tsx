@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { API_BASE_URL } from '../config';
+import { getCardFoilClass } from '../styles/cardFoil';
 import CardPreviewModal, { PreviewableCard } from './CardPreviewModal';
 import './CollectionBinder.css';
 
@@ -109,12 +110,13 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
     if (ownedQuantities[card.id] && ownedQuantities[card.id] > 0) {
       return ownedQuantities[card.id];
     }
-    const isAlt = card.id.includes('-S');
+    const isAlt = card.id.toUpperCase().endsWith('-S');
     if (isAlt) return 0;
 
-    if (/^SD/i.test(card.id) || /^SD/i.test(card.set_code || '')) return 3;
+    const defaultQty = String(card.card_type || '').toLowerCase().includes('mane') ? 1 : 4;
+    if (/^SD/i.test(card.id) || /^SD/i.test(card.set_code || '')) return defaultQty;
     const rarity = String(card.rarity || 'C').toUpperCase();
-    if (['C', 'U', 'R'].includes(rarity)) return 3;
+    if (['C', 'U', 'R', 'SPR'].includes(rarity)) return defaultQty;
 
     const isEverydayScene =
       card.card_type === 'Scene' &&
@@ -122,7 +124,7 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
         card.element.toLowerCase() === 'everyday' ||
         /everyday/i.test(card.name || '') ||
         /-EV/i.test(card.id));
-    if (isEverydayScene) return 3;
+    if (isEverydayScene) return 4;
 
     return 0;
   };
@@ -231,6 +233,7 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
 
     const owned = getOwnedCount(card);
     const isCollected = owned > 0;
+    const foilCls = isCollected ? getCardFoilClass(card) : '';
     const isStory =
       card.card_type === 'Story' ||
       /-(?:C2[5-9]|C[3-4]\d)/i.test(card.id || '') ||
@@ -247,11 +250,11 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
         <div className="binder-pocket-header">
           <span className="pocket-id">{card.id}</span>
           <span className={`pocket-rarity rarity-${card.rarity.toLowerCase()}`}>
-            {card.rarity}
+            {card.id.toUpperCase().endsWith('-S') ? `${card.rarity}-S` : card.rarity}
           </span>
         </div>
 
-        <div className={`binder-card-sleeve ${isStory ? 'story-sleeve' : ''}`}>
+        <div className={`binder-card-sleeve ${isStory ? 'story-sleeve' : ''} ${foilCls}`}>
           <img src={card.image_url} alt={card.name} loading="lazy" />
           {!isCollected && (
             <div className="uncollected-overlay">
@@ -418,6 +421,7 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
                   <option value="UR">Ultra Rare (UR)</option>
                   <option value="GR">Gold Rare (GR)</option>
                   <option value="CR">Crystal Rare (CR)</option>
+                  <option value="DR">Diamond Rare (DR)</option>
                   <option value="SPR">Special Parallel (SPR)</option>
                 </select>
                 <select
