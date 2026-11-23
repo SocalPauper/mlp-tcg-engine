@@ -21,11 +21,11 @@ import {
   sanitizeCardText,
   detectEffectKeywords,
   matchesCardKeywordExact,
+  isReactiveAdventureClause,
   extractItemGrantedAdventureClause,
   canPlayCardRestrictions,
   canPayHarmonyCost,
   getEffectiveCardCost,
-  exhaustScenesWithElementPriority,
   calculateLanePowerBreakdown,
   evaluateScalingMultiplier,
   parseActivatedCardEffect,
@@ -1901,10 +1901,17 @@ function retireCharacterWithFarewell(
   // Replacement Shield check (e.g., Soda / Funny Glasses / Pinkie's Tent / Rarity's Tent)
   const shieldItemIdx = slot.items.findIndex((it) => {
     const t = sanitizeCardText(it.effectText);
-    if (inContact && /when\s+adorned\s+character\s+retires\s+in\s+contact,\s*move\s+this\s+item\s+to\s+retirement\s+area\s+instead/i.test(t)) {
+    if (
+      inContact &&
+      /when\s+adorned\s+character\s+retires\s+in\s+contact,\s*move\s+this\s+item\s+to\s+retirement\s+area\s+instead/i.test(
+        t
+      )
+    ) {
       return true;
     }
-    return /(?:when|if)\s+adorned\s+character\s+(?:would\s+)?retires?,\s*move\s+this\s+item\s+to\s+(?:your\s+)?retirement\s+area.*instead/i.test(t);
+    return /(?:when|if)\s+adorned\s+character\s+(?:would\s+)?retires?,\s*move\s+this\s+item\s+to\s+(?:your\s+)?retirement\s+area.*instead/i.test(
+      t
+    );
   });
 
   if (shieldItemIdx !== -1) {
@@ -2015,7 +2022,8 @@ export function playCardFromHand(
   // Consume nextCardCostDiscount if it applied to this card
   let nextDiscount = player.nextCardCostDiscount || null;
   if (nextDiscount) {
-    const typeMatches = !nextDiscount.cardType || normalizedType.includes(nextDiscount.cardType.toLowerCase());
+    const typeMatches =
+      !nextDiscount.cardType || normalizedType.includes(nextDiscount.cardType.toLowerCase());
     const nameMatches = !nextDiscount.filter || matchesCardKeywordExact(card, nextDiscount.filter);
     if (typeMatches && nameMatches) nextDiscount = null;
   }
@@ -2686,7 +2694,8 @@ export function resolveTargetSelection(
   }
 
   if (pending.effectAction === 'MOVE_FRIENDLY' && !pending.selectedFromLane) {
-    if (targetOwner !== 'SELF' || !state.players[playerId].adventureArea[targetLane].character) return state;
+    if (targetOwner !== 'SELF' || !state.players[playerId].adventureArea[targetLane].character)
+      return state;
     const destinations = (['left', 'center', 'right'] as LaneKey[])
       .filter((l) => l !== targetLane)
       .map((l) => ({ owner: 'SELF' as const, lane: l }));
@@ -3077,7 +3086,7 @@ export function activateCharacterAdventureAbility(
     }
   }
 
-  if (!advClause) return state;
+  if (!advClause || isReactiveAdventureClause(advClause)) return state;
   const parsed = parseEffectClause(advClause);
   if (!parsed || parsed.kind === 'NONE_PASSIVE') return state;
 
@@ -3828,6 +3837,27 @@ export function resolveBreakthroughChoice(
       revealedCard.name
     );
 
+    // Trigger reactive "Adventure: When this Character intervenes the Plan, ..." effects (e.g. SD01E-U01)
+    const interveningChar = attacker.adventureArea[activeLane]?.character;
+    if (interveningChar) {
+      const interveneAdvClause = extractTriggerClause(interveningChar.effectText, 'Adventure');
+      const interveneMatch = interveneAdvClause?.match(
+        /^when\s+(?:this\s+character|it)\s+intervenes\s+(?:the\s+)?plan[,:\s]+([\s\S]+)$/i
+      );
+      if (interveneMatch) {
+        const innerClauses = splitCompoundClauses(interveneMatch[1].trim());
+        for (const cl of innerClauses) {
+          baseStateWithPlan = enqueueEffectItem(baseStateWithPlan, {
+            ownerId: playerId,
+            sourceCard: interveningChar,
+            sourceLane: activeLane,
+            triggerType: 'Adventure',
+            effectClause: cl,
+          });
+        }
+      }
+    }
+
     const { nextState, hasPrePlanTrigger, effectSummary } = executePrePlanEffect(
       baseStateWithPlan,
       playerId,
@@ -4023,6 +4053,42 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     ...state,
     phase: 'END_PHASE',
   };
+
+  // Auto-enqueue any continuous/board-state End-of-Turn Adventure triggers from Characters currently in play
+  for (const checkPid of ['0', '1'] as const) {
+    const checkPlayer = workingState.players[checkPid];
+    for (const laneKey of ['left', 'center', 'right'] as const) {
+      const char = checkPlayer.adventureArea[laneKey]?.character;
+      if (!char) continue;
+      const advClause = extractTriggerClause(char.effectText, 'Adventure');
+      if (!advClause) continue;
+      const delayedSpec = extractDelayedTiming(advClause);
+      if (!delayedSpec) continue;
+      const appliesNow =
+        (delayedSpec.timing === 'END_OF_YOUR_TURN' && checkPid === playerId) ||
+        delayedSpec.timing === 'END_OF_ANY_TURN';
+      if (!appliesNow) continue;
+
+      const alreadyScheduled = (workingState.delayedTriggers || []).some(
+        (t) =>
+          t.ownerId === checkPid &&
+          t.sourceCard.id === char.id &&
+          t.sourceLane === laneKey &&
+          t.createdTurn === workingState.turnNumber
+      );
+      if (!alreadyScheduled) {
+        workingState = scheduleDelayedTrigger(
+          workingState,
+          checkPid,
+          char,
+          laneKey,
+          delayedSpec.timing,
+          delayedSpec.conditionText,
+          delayedSpec.innerEffectClause
+        );
+      }
+    }
+  }
 
   const allDelayed = workingState.delayedTriggers || [];
   const activeMatchingIdx = allDelayed.findIndex(

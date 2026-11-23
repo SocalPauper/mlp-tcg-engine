@@ -21,6 +21,16 @@ const KNOWN_PET_NAMES = new Set([
   'gummy',
 ]);
 
+const NON_CHARACTER_TYPES = new Set(['event', 'scene', 'item', 'story', 'plan']);
+
+export function isReactiveAdventureClause(clauseText?: string): boolean {
+  const text = sanitizeCardText(clauseText).replace(/^Tap\s*:\s*/i, '').trim();
+  if (!text) return false;
+  return /^(?:at\s+the\s+end\s+of|when\s+(?:this\s+character|it)\s+intervenes\s+(?:the\s+)?plan)/i.test(
+    text
+  );
+}
+
 export function sanitizeCardText(raw?: string): string {
   if (!raw) return '';
   return raw
@@ -70,9 +80,16 @@ export function matchesCardKeywordExact(card: CardDefinition, filterText: string
 
   if (alternatives.length === 0) return true;
 
+  const cardTypeLower = String(card.type || '').trim().toLowerCase();
+  const isNonCharacter = NON_CHARACTER_TYPES.has(cardTypeLower);
+  const cardName = String(card.name || '').trim().toLowerCase();
+
   for (const target of alternatives) {
-    const cardName = String(card.name || '').trim().toLowerCase();
     if (cardName === target) return true;
+
+    // Non-Character cards (Events, Scenes, Items, Stories, Plans) must not match character/trait
+    // keywords solely via the database `traits` affinity column.
+    if (isNonCharacter) continue;
 
     const extraText = String((card as any).traitsText || '').toLowerCase();
     const combinedKeywords = `${card.traits || ''} ${card.type || ''} ${extraText}`.toLowerCase();
@@ -142,7 +159,7 @@ export function canPlayCardRestrictions(
     }
   }
 
-  const onlyMatch = text.match(/only\s+(?:use|play|activate)\s+when\s+([^.]+)\./i);
+  const onlyMatch = text.match(/only\s+(?:use|play|activate)\s+when\s+([^.!]+)(?:[.!]|$)/i);
   if (onlyMatch) {
     const cond = onlyMatch[1].trim();
     if (!evaluateBoardCondition(state, playerId, cond)) {
@@ -372,7 +389,11 @@ export function evaluateScalingMultiplier(
 }
 
 function areAdjacentLanes(a: LaneKey, b: LaneKey): boolean {
-  return (a === 'left' && b === 'center') || (a === 'center' && (b === 'left' || b === 'right')) || (a === 'right' && b === 'center');
+  return (
+    (a === 'left' && b === 'center') ||
+    (a === 'center' && (b === 'left' || b === 'right')) ||
+    (a === 'right' && b === 'center')
+  );
 }
 
 function doesPassiveTextApplyToCharacter(
@@ -418,11 +439,15 @@ function doesPassiveTextApplyToCharacter(
   }
 
   // Adorned Character cost threshold checks (e.g., BP01-SPR24, BP01-SPR27)
-  const costLess = text.match(/adorned\s+character\s+with\s+cost(?:\s+of\s+force\s+of\s+harmony)?\s+(\d+)\s+or\s+less/i);
+  const costLess = text.match(
+    /adorned\s+character\s+with\s+cost(?:\s+of\s+force\s+of\s+harmony)?\s+(\d+)\s+or\s+less/i
+  );
   if (costLess && (Number(character.cost) || 0) > (parseInt(costLess[1], 10) || 0)) {
     return 0;
   }
-  const costMore = text.match(/adorned\s+character\s+with\s+cost(?:\s+of\s+force\s+of\s+harmony)?\s+(\d+)\s+or\s+more/i);
+  const costMore = text.match(
+    /adorned\s+character\s+with\s+cost(?:\s+of\s+force\s+of\s+harmony)?\s+(\d+)\s+or\s+more/i
+  );
   if (costMore && (Number(character.cost) || 0) < (parseInt(costMore[1], 10) || 0)) {
     return 0;
   }
@@ -466,8 +491,10 @@ function doesPassiveTextApplyToCharacter(
   }
 
   if (/while adorned with an item/i.test(text) && slot && slot.items.length === 0) return 0;
-  if (/while (?:it has|adorned with|this character has) (?:a )?treat/i.test(text) && slot && slot.treats <= 0) return 0;
-  if (/while (?:it has|adorned with) (?:a )?present/i.test(text) && slot && slot.presents.length === 0) return 0;
+  if (/while (?:it has|adorned with|this character has) (?:a )?treat/i.test(text) && slot && slot.treats <= 0)
+    return 0;
+  if (/while (?:it has|adorned with) (?:a )?present/i.test(text) && slot && slot.presents.length === 0)
+    return 0;
   if (/each character that has had a treat/i.test(text) && slot && !slot.hadTreat) return 0;
   if (/each character that has had a present/i.test(text) && slot && !slot.hadPresent) return 0;
 
@@ -794,10 +821,18 @@ export function evaluateBoardCondition(
     return allLanes.some((l) => player.adventureArea[l].character === null);
   }
   if (/there\s+is\s+(?:any|a|an)\s+tapped\s+character\s+in\s+your\s+adventure\s+area/i.test(cond)) {
-    return allLanes.some((l) => player.adventureArea[l].character !== null && player.adventureArea[l].isExhausted);
+    return allLanes.some(
+      (l) => player.adventureArea[l].character !== null && player.adventureArea[l].isExhausted
+    );
   }
-  if (/there\s+is\s+(?:any|a|an)\s+character\s+adorned\s+with\s+an\s+item\s+in\s+your\s+adventure\s+area/i.test(cond)) {
-    return allLanes.some((l) => player.adventureArea[l].character !== null && player.adventureArea[l].items.length > 0);
+  if (
+    /there\s+is\s+(?:any|a|an)\s+character\s+adorned\s+with\s+an\s+item\s+in\s+your\s+adventure\s+area/i.test(
+      cond
+    )
+  ) {
+    return allLanes.some(
+      (l) => player.adventureArea[l].character !== null && player.adventureArea[l].items.length > 0
+    );
   }
   if (/there\s+is\s+no\s+other\s+character\s+in\s+your\s+adventure\s+area/i.test(cond)) {
     return allLanes.filter((l) => player.adventureArea[l].character !== null).length <= 1;
@@ -810,23 +845,39 @@ export function evaluateBoardCondition(
 
   const rivalExactChars = cond.match(/there\s+are\s+(\d+)\s+characters?\s+in\s+rival'?s\s+adventure\s+area/i);
   if (rivalExactChars) {
-    return allLanes.filter((l) => rival.adventureArea[l].character !== null).length === (parseInt(rivalExactChars[1], 10) || 0);
-  }
-
-  const rivalMinChars = cond.match(/there\s+are\s+(\d+)\s+or\s+more\s+characters?\s+in\s+rival'?s\s+adventure\s+area/i);
-  if (rivalMinChars) {
-    return allLanes.filter((l) => rival.adventureArea[l].character !== null).length >= (parseInt(rivalMinChars[1], 10) || 1);
-  }
-
-  const rivalHighPower = cond.match(/there\s+is\s+(?:any|a|an)\s+character\s+with\s+inspiration\s+(\d+)\s+or\s+more\s+in\s+rival'?s\s+adventure\s+area/i);
-  if (rivalHighPower) {
-    const minPwr = parseInt(rivalHighPower[1], 10) || 1;
-    return allLanes.some(
-      (l) => rival.adventureArea[l].character !== null && calculateLanePowerBreakdown(state, oppId, l).totalPower >= minPwr
+    return (
+      allLanes.filter((l) => rival.adventureArea[l].character !== null).length ===
+      (parseInt(rivalExactChars[1], 10) || 0)
     );
   }
 
-  if (/number\s+of\s+characters\s+in\s+your\s+adventure\s+area\s+is\s+less\s+than\s+the\s+number\s+of\s+characters\s+in\s+rival'?s\s+adventure\s+area/i.test(cond)) {
+  const rivalMinChars = cond.match(
+    /there\s+are\s+(\d+)\s+or\s+more\s+characters?\s+in\s+rival'?s\s+adventure\s+area/i
+  );
+  if (rivalMinChars) {
+    return (
+      allLanes.filter((l) => rival.adventureArea[l].character !== null).length >=
+      (parseInt(rivalMinChars[1], 10) || 1)
+    );
+  }
+
+  const rivalHighPower = cond.match(
+    /there\s+is\s+(?:any|a|an)\s+character\s+with\s+inspiration\s+(\d+)\s+or\s+more\s+in\s+rival'?s\s+adventure\s+area/i
+  );
+  if (rivalHighPower) {
+    const minPwr = parseInt(rivalHighPower[1], 10) || 1;
+    return allLanes.some(
+      (l) =>
+        rival.adventureArea[l].character !== null &&
+        calculateLanePowerBreakdown(state, oppId, l).totalPower >= minPwr
+    );
+  }
+
+  if (
+    /number\s+of\s+characters\s+in\s+your\s+adventure\s+area\s+is\s+less\s+than\s+the\s+number\s+of\s+characters\s+in\s+rival'?s\s+adventure\s+area/i.test(
+      cond
+    )
+  ) {
     const mine = allLanes.filter((l) => player.adventureArea[l].character !== null).length;
     const theirs = allLanes.filter((l) => rival.adventureArea[l].character !== null).length;
     return mine < theirs;
@@ -839,12 +890,22 @@ export function evaluateBoardCondition(
   const handMinMatch = cond.match(/there\s+are\s+(\d+)\s+or\s+more\s+cards\s+in\s+your\s+hand/i);
   if (handMinMatch) return player.hand.length >= (parseInt(handMinMatch[1], 10) || 1);
 
-  if (/there\s+is\s+(?:any|a|an)\s+character\s+that\s+has\s+had\s+a\s+treat\s+in\s+your\s+adventure\s+area/i.test(cond)) {
+  if (
+    /there\s+is\s+(?:any|a|an)\s+character\s+that\s+has\s+had\s+a\s+treat\s+in\s+your\s+adventure\s+area/i.test(
+      cond
+    )
+  ) {
     return allLanes.some((l) => player.adventureArea[l].character !== null && player.adventureArea[l].hadTreat);
   }
 
-  if (/there\s+are\s+[｢\[「]unicorn[｣\]」]\s*,\s*[｢\[「]pegasus[｣\]」]\s*(?:and|,)\s*[｢\[「]earth\s+pony[｣\]」]\s+in\s+your\s+adventure\s+area/i.test(cond)) {
-    const deployedChars = allLanes.map((l) => player.adventureArea[l].character).filter(Boolean) as CardDefinition[];
+  if (
+    /there\s+are\s+[｢\[「]unicorn[｣\]」]\s*,\s*[｢\[「]pegasus[｣\]」]\s*(?:and|,)\s*[｢\[「]earth\s+pony[｣\]」]\s+in\s+your\s+adventure\s+area/i.test(
+      cond
+    )
+  ) {
+    const deployedChars = allLanes
+      .map((l) => player.adventureArea[l].character)
+      .filter(Boolean) as CardDefinition[];
     return (
       deployedChars.some((c) => matchesCardKeywordExact(c, 'Unicorn')) &&
       deployedChars.some((c) => matchesCardKeywordExact(c, 'Pegasus')) &&
@@ -874,14 +935,24 @@ export function evaluateBoardCondition(
     });
   }
 
-  const retMinEvents = cond.match(/there\s+are\s+(\d+)\s+or\s+more\s+events?\s+in\s+your\s+retirement\s+area/i);
+  const retMinEvents = cond.match(
+    /there\s+are\s+(\d+)\s+or\s+more\s+events?\s+in\s+your\s+retirement\s+area/i
+  );
   if (retMinEvents) {
-    return player.retirement.filter((c) => String(c.type || '').toLowerCase() === 'event').length >= (parseInt(retMinEvents[1], 10) || 1);
+    return (
+      player.retirement.filter((c) => String(c.type || '').toLowerCase() === 'event').length >=
+      (parseInt(retMinEvents[1], 10) || 1)
+    );
   }
 
-  const retMinItems = cond.match(/there\s+are\s+(\d+)\s+or\s+more\s+items?\s+in\s+your\s+retirement\s+area/i);
+  const retMinItems = cond.match(
+    /there\s+are\s+(\d+)\s+or\s+more\s+items?\s+in\s+your\s+retirement\s+area/i
+  );
   if (retMinItems) {
-    return player.retirement.filter((c) => String(c.type || '').toLowerCase() === 'item').length >= (parseInt(retMinItems[1], 10) || 1);
+    return (
+      player.retirement.filter((c) => String(c.type || '').toLowerCase() === 'item').length >=
+      (parseInt(retMinItems[1], 10) || 1)
+    );
   }
 
   if (/there\s+is\s+(?:any|a|an)\s+event\s+in\s+your\s+retirement\s+area/i.test(cond)) {
@@ -891,14 +962,22 @@ export function evaluateBoardCondition(
     return player.retirement.some((c) => String(c.type || '').toLowerCase() === 'item');
   }
 
-  const minCharsMatch = cond.match(/there\s+are\s+(\d+)\s+or\s+more\s+characters?\s+in\s+your\s+adventure\s+area/i);
+  const minCharsMatch = cond.match(
+    /there\s+are\s+(\d+)\s+or\s+more\s+characters?\s+in\s+your\s+adventure\s+area/i
+  );
   if (minCharsMatch) {
-    return allLanes.filter((l) => player.adventureArea[l].character !== null).length >= (parseInt(minCharsMatch[1], 10) || 1);
+    return (
+      allLanes.filter((l) => player.adventureArea[l].character !== null).length >=
+      (parseInt(minCharsMatch[1], 10) || 1)
+    );
   }
 
   const countCharsMatch = cond.match(/you\s+have\s+(\d+)\s+or\s+more\s+characters?/i);
   if (countCharsMatch) {
-    return allLanes.filter((l) => player.adventureArea[l].character !== null).length >= (parseInt(countCharsMatch[1], 10) || 1);
+    return (
+      allLanes.filter((l) => player.adventureArea[l].character !== null).length >=
+      (parseInt(countCharsMatch[1], 10) || 1)
+    );
   }
 
   return true;
@@ -1059,20 +1138,42 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   }
 
   // Flip Scenes face-up or face-down (BP02-SPR06, BP02-SPR08, BP02-SPR10, BP04-SPR06, BP04-SPR15)
-  const flipRivalDown = text.match(/choose\s+(\d+)\s+face-up\s+scenes?\s+in\s+rival'?s\s+scene\s+area,\s*turn\s+(?:it|them)\s+down/i);
+  const flipRivalDown = text.match(
+    /choose\s+(\d+)\s+face-up\s+scenes?\s+in\s+rival'?s\s+scene\s+area,\s*turn\s+(?:it|them)\s+down/i
+  );
   if (flipRivalDown) {
-    return { kind: 'FLIP_RIVAL_SCENES_DOWN', amount: parseInt(flipRivalDown[1], 10) || 1, requiresChoice: true };
+    return {
+      kind: 'FLIP_RIVAL_SCENES_DOWN',
+      amount: parseInt(flipRivalDown[1], 10) || 1,
+      requiresChoice: true,
+    };
   }
-  const flipSelfDown = text.match(/choose\s+(\d+)\s+face-up\s+scenes?(?:\s+in\s+your\s+scene\s+area)?,\s*turn\s+(?:it|them)\s+down/i);
+  const flipSelfDown = text.match(
+    /choose\s+(\d+)\s+face-up\s+scenes?(?:\s+in\s+your\s+scene\s+area)?,\s*turn\s+(?:it|them)\s+down/i
+  );
   if (flipSelfDown) {
-    return { kind: 'FLIP_SCENES_DOWN', amount: parseInt(flipSelfDown[1], 10) || 1, requiresChoice: true };
+    return {
+      kind: 'FLIP_SCENES_DOWN',
+      amount: parseInt(flipSelfDown[1], 10) || 1,
+      requiresChoice: true,
+    };
   }
-  const flipSelfUp = text.match(/choose\s+(\d+)\s+face-down\s+(?:tapped\s+)?scenes?(?:\s+without\s+"everyday"\s+mark)?\s+in\s+your\s+scene\s+area,\s*turn\s+(?:it|them)\s+up/i);
+  const flipSelfUp = text.match(
+    /choose\s+(\d+)\s+face-down\s+(?:tapped\s+)?scenes?(?:\s+without\s+"everyday"\s+mark)?\s+in\s+your\s+scene\s+area,\s*turn\s+(?:it|them)\s+up/i
+  );
   if (flipSelfUp) {
-    return { kind: 'FLIP_SCENES_UP', amount: parseInt(flipSelfUp[1], 10) || 1, requiresChoice: true };
+    return {
+      kind: 'FLIP_SCENES_UP',
+      amount: parseInt(flipSelfUp[1], 10) || 1,
+      requiresChoice: true,
+    };
   }
 
-  if (/(?:look\s+at|reveal)\s+the\s+top\s+card\s+of\s+(?:your|the)\s+deck.*?(?:top\s+or\s+(?:the )?bottom)/i.test(text)) {
+  if (
+    /(?:look\s+at|reveal)\s+the\s+top\s+card\s+of\s+(?:your|the)\s+deck.*?(?:top\s+or\s+(?:the )?bottom)/i.test(
+      text
+    )
+  ) {
     return { kind: 'SCRY_TOP_BOTTOM', amount: 1, requiresChoice: true };
   }
 

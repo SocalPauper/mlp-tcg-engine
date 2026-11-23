@@ -283,6 +283,8 @@ const KNOWN_PET_NAMES = new Set([
   'gummy',
 ]);
 
+const NON_CHARACTER_TYPES_CLIENT = new Set(['event', 'scene', 'item', 'story', 'plan']);
+
 function isStoryCard(card: CardDefinition | null): boolean {
   if (!card) return false;
   return (
@@ -308,9 +310,11 @@ function matchesClientKeyword(card: CardDefinition, filterText: string): boolean
     .filter(Boolean);
   if (alts.length === 0) return true;
   const cardName = String(card.name || '').trim().toLowerCase();
+  const isNonChar = NON_CHARACTER_TYPES_CLIENT.has(String(card.type || '').trim().toLowerCase());
   const combined = `${card.traits || ''} ${card.type || ''}`.toLowerCase();
   for (const target of alts) {
     if (cardName === target) return true;
+    if (isNonChar) continue;
     if (target === 'pet' && KNOWN_PET_NAMES.has(cardName)) return true;
     if (combined.includes(target)) return true;
   }
@@ -329,7 +333,13 @@ function canItemAdornCharacter(itemCard: CardDefinition, targetChar: CardDefinit
 
 function hasAdventureTapAbility(slot: AdventureSlot): boolean {
   const charText = cleanCardText(slot.character?.effectText);
-  if (/Adventure\s*:\s*(?!While\b)/i.test(charText)) return true;
+  if (
+    /Adventure\s*:\s*(?!While\b|At\s+the\s+end\s+of\b|When\s+(?:this\s+character|it)\s+intervenes\b)/i.test(
+      charText
+    )
+  ) {
+    return true;
+  }
   for (const it of slot.items || []) {
     const itText = cleanCardText(it.effectText);
     if (/adorned\s+character\s+gains\s*:?\s*"[^"]*Adventure\s*:/i.test(itText)) return true;
@@ -400,6 +410,14 @@ function canAffordCardWithHarmony(
   card: CardDefinition,
   rival?: PlayerState
 ): boolean {
+  const text = cleanCardText(card.effectText);
+  const sceneReq = text.match(
+    /only\s+(?:use|play|activate)\s+when\s+(?:there\s+are|you\s+have)\s+(\d+)\s+or\s+more\s+scenes?\s+in\s+your\s+scene\s+area/i
+  );
+  if (sceneReq && player.sceneArea.length < (parseInt(sceneReq[1], 10) || 1)) {
+    return false;
+  }
+
   const cost = getClientEffectiveCost(player, card, rival);
   if (cost === 0) return true;
   const readyScenes = player.sceneArea.filter((s) => !s.isExhausted);
@@ -777,108 +795,108 @@ export default function GameBoard({
     ws.send(JSON.stringify({ type: 'GAME_ACTION', action, payload }));
   };
 
-	const handleSubmitMatchBug = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (!inMatchBugSummary.trim()) return;
-		setSubmittingMatchBug(true);
+  const handleSubmitMatchBug = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inMatchBugSummary.trim()) return;
+    setSubmittingMatchBug(true);
 
-		const compactSnapshot = {
-		  roomId: gameState.roomId,
-		  phase: gameState.phase,
-		  turnNumber: gameState.turnNumber,
-		  turnPlayerId: gameState.turnPlayerId,
-		  firstPlayerId: gameState.firstPlayerId,
-		  contactState: gameState.contactState,
-		  pendingTarget: gameState.pendingTarget,
-		  pendingHandChoice: gameState.pendingHandChoice,
-		  delayedTriggers: gameState.delayedTriggers,
-		  players: {
-			'0': {
-			  displayName: gameState.players['0'].displayName,
-			  leader: gameState.players['0'].leader,
-			  storyProgress: gameState.players['0'].storyProgress,
-			  storyStages: gameState.players['0'].storyStages,
-			  sceneArea: gameState.players['0'].sceneArea,
-			  adventureArea: gameState.players['0'].adventureArea,
-			  handCount: gameState.players['0'].hand.length,
-			  hand: gameState.players['0'].hand,
-			  retirement: gameState.players['0'].retirement,
-			},
-			'1': {
-			  displayName: gameState.players['1'].displayName,
-			  leader: gameState.players['1'].leader,
-			  storyProgress: gameState.players['1'].storyProgress,
-			  storyStages: gameState.players['1'].storyStages,
-			  sceneArea: gameState.players['1'].sceneArea,
-			  adventureArea: gameState.players['1'].adventureArea,
-			  handCount: gameState.players['1'].hand.length,
-			  hand: gameState.players['1'].hand,
-			  retirement: gameState.players['1'].retirement,
-			},
-		  },
-		  actionLog: gameState.actionLog || [],
-		  debugTrace: gameState.debugTrace || [],
-		};
+    const compactSnapshot = {
+      roomId: gameState.roomId,
+      phase: gameState.phase,
+      turnNumber: gameState.turnNumber,
+      turnPlayerId: gameState.turnPlayerId,
+      firstPlayerId: gameState.firstPlayerId,
+      contactState: gameState.contactState,
+      pendingTarget: gameState.pendingTarget,
+      pendingHandChoice: gameState.pendingHandChoice,
+      delayedTriggers: gameState.delayedTriggers,
+      players: {
+        '0': {
+          displayName: gameState.players['0'].displayName,
+          leader: gameState.players['0'].leader,
+          storyProgress: gameState.players['0'].storyProgress,
+          storyStages: gameState.players['0'].storyStages,
+          sceneArea: gameState.players['0'].sceneArea,
+          adventureArea: gameState.players['0'].adventureArea,
+          handCount: gameState.players['0'].hand.length,
+          hand: gameState.players['0'].hand,
+          retirement: gameState.players['0'].retirement,
+        },
+        '1': {
+          displayName: gameState.players['1'].displayName,
+          leader: gameState.players['1'].leader,
+          storyProgress: gameState.players['1'].storyProgress,
+          storyStages: gameState.players['1'].storyStages,
+          sceneArea: gameState.players['1'].sceneArea,
+          adventureArea: gameState.players['1'].adventureArea,
+          handCount: gameState.players['1'].hand.length,
+          hand: gameState.players['1'].hand,
+          retirement: gameState.players['1'].retirement,
+        },
+      },
+      actionLog: gameState.actionLog || [],
+      debugTrace: gameState.debugTrace || [],
+    };
 
-		const clientMeta = {
-		  url: window.location.href,
-		  viewport: `${window.innerWidth}x${window.innerHeight}`,
-		  userAgent: navigator.userAgent,
-		  seat,
-		  zoneFocus,
-		  selectedHandCardId,
-		  submittedAtLocal: new Date().toString(),
-		};
+    const clientMeta = {
+      url: window.location.href,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      userAgent: navigator.userAgent,
+      seat,
+      zoneFocus,
+      selectedHandCardId,
+      submittedAtLocal: new Date().toString(),
+    };
 
-		try {
-		  const token = localStorage.getItem('token');
-		  const res = await fetch(`${API_BASE_URL}/api/bug-reports`, {
-			method: 'POST',
-			headers: {
-			  'Content-Type': 'application/json',
-			  ...(token ? { Authorization: `Bearer ${token}` } : {}),
-			},
-			body: JSON.stringify({
-			  category: 'IN_MATCH_GAMEPLAY',
-			  roomCode: gameState.roomId,
-			  seat,
-			  reporterName: me?.displayName || 'Duelist',
-			  summary: inMatchBugSummary.trim(),
-			  boardSnapshot: compactSnapshot,
-			  clientMeta,
-			}),
-		  });
-		  const data = await res.json();
-		  if (res.ok && data.success) {
-			alert(`🐞 Match Bug Report #${data.reportId} saved with full board state & diagnostic clues!`);
-			setInMatchBugSummary('');
-			setShowInMatchBugModal(false);
-			return;
-		  }
-		  throw new Error(data.error || `HTTP ${res.status}`);
-		} catch {
-		  if (ws.readyState === WebSocket.OPEN) {
-			ws.send(
-			  JSON.stringify({
-				type: 'REPORT_BUG',
-				roomCode: gameState.roomId,
-				seat,
-				reporterName: me?.displayName || 'Duelist',
-				summary: inMatchBugSummary.trim(),
-				boardSnapshot: compactSnapshot,
-				clientMeta,
-			  })
-			);
-			alert('🐞 Match Bug Report submitted via live match connection!');
-			setInMatchBugSummary('');
-			setShowInMatchBugModal(false);
-		  } else {
-			alert('Unable to reach server to submit bug report. Please check your connection.');
-		  }
-		} finally {
-		  setSubmittingMatchBug(false);
-		}
-	  };
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/bug-reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          category: 'IN_MATCH_GAMEPLAY',
+          roomCode: gameState.roomId,
+          seat,
+          reporterName: me?.displayName || 'Duelist',
+          summary: inMatchBugSummary.trim(),
+          boardSnapshot: compactSnapshot,
+          clientMeta,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(`🐞 Match Bug Report #${data.reportId} saved with full board state & diagnostic clues!`);
+        setInMatchBugSummary('');
+        setShowInMatchBugModal(false);
+        return;
+      }
+      throw new Error(data.error || `HTTP ${res.status}`);
+    } catch {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            type: 'REPORT_BUG',
+            roomCode: gameState.roomId,
+            seat,
+            reporterName: me?.displayName || 'Duelist',
+            summary: inMatchBugSummary.trim(),
+            boardSnapshot: compactSnapshot,
+            clientMeta,
+          })
+        );
+        alert('🐞 Match Bug Report submitted via live match connection!');
+        setInMatchBugSummary('');
+        setShowInMatchBugModal(false);
+      } else {
+        alert('Unable to reach server to submit bug report. Please check your connection.');
+      }
+    } finally {
+      setSubmittingMatchBug(false);
+    }
+  };
 
   const selectedHandCard = me.hand.find((c) => c.id === selectedHandCardId) || null;
 
@@ -2509,25 +2527,42 @@ export default function GameBoard({
                 )}
 
               {me.turnsTaken > 1 ? (
-                <button
-                  type="button"
-                  className="action-bar-btn primary"
-                  onClick={() => sendAction('START_CONTACT')}
-                >
-                  ⚔️ Contact Phase
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="action-bar-btn primary"
+                    onClick={() => sendAction('START_CONTACT')}
+                  >
+                    ⚔️ Contact Phase
+                  </button>
+                  {!(['left', 'center', 'right'] as const).some(
+                    (l) =>
+                      me.adventureArea[l].character !== null &&
+                      !me.actedLanesThisTurn?.includes(l)
+                  ) && (
+                    <button
+                      type="button"
+                      className="action-bar-btn gold"
+                      onClick={() => sendAction('END_TURN')}
+                    >
+                      End Turn ⏭️
+                    </button>
+                  )}
+                </>
               ) : (
-                <span style={{ fontSize: '11px', color: '#fbcfe8', fontStyle: 'italic' }}>
-                  (Turn 1: No Contact)
-                </span>
+                <>
+                  <span style={{ fontSize: '11px', color: '#fbcfe8', fontStyle: 'italic' }}>
+                    (Turn 1: No Contact)
+                  </span>
+                  <button
+                    type="button"
+                    className="action-bar-btn gold"
+                    onClick={() => sendAction('END_TURN')}
+                  >
+                    End Turn ⏭️
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                className="action-bar-btn gold"
-                onClick={() => sendAction('END_TURN')}
-              >
-                End Turn ⏭️
-              </button>
             </>
           )}
 
