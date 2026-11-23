@@ -23,7 +23,18 @@ const KNOWN_PET_NAMES = new Set([
 
 export function sanitizeCardText(raw?: string): string {
   if (!raw) return '';
-  return raw.replace(/\{\{[^}]*$/g, '').replace(/\{\{|\}\}/g, '').trim();
+  return raw
+    .replace(/\{\{[^}]*$/g, '')
+    .replace(/\{\{|\}\}/g, '')
+    .replace(/\bonly\s+only\b/gi, 'Only')
+    .trim();
+}
+
+export function extractBracketKeywords(raw?: string): string[] {
+  const text = sanitizeCardText(raw);
+  if (!text) return [];
+  const matches = Array.from(text.matchAll(/[｢\[「]([^｣\]」]+)[｣\]」]/g));
+  return matches.map((m) => m[1].trim()).filter(Boolean);
 }
 
 export function detectEffectKeywords(raw?: string): string[] {
@@ -39,40 +50,50 @@ export function detectEffectKeywords(raw?: string): string[] {
   if (/\bIf\b/i.test(text)) tags.push('If (Condition)');
   if (/\bOnly\b/i.test(text)) tags.push('Only (Restriction)');
   if (/\b(?:Choose|Select)\b/i.test(text)) tags.push('Choose/Select (Player Input)');
+  if (/for each/i.test(text)) tags.push('Scaling: For Each');
+  if (/treat/i.test(text)) tags.push('Mechanic: Treat');
+  if (/present/i.test(text)) tags.push('Mechanic: Present');
   if (/at the end of/i.test(text)) tags.push('Delayed: End of Turn');
   if (/until the end of/i.test(text)) tags.push('Duration: Until End of Turn');
   if (/top or (?:the )?bottom/i.test(text)) tags.push('Top/Bottom Deck Choice');
-  const bracket = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
-  if (bracket) tags.push(`Keyword: 「${bracket[1]}」`);
-  return tags;
+  for (const kw of extractBracketKeywords(text)) {
+    tags.push(`Keyword: 「${kw}」`);
+  }
+  return Array.from(new Set(tags));
 }
 
 export function matchesCardKeywordExact(card: CardDefinition, filterText: string): boolean {
-  const target = filterText.trim().toLowerCase();
-  if (!target) return true;
-
-  const cardName = String(card.name || '').trim().toLowerCase();
-  if (cardName === target) return true;
-
-  const extraText = String((card as any).traitsText || '').toLowerCase();
-  const combinedKeywords = `${card.traits || ''} ${card.type || ''} ${extraText}`.toLowerCase();
-
-  if (target === 'pet' && KNOWN_PET_NAMES.has(cardName)) {
-    return true;
-  }
-
-  const traitTokens = combinedKeywords
-    .split(/[,/|•·\s]+/)
-    .map((t) => t.trim())
+  const alternatives = filterText
+    .split(/\s+or\s+/i)
+    .map((part) => part.replace(/[｢\[「｣\]」]/g, '').trim().toLowerCase())
     .filter(Boolean);
 
-  if (!target.includes(' ') && traitTokens.includes(target)) {
-    return true;
-  }
+  if (alternatives.length === 0) return true;
 
-  const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const wordBoundaryRegex = new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, 'i');
-  if (wordBoundaryRegex.test(combinedKeywords)) return true;
+  for (const target of alternatives) {
+    const cardName = String(card.name || '').trim().toLowerCase();
+    if (cardName === target) return true;
+
+    const extraText = String((card as any).traitsText || '').toLowerCase();
+    const combinedKeywords = `${card.traits || ''} ${card.type || ''} ${extraText}`.toLowerCase();
+
+    if (target === 'pet' && KNOWN_PET_NAMES.has(cardName)) {
+      return true;
+    }
+
+    const traitTokens = combinedKeywords
+      .split(/[,/|•·\s]+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    if (!target.includes(' ') && traitTokens.includes(target)) {
+      return true;
+    }
+
+    const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wordBoundaryRegex = new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, 'i');
+    if (wordBoundaryRegex.test(combinedKeywords)) return true;
+  }
 
   return false;
 }
@@ -80,8 +101,25 @@ export function matchesCardKeywordExact(card: CardDefinition, filterText: string
 export function extractAdornRestriction(card: CardDefinition): string | null {
   const text = sanitizeCardText(card.effectText);
   if (!text) return null;
-  const adornMatch = text.match(/only\s+adorn\s+[｢\[「]([^｣\]」]+)[｣\]」]/i);
+  const adornMatch = text.match(
+    /only\s+adorn\s+([｢\[「][^｣\]」]+[｣\]」](?:\s+or\s+[｢\[「][^｣\]」]+[｣\]」])*)/i
+  );
   return adornMatch ? adornMatch[1].trim() : null;
+}
+
+export function extractItemGrantedAdventureClause(slot: AdventureSlot): {
+  sourceCard: CardDefinition;
+  clause: string;
+} | null {
+  for (const item of slot.items || []) {
+    const text = sanitizeCardText(item.effectText);
+    const granted = text.match(/adorned\s+character\s+gains\s*:?\s*"([^"]+)"/i);
+    if (granted && /adventure\s*:/i.test(granted[1])) {
+      const inner = extractTriggerClause(granted[1], 'Adventure') || granted[1];
+      return { sourceCard: item, clause: inner };
+    }
+  }
+  return null;
 }
 
 export function canPlayCardRestrictions(
@@ -99,12 +137,12 @@ export function canPlayCardRestrictions(
     if (!targetChar || !matchesCardKeywordExact(targetChar, adornRequired)) {
       return {
         allowed: false,
-        reason: `Only adorn 「${adornRequired}」`,
+        reason: `Only adorn ${adornRequired}`,
       };
     }
   }
 
-  const onlyMatch = text.match(/^only\s+(?:use|play|activate)\s+when\s+([^.]+)\./i);
+  const onlyMatch = text.match(/only\s+(?:use|play|activate)\s+when\s+([^.]+)\./i);
   if (onlyMatch) {
     const cond = onlyMatch[1].trim();
     if (!evaluateBoardCondition(state, playerId, cond)) {
@@ -118,11 +156,38 @@ export function canPlayCardRestrictions(
   return { allowed: true };
 }
 
-export function getEffectiveCardCost(player: PlayerState, card: CardDefinition): number {
+export function getEffectiveCardCost(
+  player: PlayerState,
+  card: CardDefinition,
+  rivalPlayer?: PlayerState
+): number {
   let baseCost = Math.max(0, Number(card.cost) || 0);
   if (baseCost === 0) return 0;
 
   const cardType = String(card.type || '').toLowerCase();
+  const cardText = sanitizeCardText(card.effectText);
+
+  // 1. Self-printed scaling cost reduction (e.g. "-1 Cost of Force of Harmony when played from Hand for each ...")
+  const selfDiscountMatch = cardText.match(
+    /(?:this\s+(?:character|item|event)\s+gets\s+)?-(\d+)\s*cost(?:\s+of\s+force\s+of\s+harmony)?\s+when\s+played\s+from\s+hand\s+(for\s+each\s+[^.]+)/i
+  );
+  if (selfDiscountMatch) {
+    const perUnit = parseInt(selfDiscountMatch[1], 10) || 1;
+    const scale = evaluateScalingMultiplier(selfDiscountMatch[2], player, rivalPlayer);
+    baseCost = Math.max(0, baseCost - perUnit * scale);
+  }
+
+  // 2. Temporary next-card cost discount
+  if (player.nextCardCostDiscount) {
+    const disc = player.nextCardCostDiscount;
+    const typeMatches = !disc.cardType || cardType.includes(disc.cardType.toLowerCase());
+    const nameMatches = !disc.filter || matchesCardKeywordExact(card, disc.filter);
+    if (typeMatches && nameMatches) {
+      baseCost = Math.max(0, baseCost - disc.amount);
+    }
+  }
+
+  // 3. Leader passive -1 Cost
   const leaderText = sanitizeCardText(player.leader?.effectText);
   if (
     leaderText &&
@@ -135,6 +200,7 @@ export function getEffectiveCardCost(player: PlayerState, card: CardDefinition):
     baseCost = Math.max(0, baseCost - 1);
   }
 
+  // 4. Scene passive -1 Cost
   for (const sc of player.sceneArea) {
     if (!sc.isFaceUp) continue;
     const scText = sanitizeCardText(sc.card.effectText);
@@ -153,8 +219,12 @@ export function getEffectiveCardCost(player: PlayerState, card: CardDefinition):
   return baseCost;
 }
 
-export function canPayHarmonyCost(player: PlayerState, card: CardDefinition): boolean {
-  const requiredCost = getEffectiveCardCost(player, card);
+export function canPayHarmonyCost(
+  player: PlayerState,
+  card: CardDefinition,
+  rivalPlayer?: PlayerState
+): boolean {
+  const requiredCost = getEffectiveCardCost(player, card, rivalPlayer);
   if (requiredCost === 0) return true;
 
   const readyScenes = player.sceneArea.filter((s) => !s.isExhausted);
@@ -207,6 +277,104 @@ export function exhaustScenesWithElementPriority(
   );
 }
 
+export function evaluateScalingMultiplier(
+  text: string,
+  ownerPlayer?: PlayerState,
+  rivalPlayer?: PlayerState
+): number {
+  if (!ownerPlayer) return 1;
+  const allLanes: LaneKey[] = ['left', 'center', 'right'];
+
+  const bracketEach = text.match(
+    /for\s+each\s+([｢\[「][^｣\]」]+[｣\]」](?:\s+or\s+[｢\[「][^｣\]」]+[｣\]」])*)\s+in\s+your\s+adventure\s+area/i
+  );
+  if (bracketEach) {
+    return allLanes.filter((l) => {
+      const c = ownerPlayer.adventureArea[l].character;
+      return c !== null && matchesCardKeywordExact(c, bracketEach[1]);
+    }).length;
+  }
+
+  if (/for\s+each\s+character\s+in\s+your\s+and\s+your\s+rival'?s\s+adventure\s+area/i.test(text)) {
+    const mine = allLanes.filter((l) => ownerPlayer.adventureArea[l].character !== null).length;
+    const theirs = rivalPlayer
+      ? allLanes.filter((l) => rivalPlayer.adventureArea[l].character !== null).length
+      : 0;
+    return mine + theirs;
+  }
+
+  if (
+    /for\s+each\s+character\s+that\s+has\s+had\s+a\s+treat\s+in\s+your\s+and\s+your\s+rival'?s\s+adventure\s+areas?/i.test(
+      text
+    )
+  ) {
+    const mine = allLanes.filter(
+      (l) => ownerPlayer.adventureArea[l].character !== null && ownerPlayer.adventureArea[l].hadTreat
+    ).length;
+    const theirs = rivalPlayer
+      ? allLanes.filter(
+          (l) => rivalPlayer.adventureArea[l].character !== null && rivalPlayer.adventureArea[l].hadTreat
+        ).length
+      : 0;
+    return mine + theirs;
+  }
+
+  if (/for\s+each\s+character\s+that\s+has\s+had\s+a\s+treat\s+in\s+your\s+adventure\s+area/i.test(text)) {
+    return allLanes.filter(
+      (l) => ownerPlayer.adventureArea[l].character !== null && ownerPlayer.adventureArea[l].hadTreat
+    ).length;
+  }
+
+  if (/for\s+each\s+empty\s+slot\s+in\s+your\s+adventure\s+area/i.test(text)) {
+    return allLanes.filter((l) => ownerPlayer.adventureArea[l].character === null).length;
+  }
+
+  if (/for\s+each\s+character\s+in\s+your\s+adventure\s+area/i.test(text)) {
+    return allLanes.filter((l) => ownerPlayer.adventureArea[l].character !== null).length;
+  }
+
+  if (/for\s+each\s+scene\s+in\s+your\s+scene\s+area/i.test(text)) {
+    return ownerPlayer.sceneArea.length;
+  }
+
+  if (/for\s+each\s+event\s+in\s+your\s+retirement\s+area/i.test(text)) {
+    return ownerPlayer.retirement.filter((c) => String(c.type || '').toLowerCase() === 'event').length;
+  }
+
+  const retBracketEach = text.match(
+    /for\s+each\s+[｢\[「]([^｣\]」]+)[｣\]」]\s+in\s+your\s+retirement\s+area/i
+  );
+  if (retBracketEach) {
+    return ownerPlayer.retirement.filter((c) => matchesCardKeywordExact(c, retBracketEach[1])).length;
+  }
+
+  if (/for\s+each\s+plan\s+in\s+your\s+story\s+area/i.test(text)) {
+    return ownerPlayer.storyStages.filter((s) => s.planCard !== null && !s.isPlanRevealed).length;
+  }
+
+  if (/for\s+each\s+plan\s+in\s+rival'?s\s+story\s+area/i.test(text) && rivalPlayer) {
+    return rivalPlayer.storyStages.filter((s) => s.planCard !== null && !s.isPlanRevealed).length;
+  }
+
+  if (/for\s+each\s+present\s+in\s+your\s+and\s+your\s+rival'?s\s+adventure\s+areas?/i.test(text)) {
+    const mine = allLanes.reduce((acc, l) => acc + (ownerPlayer.adventureArea[l].presents?.length || 0), 0);
+    const theirs = rivalPlayer
+      ? allLanes.reduce((acc, l) => acc + (rivalPlayer.adventureArea[l].presents?.length || 0), 0)
+      : 0;
+    return mine + theirs;
+  }
+
+  if (/for\s+each\s+card\s+in\s+your\s+hand/i.test(text)) {
+    return ownerPlayer.hand.length;
+  }
+
+  return 1;
+}
+
+function areAdjacentLanes(a: LaneKey, b: LaneKey): boolean {
+  return (a === 'left' && b === 'center') || (a === 'center' && (b === 'left' || b === 'right')) || (a === 'right' && b === 'center');
+}
+
 function doesPassiveTextApplyToCharacter(
   rawText: string,
   character: CardDefinition,
@@ -215,20 +383,23 @@ function doesPassiveTextApplyToCharacter(
   ownerPlayer?: PlayerState,
   slot?: AdventureSlot,
   isSelfCard = false,
-  isAttachedItem = false
+  isAttachedItem = false,
+  rivalPlayer?: PlayerState
 ): number {
   const text = sanitizeCardText(rawText);
   if (!text) return 0;
 
   if (
-    /Inspo Boost|Inspiration Boost|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted|until the end of|at the end of/i.test(
+    /Inspo Boost|Inspiration Boost|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted|until the end of|at the end of|each character in rival'?s adventure area gets/i.test(
       text
     )
   ) {
     return 0;
   }
 
-  const isContinuousAdventure = /^adventure\s*:\s*while\b/i.test(text);
+  const isContinuousAdventure = /^adventure\s*:\s*(?:while|this\s+character|each\s+character|adorned)/i.test(
+    text
+  );
   if (/^adventure\s*:/i.test(text) && !isContinuousAdventure) {
     return 0;
   }
@@ -236,8 +407,8 @@ function doesPassiveTextApplyToCharacter(
   const powerMatch = text.match(/get[s]?\s*\+(\d+)\s*(?:Inspiration|Power)/i);
   if (!powerMatch) return 0;
 
-  const bonus = parseInt(powerMatch[1], 10) || 0;
-  if (bonus <= 0) return 0;
+  const perUnit = parseInt(powerMatch[1], 10) || 0;
+  if (perUnit <= 0) return 0;
 
   if (/(?:during|in)\s+your\s+turn/i.test(text) && !isOwnersTurn) {
     return 0;
@@ -246,8 +417,18 @@ function doesPassiveTextApplyToCharacter(
     return 0;
   }
 
+  // Adorned Character cost threshold checks (e.g., BP01-SPR24, BP01-SPR27)
+  const costLess = text.match(/adorned\s+character\s+with\s+cost(?:\s+of\s+force\s+of\s+harmony)?\s+(\d+)\s+or\s+less/i);
+  if (costLess && (Number(character.cost) || 0) > (parseInt(costLess[1], 10) || 0)) {
+    return 0;
+  }
+  const costMore = text.match(/adorned\s+character\s+with\s+cost(?:\s+of\s+force\s+of\s+harmony)?\s+(\d+)\s+or\s+more/i);
+  if (costMore && (Number(character.cost) || 0) < (parseInt(costMore[1], 10) || 0)) {
+    return 0;
+  }
+
   const whileBracketInAdv = text.match(
-    /while\s+there\s+(?:is|are)\s+(?:any|a|an)\s+[｢\[「]([^｣\]」]+)[｣\]」]\s+in\s+your\s+adventure\s+area/i
+    /while\s+there\s+(?:is|are)\s+(?:any|a|an)\s+([｢\[「][^｣\]」]+[｣\]」](?:\s+or\s+[｢\[「][^｣\]」]+[｣\]」])*)\s+in\s+your\s+adventure\s+area/i
   );
   if (whileBracketInAdv && ownerPlayer) {
     const required = whileBracketInAdv[1].trim();
@@ -264,8 +445,7 @@ function doesPassiveTextApplyToCharacter(
     ) &&
     ownerPlayer
   ) {
-    const hasUntappedScene = ownerPlayer.sceneArea.some((sc) => !sc.isExhausted);
-    if (!hasUntappedScene) return 0;
+    if (!ownerPlayer.sceneArea.some((sc) => !sc.isExhausted)) return 0;
   }
 
   if (
@@ -274,51 +454,39 @@ function doesPassiveTextApplyToCharacter(
     ) &&
     ownerPlayer
   ) {
-    const hasTappedScene = ownerPlayer.sceneArea.some((sc) => sc.isExhausted);
-    if (!hasTappedScene) return 0;
+    if (!ownerPlayer.sceneArea.some((sc) => sc.isExhausted)) return 0;
+  }
+
+  if (/while\s+there\s+is\s+(?:any|an)\s+event\s+in\s+your\s+retirement\s+area/i.test(text) && ownerPlayer) {
+    if (!ownerPlayer.retirement.some((c) => String(c.type || '').toLowerCase() === 'event')) return 0;
   }
 
   if (/while there is any item in your retirement/i.test(text) && ownerPlayer) {
-    const hasItemInRetirement = ownerPlayer.retirement.some(
-      (c) => String(c.type || '').toLowerCase() === 'item'
-    );
-    if (!hasItemInRetirement) return 0;
+    if (!ownerPlayer.retirement.some((c) => String(c.type || '').toLowerCase() === 'item')) return 0;
   }
 
-  if (/while adorned with an item/i.test(text) && slot && slot.items.length === 0) {
-    return 0;
-  }
+  if (/while adorned with an item/i.test(text) && slot && slot.items.length === 0) return 0;
+  if (/while (?:it has|adorned with|this character has) (?:a )?treat/i.test(text) && slot && slot.treats <= 0) return 0;
+  if (/while (?:it has|adorned with) (?:a )?present/i.test(text) && slot && slot.presents.length === 0) return 0;
+  if (/each character that has had a treat/i.test(text) && slot && !slot.hadTreat) return 0;
+  if (/each character that has had a present/i.test(text) && slot && !slot.hadPresent) return 0;
 
-  if (/while (?:it has|adorned with) (?:a )?treat/i.test(text) && slot && slot.treats <= 0) {
-    return 0;
-  }
-
-  if (/while (?:it has|adorned with) (?:a )?present/i.test(text) && slot && slot.presents.length === 0) {
-    return 0;
-  }
-
-  if (/this\s+character\s+gets/i.test(text) && !isSelfCard && !isAttachedItem) {
-    return 0;
-  }
-  if (/adorned\s+character\s+gets/i.test(text) && !isAttachedItem) {
-    return 0;
-  }
+  if (/this\s+character\s+gets/i.test(text) && !isSelfCard && !isAttachedItem) return 0;
+  if (/adorned\s+character\s+gets/i.test(text) && !isAttachedItem) return 0;
+  if (/other\s+characters?\s+in\s+your\s+adventure\s+area/i.test(text) && isAttachedItem) return 0;
+  if (/characters?\s+next\s+to\s+adorned\s+character/i.test(text) && isAttachedItem) return 0;
 
   if (/left\s+lane/i.test(text) && lane !== 'left') return 0;
   if (/center\s+lane/i.test(text) && lane !== 'center') return 0;
   if (/right\s+lane/i.test(text) && lane !== 'right') return 0;
 
   const charType = String(character.type || '').toLowerCase();
-  if (/your\s+friend/i.test(text) && !charType.includes('friend')) {
-    return 0;
-  }
+  if (/your\s+friend/i.test(text) && !charType.includes('friend')) return 0;
 
   const elements = ['magic', 'loyalty', 'honesty', 'generosity', 'kindness', 'laughter'];
   for (const el of elements) {
     const elRegex = new RegExp(`your\\s+${el}\\s+character`, 'i');
-    if (elRegex.test(text) && String(character.element || '').toLowerCase() !== el) {
-      return 0;
-    }
+    if (elRegex.test(text) && String(character.element || '').toLowerCase() !== el) return 0;
   }
 
   if (!isContinuousAdventure && !isSelfCard && !isAttachedItem) {
@@ -328,7 +496,8 @@ function doesPassiveTextApplyToCharacter(
     }
   }
 
-  return bonus;
+  const multiplier = evaluateScalingMultiplier(text, ownerPlayer, rivalPlayer);
+  return perUnit * multiplier;
 }
 
 export function calculateLanePowerBreakdown(
@@ -336,7 +505,9 @@ export function calculateLanePowerBreakdown(
   playerId: '0' | '1',
   lane: LaneKey
 ): LanePowerBreakdown {
+  const oppId: '0' | '1' = playerId === '0' ? '1' : '0';
   const player = state.players[playerId];
+  const rival = state.players[oppId];
   const slot = player.adventureArea[lane];
 
   if (!slot.character) {
@@ -347,7 +518,9 @@ export function calculateLanePowerBreakdown(
   const basePower = Number(character.power) || 0;
   const modifiers: PowerModifierLine[] = [];
   const isOwnersTurn = state.turnPlayerId === playerId;
+  const allLanes: LaneKey[] = ['left', 'center', 'right'];
 
+  // 1. Self passive
   const selfBonus = doesPassiveTextApplyToCharacter(
     character.effectText || '',
     character,
@@ -356,7 +529,8 @@ export function calculateLanePowerBreakdown(
     player,
     slot,
     true,
-    false
+    false,
+    rival
   );
   if (selfBonus > 0) {
     modifiers.push({
@@ -366,6 +540,7 @@ export function calculateLanePowerBreakdown(
     });
   }
 
+  // 2. Attached items on this slot
   for (const item of slot.items) {
     let itemBonus = Number(item.power) || 0;
     const itemText = sanitizeCardText(item.effectText);
@@ -377,7 +552,8 @@ export function calculateLanePowerBreakdown(
       player,
       slot,
       false,
-      true
+      true,
+      rival
     );
     itemBonus += passiveItemBonus;
 
@@ -390,6 +566,75 @@ export function calculateLanePowerBreakdown(
     }
   }
 
+  // 3. Friendly board-wide & adjacent-lane auras from other characters/items
+  for (const otherLane of allLanes) {
+    if (otherLane === lane) continue;
+    const otherSlot = player.adventureArea[otherLane];
+    if (!otherSlot.character) continue;
+
+    // Friendly character global aura (e.g. Princess Luna: Each Character that has had a Treat gets +1)
+    const otherCharText = sanitizeCardText(otherSlot.character.effectText);
+    if (/each\s+character\s+that\s+has\s+had\s+a\s+(?:treat|present)/i.test(otherCharText)) {
+      const auraBonus = doesPassiveTextApplyToCharacter(
+        otherCharText,
+        character,
+        lane,
+        isOwnersTurn,
+        player,
+        slot,
+        false,
+        false,
+        rival
+      );
+      if (auraBonus > 0) {
+        modifiers.push({
+          sourceName: `Aura: ${otherSlot.character.name}`,
+          sourceType: 'MANE_PASSIVE',
+          amount: auraBonus,
+        });
+      }
+    }
+
+    // Items on other lanes that buff "Other Characters" or "Characters next to adorned Character"
+    for (const otherItem of otherSlot.items) {
+      const itText = sanitizeCardText(otherItem.effectText);
+      const isOtherAll = /other\s+characters?\s+in\s+your\s+adventure\s+area\s+get/i.test(itText);
+      const isAdjacent =
+        /characters?\s+next\s+to\s+adorned\s+character\s+get/i.test(itText) &&
+        areAdjacentLanes(lane, otherLane);
+      if (isOtherAll || isAdjacent) {
+        const m = itText.match(/get[s]?\s*\+(\d+)\s*(?:Inspiration|Power)/i);
+        const amt = m ? parseInt(m[1], 10) || 0 : 0;
+        if (amt > 0) {
+          modifiers.push({
+            sourceName: `Item Aura: ${otherItem.name}`,
+            sourceType: 'ITEM',
+            amount: amt,
+          });
+        }
+      }
+    }
+  }
+
+  // 4. Rival continuous debuff auras (e.g. BP03-CR04 Applejack: While this Character has a Treat, each Character in Rival's Adventure Area gets -1 Inspiration)
+  for (const rLane of allLanes) {
+    const rSlot = rival.adventureArea[rLane];
+    if (!rSlot.character) continue;
+    const rText = sanitizeCardText(rSlot.character.effectText);
+    const debuffAura = rText.match(
+      /while\s+this\s+character\s+has\s+a\s+treat,\s*each\s+character\s+in\s+rival'?s\s+adventure\s+area\s+gets\s*-(\d+)\s*(?:Inspiration|Power)/i
+    );
+    if (debuffAura && rSlot.treats > 0) {
+      const penalty = parseInt(debuffAura[1], 10) || 1;
+      modifiers.push({
+        sourceName: `Rival Aura: ${rSlot.character.name}`,
+        sourceType: 'INSPO_BOOST',
+        amount: -penalty,
+      });
+    }
+  }
+
+  // 5. Leader, Scene, and Story passives
   if (player.leader) {
     const leaderBonus = doesPassiveTextApplyToCharacter(
       player.leader.effectText || '',
@@ -399,7 +644,8 @@ export function calculateLanePowerBreakdown(
       player,
       slot,
       false,
-      false
+      false,
+      rival
     );
     if (leaderBonus > 0) {
       modifiers.push({
@@ -420,7 +666,8 @@ export function calculateLanePowerBreakdown(
       player,
       slot,
       false,
-      false
+      false,
+      rival
     );
     if (scBonus > 0) {
       modifiers.push({
@@ -441,7 +688,8 @@ export function calculateLanePowerBreakdown(
       player,
       slot,
       false,
-      false
+      false,
+      rival
     );
     if (stBonus > 0) {
       modifiers.push({
@@ -514,45 +762,143 @@ export function evaluateBoardCondition(
 ): boolean {
   if (!conditionText) return true;
   const cond = sanitizeCardText(conditionText);
+  const oppId: '0' | '1' = ownerId === '0' ? '1' : '0';
   const player = state.players[ownerId];
+  const rival = state.players[oppId];
   const allLanes: LaneKey[] = ['left', 'center', 'right'];
 
   const sceneMinMatch = cond.match(
     /(?:there\s+are|you\s+have)\s+(\d+)\s+or\s+more\s+scenes?\s+in\s+your\s+scene\s+area/i
   );
-  if (sceneMinMatch) {
-    const minScenes = parseInt(sceneMinMatch[1], 10) || 1;
-    return player.sceneArea.length >= minScenes;
-  }
+  if (sceneMinMatch) return player.sceneArea.length >= (parseInt(sceneMinMatch[1], 10) || 1);
 
   const sceneMaxMatch = cond.match(
     /(?:there\s+are|you\s+have)\s+(\d+)\s+or\s+(?:fewer|less)\s+scenes?\s+in\s+your\s+scene\s+area/i
   );
-  if (sceneMaxMatch) {
-    const maxScenes = parseInt(sceneMaxMatch[1], 10) || 0;
-    return player.sceneArea.length <= maxScenes;
+  if (sceneMaxMatch) return player.sceneArea.length <= (parseInt(sceneMaxMatch[1], 10) || 0);
+
+  const faceUpMinMatch = cond.match(
+    /(?:there\s+are|you\s+have)\s+(\d+)\s+or\s+more\s+face-up\s+scenes?\s+in\s+your\s+scene\s+area/i
+  );
+  if (faceUpMinMatch) {
+    return player.sceneArea.filter((s) => s.isFaceUp).length >= (parseInt(faceUpMinMatch[1], 10) || 1);
   }
 
-  const bracketInAdv = cond.match(
-    /there\s+is\s+(?:any|a|an)\s+[｢\[「]([^｣\]」]+)[｣\]」]\s+in\s+your\s+adventure\s+area/i
+  if (/there\s+is\s+(?:any|a|an)\s+face-down\s+scene\s+in\s+your\s+scene\s+area/i.test(cond)) {
+    return player.sceneArea.some((s) => !s.isFaceUp);
+  }
+  if (/there\s+is\s+(?:any|a|an)\s+face-up\s+scene\s+in\s+your\s+scene\s+area/i.test(cond)) {
+    return player.sceneArea.some((s) => s.isFaceUp);
+  }
+  if (/there\s+is\s+(?:any|a|an)\s+empty\s+slot\s+in\s+your\s+adventure\s+area/i.test(cond)) {
+    return allLanes.some((l) => player.adventureArea[l].character === null);
+  }
+  if (/there\s+is\s+(?:any|a|an)\s+tapped\s+character\s+in\s+your\s+adventure\s+area/i.test(cond)) {
+    return allLanes.some((l) => player.adventureArea[l].character !== null && player.adventureArea[l].isExhausted);
+  }
+  if (/there\s+is\s+(?:any|a|an)\s+character\s+adorned\s+with\s+an\s+item\s+in\s+your\s+adventure\s+area/i.test(cond)) {
+    return allLanes.some((l) => player.adventureArea[l].character !== null && player.adventureArea[l].items.length > 0);
+  }
+  if (/there\s+is\s+no\s+other\s+character\s+in\s+your\s+adventure\s+area/i.test(cond)) {
+    return allLanes.filter((l) => player.adventureArea[l].character !== null).length <= 1;
+  }
+  if (/rival\s+has\s+more\s+plans\s+than\s+you\s+in\s+story\s+area/i.test(cond)) {
+    const myPlans = player.storyStages.filter((s) => s.planCard !== null && !s.isPlanRevealed).length;
+    const oppPlans = rival.storyStages.filter((s) => s.planCard !== null && !s.isPlanRevealed).length;
+    return oppPlans > myPlans;
+  }
+
+  const rivalExactChars = cond.match(/there\s+are\s+(\d+)\s+characters?\s+in\s+rival'?s\s+adventure\s+area/i);
+  if (rivalExactChars) {
+    return allLanes.filter((l) => rival.adventureArea[l].character !== null).length === (parseInt(rivalExactChars[1], 10) || 0);
+  }
+
+  const rivalMinChars = cond.match(/there\s+are\s+(\d+)\s+or\s+more\s+characters?\s+in\s+rival'?s\s+adventure\s+area/i);
+  if (rivalMinChars) {
+    return allLanes.filter((l) => rival.adventureArea[l].character !== null).length >= (parseInt(rivalMinChars[1], 10) || 1);
+  }
+
+  const rivalHighPower = cond.match(/there\s+is\s+(?:any|a|an)\s+character\s+with\s+inspiration\s+(\d+)\s+or\s+more\s+in\s+rival'?s\s+adventure\s+area/i);
+  if (rivalHighPower) {
+    const minPwr = parseInt(rivalHighPower[1], 10) || 1;
+    return allLanes.some(
+      (l) => rival.adventureArea[l].character !== null && calculateLanePowerBreakdown(state, oppId, l).totalPower >= minPwr
+    );
+  }
+
+  if (/number\s+of\s+characters\s+in\s+your\s+adventure\s+area\s+is\s+less\s+than\s+the\s+number\s+of\s+characters\s+in\s+rival'?s\s+adventure\s+area/i.test(cond)) {
+    const mine = allLanes.filter((l) => player.adventureArea[l].character !== null).length;
+    const theirs = allLanes.filter((l) => rival.adventureArea[l].character !== null).length;
+    return mine < theirs;
+  }
+
+  if (/cards\s+in\s+your\s+hand\s+are\s+less\s+than\s+the\s+cards\s+in\s+rival'?s\s+hand/i.test(cond)) {
+    return player.hand.length < rival.hand.length;
+  }
+
+  const handMinMatch = cond.match(/there\s+are\s+(\d+)\s+or\s+more\s+cards\s+in\s+your\s+hand/i);
+  if (handMinMatch) return player.hand.length >= (parseInt(handMinMatch[1], 10) || 1);
+
+  if (/there\s+is\s+(?:any|a|an)\s+character\s+that\s+has\s+had\s+a\s+treat\s+in\s+your\s+adventure\s+area/i.test(cond)) {
+    return allLanes.some((l) => player.adventureArea[l].character !== null && player.adventureArea[l].hadTreat);
+  }
+
+  if (/there\s+are\s+[｢\[「]unicorn[｣\]」]\s*,\s*[｢\[「]pegasus[｣\]」]\s*(?:and|,)\s*[｢\[「]earth\s+pony[｣\]」]\s+in\s+your\s+adventure\s+area/i.test(cond)) {
+    const deployedChars = allLanes.map((l) => player.adventureArea[l].character).filter(Boolean) as CardDefinition[];
+    return (
+      deployedChars.some((c) => matchesCardKeywordExact(c, 'Unicorn')) &&
+      deployedChars.some((c) => matchesCardKeywordExact(c, 'Pegasus')) &&
+      deployedChars.some((c) => matchesCardKeywordExact(c, 'Earth Pony'))
+    );
+  }
+
+  const bracketCostInAdv = cond.match(
+    /there\s+is\s+(?:any|a|an)\s+[｢\[「]([^｣\]」]+)[｣\]」]\s+with\s+cost(?:\s+of\s+force\s+of\s+harmony)?\s+(\d+)\s+or\s+less\s+in\s+your\s+adventure\s+area/i
   );
-  if (bracketInAdv) {
-    const required = bracketInAdv[1].trim();
+  if (bracketCostInAdv) {
+    const reqName = bracketCostInAdv[1].trim();
+    const maxCost = parseInt(bracketCostInAdv[2], 10) || 0;
     return allLanes.some((l) => {
-      const char = player.adventureArea[l].character;
-      return char !== null && matchesCardKeywordExact(char, required);
+      const c = player.adventureArea[l].character;
+      return c !== null && matchesCardKeywordExact(c, reqName) && (Number(c.cost) || 0) <= maxCost;
     });
   }
 
+  const bracketInAdv = cond.match(
+    /there\s+is\s+(?:any|a|an)\s+([｢\[「][^｣\]」]+[｣\]」](?:\s+or\s+[｢\[「][^｣\]」]+[｣\]」])*)\s+in\s+your\s+adventure\s+area/i
+  );
+  if (bracketInAdv) {
+    return allLanes.some((l) => {
+      const char = player.adventureArea[l].character;
+      return char !== null && matchesCardKeywordExact(char, bracketInAdv[1].trim());
+    });
+  }
+
+  const retMinEvents = cond.match(/there\s+are\s+(\d+)\s+or\s+more\s+events?\s+in\s+your\s+retirement\s+area/i);
+  if (retMinEvents) {
+    return player.retirement.filter((c) => String(c.type || '').toLowerCase() === 'event').length >= (parseInt(retMinEvents[1], 10) || 1);
+  }
+
+  const retMinItems = cond.match(/there\s+are\s+(\d+)\s+or\s+more\s+items?\s+in\s+your\s+retirement\s+area/i);
+  if (retMinItems) {
+    return player.retirement.filter((c) => String(c.type || '').toLowerCase() === 'item').length >= (parseInt(retMinItems[1], 10) || 1);
+  }
+
+  if (/there\s+is\s+(?:any|a|an)\s+event\s+in\s+your\s+retirement\s+area/i.test(cond)) {
+    return player.retirement.some((c) => String(c.type || '').toLowerCase() === 'event');
+  }
   if (/there\s+is\s+(?:any|an)\s+item\s+in\s+your\s+retirement/i.test(cond)) {
     return player.retirement.some((c) => String(c.type || '').toLowerCase() === 'item');
   }
 
+  const minCharsMatch = cond.match(/there\s+are\s+(\d+)\s+or\s+more\s+characters?\s+in\s+your\s+adventure\s+area/i);
+  if (minCharsMatch) {
+    return allLanes.filter((l) => player.adventureArea[l].character !== null).length >= (parseInt(minCharsMatch[1], 10) || 1);
+  }
+
   const countCharsMatch = cond.match(/you\s+have\s+(\d+)\s+or\s+more\s+characters?/i);
   if (countCharsMatch) {
-    const minCount = parseInt(countCharsMatch[1], 10) || 1;
-    const currentCount = allLanes.filter((l) => player.adventureArea[l].character !== null).length;
-    return currentCount >= minCount;
+    return allLanes.filter((l) => player.adventureArea[l].character !== null).length >= (parseInt(countCharsMatch[1], 10) || 1);
   }
 
   return true;
@@ -562,15 +908,25 @@ export interface ParsedActivatedEffect {
   kind:
     | 'NONE_PASSIVE'
     | 'DRAW'
+    | 'DRAW_UNTIL_MATCH_RIVAL'
     | 'DRAW_THEN_DISCARD'
     | 'DISCARD_HAND'
     | 'DISCARD_THEN_DRAW'
     | 'RECOVER_RETIREMENT'
+    | 'REVIVE_RETIREMENT'
+    | 'MOVE_HAND_TO_PLAN'
     | 'UNTAP_SCENES'
+    | 'FLIP_SCENES_UP'
+    | 'FLIP_SCENES_DOWN'
+    | 'FLIP_RIVAL_SCENES_DOWN'
+    | 'ADD_FACEDOWN_SCENE'
+    | 'COST_DISCOUNT_NEXT'
     | 'SCRY_TOP_BOTTOM'
     | 'REVEAL_TOP_PICK_HAND'
     | 'TARGET_BUFF_POWER'
+    | 'BUFF_TWO_TARGETS'
     | 'TARGET_DEBUFF_OPPONENT'
+    | 'GLOBAL_DEBUFF_OPPONENT'
     | 'TARGET_RETIRE_OPPONENT'
     | 'PREVENT_RETIRE_IN_CONTACT'
     | 'TARGET_MOVE_FRIENDLY'
@@ -578,6 +934,7 @@ export interface ParsedActivatedEffect {
     | 'TARGET_READY_FRIENDLY'
     | 'GLOBAL_BUFF_FRIENDLY'
     | 'TREAT_FOR_YOU'
+    | 'REMOVE_TREAT'
     | 'DELIVER_PRESENT'
     | 'UNWRAP_PRESENT';
   amount: number;
@@ -589,6 +946,7 @@ export interface ParsedActivatedEffect {
   targetSide?: 'SELF' | 'OPPONENT' | 'ANY';
   requiredTypeFilter?: string;
   requiredNameFilter?: string;
+  secondaryNameFilter?: string;
 }
 
 export function extractTriggerClause(
@@ -614,6 +972,27 @@ export function extractTriggerClause(
   return match ? match[1].trim() : null;
 }
 
+/**
+ * Splits compound multi-sentence effects into ordered atomic clauses so every step resolves.
+ */
+export function splitCompoundClauses(rawText?: string): string[] {
+  let text = sanitizeCardText(rawText);
+  if (!text) return [];
+  // Strip leading "Only use when ..." sentence (already enforced by canPlayCardRestrictions)
+  text = text.replace(/^only\s+(?:use|play|activate)\s+when\s+[^.]+\.\s*/i, '').trim();
+  if (!text) return [];
+
+  // Keep "Reveal the top N ... choose 1 ..." or "Draw N, discard M" intact as single clauses
+  if (/reveal\s+the\s+top\s+\d+|draw\s+\d+.*discard\s+\d+|discard\s+.*draw\s+\d+/i.test(text)) {
+    return [text];
+  }
+
+  return text
+    .split(/(?<=\.)\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !/^only\s+(?:use|play|activate|adorn)\b/i.test(s));
+}
+
 export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | null {
   let text = sanitizeCardText(clauseText);
   if (!text) return null;
@@ -630,24 +1009,71 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     text = leadingIf[1].trim();
   }
 
-  const nameBracket = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
-  const nameFilter = nameBracket ? nameBracket[1].trim() : undefined;
+  const allBrackets = extractBracketKeywords(text);
+  const nameFilter = allBrackets[0];
 
   const limitMatch = text.match(
     /(?:cost(?:\s+of\s+Force\s+of\s+Harmony)?|power|inspiration|harmony(?:\s+level)?)\s*(\d+)\s*or\s*less/i
   );
   const parsedMaxLimit = limitMatch ? parseInt(limitMatch[1], 10) : undefined;
 
-  if (
-    /(?:look\s+at|reveal)\s+the\s+top\s+card\s+of\s+(?:your|the)\s+deck.*?(?:top\s+or\s+(?:the )?bottom)/i.test(
-      text
-    )
-  ) {
+  // Next-card cost discount (BP03-CR05, BP04-SPR01)
+  const nextDiscountMatch = text.match(
+    /the\s+next\s+(Item|Event|Character|[｢\[「][^｣\]」]+[｣\]」])\s+gets\s*-(\d+)\s*cost/i
+  );
+  if (nextDiscountMatch) {
+    const rawTarget = nextDiscountMatch[1].trim();
+    const isType = ['item', 'event', 'character'].includes(rawTarget.toLowerCase());
     return {
-      kind: 'SCRY_TOP_BOTTOM',
+      kind: 'COST_DISCOUNT_NEXT',
+      amount: parseInt(nextDiscountMatch[2], 10) || 1,
+      requiredTypeFilter: isType ? rawTarget : undefined,
+      requiredNameFilter: !isType ? rawTarget : undefined,
+    };
+  }
+
+  // Draw until hand matches rival (BP04-SPR08)
+  if (/draw\s+cards?\s+until\s+you\s+have\s+as\s+many\s+cards\s+in\s+hand\s+as\s+rival/i.test(text)) {
+    return { kind: 'DRAW_UNTIL_MATCH_RIVAL', amount: 1 };
+  }
+
+  // Add 1 face-down Scene, tap it (BP02-SPR09)
+  if (/add\s+1\s+face-down\s+scene/i.test(text)) {
+    return { kind: 'ADD_FACEDOWN_SCENE', amount: 1 };
+  }
+
+  // Move 1 Hand to Story Area as Plan (BP02-SPR02)
+  if (/move\s+1\s+hand\s+to\s+story\s+area.*plan/i.test(text)) {
+    return { kind: 'MOVE_HAND_TO_PLAN', amount: 1, requiresChoice: true };
+  }
+
+  // Revive Character from Retirement to Adventure Area (BP02-SPR11)
+  if (/retirement\s+area,\s*move\s+it\s+to\s+adventure\s+area/i.test(text)) {
+    return {
+      kind: 'REVIVE_RETIREMENT',
       amount: 1,
+      maxLimit: parsedMaxLimit,
+      requiredNameFilter: nameFilter,
       requiresChoice: true,
     };
+  }
+
+  // Flip Scenes face-up or face-down (BP02-SPR06, BP02-SPR08, BP02-SPR10, BP04-SPR06, BP04-SPR15)
+  const flipRivalDown = text.match(/choose\s+(\d+)\s+face-up\s+scenes?\s+in\s+rival'?s\s+scene\s+area,\s*turn\s+(?:it|them)\s+down/i);
+  if (flipRivalDown) {
+    return { kind: 'FLIP_RIVAL_SCENES_DOWN', amount: parseInt(flipRivalDown[1], 10) || 1, requiresChoice: true };
+  }
+  const flipSelfDown = text.match(/choose\s+(\d+)\s+face-up\s+scenes?(?:\s+in\s+your\s+scene\s+area)?,\s*turn\s+(?:it|them)\s+down/i);
+  if (flipSelfDown) {
+    return { kind: 'FLIP_SCENES_DOWN', amount: parseInt(flipSelfDown[1], 10) || 1, requiresChoice: true };
+  }
+  const flipSelfUp = text.match(/choose\s+(\d+)\s+face-down\s+(?:tapped\s+)?scenes?(?:\s+without\s+"everyday"\s+mark)?\s+in\s+your\s+scene\s+area,\s*turn\s+(?:it|them)\s+up/i);
+  if (flipSelfUp) {
+    return { kind: 'FLIP_SCENES_UP', amount: parseInt(flipSelfUp[1], 10) || 1, requiresChoice: true };
+  }
+
+  if (/(?:look\s+at|reveal)\s+the\s+top\s+card\s+of\s+(?:your|the)\s+deck.*?(?:top\s+or\s+(?:the )?bottom)/i.test(text)) {
+    return { kind: 'SCRY_TOP_BOTTOM', amount: 1, requiresChoice: true };
   }
 
   if (/(?:won'?t|cannot|can'?t)\s+(?:be\s+)?retired?\s+in\s+contact/i.test(text)) {
@@ -712,11 +1138,11 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   }
 
   const revealPickMatch = text.match(
-    /reveal\s+the\s+top\s+(\d+)\s+cards?\s+of\s+(?:your|the)\s+deck.*?choose\s+1\s+(Item|Event|Character|Scene|card|[｢\[「][^｣\]」]+[｣\]」])/i
+    /reveal\s+the\s+top\s+(\d+)\s+cards?\s+of\s+(?:your|the)\s+deck.*?choose\s+1\s+(Item|Event|Character|Scene|card|[｢\[「][^｣\]」]+[｣\]」](?:\s+or\s+[｢\[「][^｣\]」]+[｣\]」])*)/i
   );
   if (revealPickMatch) {
     const count = parseInt(revealPickMatch[1], 10) || 3;
-    const rawTarget = revealPickMatch[2].replace(/[｢\[「｣\]」]/g, '').trim();
+    const rawTarget = revealPickMatch[2].trim();
     const isAnyCard = rawTarget.toLowerCase() === 'card';
     const isCardType = ['item', 'event', 'character', 'scene'].includes(rawTarget.toLowerCase());
     return {
@@ -726,6 +1152,10 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
       requiredNameFilter: !isCardType && !isAnyCard ? rawTarget : nameFilter,
       requiresChoice: true,
     };
+  }
+
+  if (/remove\s+the\s+treat/i.test(text)) {
+    return { kind: 'REMOVE_TREAT', amount: 1, requiresChoice: true };
   }
 
   if (/treat for you!|put\s+\d+\s+treat/i.test(text)) {
@@ -761,7 +1191,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  if (/deliver\s+present|put\s+\d+\s+present/i.test(text)) {
+  if (/deliver\s+present|put\s+(?:\d+|[｢\[「][^｣\]」]+[｣\]」])\s*present/i.test(text)) {
     const countMatch = text.match(/put\s+(\d+)\s+present/i);
     const isGlobal = /each\s+/i.test(text);
     const targetSide: 'SELF' | 'OPPONENT' | 'ANY' = /rival'?s\s+adventure/i.test(text)
@@ -780,15 +1210,23 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   }
 
   if (/switch(?:es)?\s+positions/i.test(text)) {
-    const targetSide: 'SELF' | 'OPPONENT' = /rival'?s\s+adventure/i.test(text)
-      ? 'OPPONENT'
-      : 'SELF';
+    const targetSide: 'SELF' | 'OPPONENT' = /rival'?s\s+adventure/i.test(text) ? 'OPPONENT' : 'SELF';
     return {
       kind: 'SWITCH_POSITIONS',
       amount: 1,
       targetSide,
       requiredNameFilter: nameFilter,
       requiresChoice: true,
+    };
+  }
+
+  const globalDebuffMatch = text.match(
+    /each\s+character\s+in\s+rival'?s\s+adventure\s+area\s+gets\s*(?:–|-)\s*(\d+)\s*(?:Inspiration|Power)/i
+  );
+  if (globalDebuffMatch) {
+    return {
+      kind: 'GLOBAL_DEBUFF_OPPONENT',
+      amount: parseInt(globalDebuffMatch[1], 10) || 1,
     };
   }
 
@@ -822,10 +1260,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     return { kind: 'TARGET_READY_FRIENDLY', amount: 1, requiresChoice: true };
   }
 
-  if (
-    /retirement\s+(?:area|pile)/i.test(text) &&
-    /add\s+(?:it|them)\s+to\s+(?:your\s+)?hand/i.test(text)
-  ) {
+  if (/retirement\s+(?:area|pile)/i.test(text) && /add\s+(?:it|them)\s+to\s+(?:your\s+)?hand/i.test(text)) {
     const typeMatch = text.match(/(?:choose|select)\s+(?:1|any)\s+(Item|Event|Character|Scene)/i);
     return {
       kind: 'RECOVER_RETIREMENT',
@@ -845,7 +1280,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   }
 
   const globalMatch = text.match(
-    /(?:all|each)\s+(?:of\s+)?(?:your\s+)?(?:characters?|[｢\[「][^｣\]」]+[｣\]」])\s+(?:in\s+your\s+adventure\s+area\s+)?get[s]?\s*\+(\d+)/i
+    /(?:all|each)\s+(?:of\s+)?(?:your\s+)?(?:characters?(?:\s+that\s+has\s+had\s+a\s+treat)?|[｢\[「][^｣\]」]+[｣\]」])\s+(?:in\s+your\s+adventure\s+area\s+)?get[s]?\s*\+(\d+)/i
   );
   if (globalMatch) {
     return {
@@ -857,8 +1292,20 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
 
   const buffMatch = text.match(/\+(\d+)\s*(?:Inspiration|Power)/i);
   if (buffMatch) {
+    const isDualTarget =
+      allBrackets.length >= 2 &&
+      /choose\s+1\s+[｢\[「][^｣\]」]+[｣\]」]\s+and\s+1\s+[｢\[「][^｣\]」]+[｣\]」]/i.test(text);
+    if (isDualTarget) {
+      return {
+        kind: 'BUFF_TWO_TARGETS',
+        amount: parseInt(buffMatch[1], 10) || 1,
+        requiredNameFilter: allBrackets[0],
+        secondaryNameFilter: allBrackets[1],
+        requiresChoice: true,
+      };
+    }
     const isTargeted =
-      /choose|select|target|1\s+of\s+your|another/i.test(text) || Boolean(nameBracket);
+      /choose|select|target|1\s+of\s+your|another/i.test(text) || allBrackets.length > 0;
     return {
       kind: 'TARGET_BUFF_POWER',
       amount: parseInt(buffMatch[1], 10) || 1,

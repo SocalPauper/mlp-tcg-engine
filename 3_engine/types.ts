@@ -76,8 +76,15 @@ export interface LanePowerBreakdown {
   totalPower: number;
 }
 
+export interface NextCardDiscount {
+  filter?: string;
+  cardType?: string;
+  amount: number;
+}
+
 export type PendingEffectAction =
   | 'BUFF_POWER'
+  | 'BUFF_TWO_TARGETS'
   | 'DEBUFF_OPPONENT'
   | 'RETIRE_OPPONENT'
   | 'PREVENT_RETIRE_IN_CONTACT'
@@ -85,6 +92,7 @@ export type PendingEffectAction =
   | 'SWITCH_POSITIONS'
   | 'READY_FRIENDLY'
   | 'TREAT_CHARACTER'
+  | 'REMOVE_TREAT'
   | 'DELIVER_PRESENT'
   | 'UNWRAP_PRESENT';
 
@@ -109,6 +117,7 @@ export interface PendingTargetSelection {
     lane: LaneKey;
   }[];
   selectedFromLane?: LaneKey;
+  secondaryNameFilter?: string;
   resumeAttackQueue?: LaneKey[] | null;
   resumeEndTurnForPlayer?: '0' | '1' | null;
 }
@@ -120,9 +129,14 @@ export interface PendingHandChoice {
     | 'DISCARD_FROM_HAND'
     | 'DISCARD_THEN_DRAW'
     | 'RECOVER_FROM_RETIREMENT'
+    | 'REVIVE_FROM_RETIREMENT'
+    | 'MOVE_HAND_TO_PLAN'
     | 'PICK_REVEALED_TO_HAND'
     | 'TOP_OR_BOTTOM_DECK'
     | 'CHOOSE_SCENE_TO_UNTAP'
+    | 'CHOOSE_SCENE_TO_FLIP_UP'
+    | 'CHOOSE_SCENE_TO_FLIP_DOWN'
+    | 'CHOOSE_RIVAL_SCENE_TO_FLIP_DOWN'
     | 'END_PHASE_HAND_LIMIT';
   count: number;
   secondaryDrawCount?: number;
@@ -253,6 +267,7 @@ export interface PlayerState {
   mulliganStatus: 'PENDING' | 'KEPT' | 'MULLIGANED';
   turnsTaken: number;
   actedLanesThisTurn: LaneKey[];
+  nextCardCostDiscount?: NextCardDiscount | null;
   isConnected?: boolean;
   speechBubble?: ManeSpeechBubble | null;
 }
