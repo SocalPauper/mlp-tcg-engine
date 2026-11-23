@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL } from '../config';
 import { getCardFoilClass } from '../styles/cardFoil';
 import { soundFX } from '../utils/soundEffects';
+import CardPreviewModal from './CardPreviewModal';
 import './GameBoard.css';
 
 const CARD_BACK_URL = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp';
@@ -15,9 +16,11 @@ interface CardDefinition {
   cost: number;
   power: number;
   defense: number;
+  traits?: string;
   effectText?: string;
   imageUrl?: string;
   rarity?: string;
+  setCode?: string;
 }
 
 interface SceneCardInPlay {
@@ -41,7 +44,9 @@ interface AdventureSlot {
   inspoBoost: number;
   isExhausted?: boolean;
   treats?: number;
+  hadTreat?: boolean;
   presents?: CardDefinition[];
+  hadPresent?: boolean;
   preventRetireInContact?: boolean;
 }
 
@@ -74,9 +79,14 @@ interface PendingHandChoice {
     | 'DISCARD_FROM_HAND'
     | 'DISCARD_THEN_DRAW'
     | 'RECOVER_FROM_RETIREMENT'
+    | 'REVIVE_FROM_RETIREMENT'
+    | 'MOVE_HAND_TO_PLAN'
     | 'PICK_REVEALED_TO_HAND'
     | 'TOP_OR_BOTTOM_DECK'
     | 'CHOOSE_SCENE_TO_UNTAP'
+    | 'CHOOSE_SCENE_TO_FLIP_UP'
+    | 'CHOOSE_SCENE_TO_FLIP_DOWN'
+    | 'CHOOSE_RIVAL_SCENE_TO_FLIP_DOWN'
     | 'END_PHASE_HAND_LIMIT';
   count: number;
   secondaryDrawCount?: number;
@@ -167,6 +177,7 @@ interface PlayerState {
   mulliganStatus: 'PENDING' | 'KEPT' | 'MULLIGANED';
   turnsTaken: number;
   actedLanesThisTurn: ('left' | 'center' | 'right')[];
+  nextCardCostDiscount?: { filter?: string; cardType?: string; amount: number } | null;
   isConnected?: boolean;
   speechBubble?: ManeSpeechBubble | null;
 }
@@ -260,6 +271,18 @@ interface GameBoardProps {
   onLeaveMatch: () => void;
 }
 
+const KNOWN_PET_NAMES = new Set([
+  'angel',
+  'winona',
+  'philomena',
+  'turtle',
+  'tank',
+  'owlowiscious',
+  'opal',
+  'opalescence',
+  'gummy',
+]);
+
 function isStoryCard(card: CardDefinition | null): boolean {
   if (!card) return false;
   return (
@@ -271,21 +294,113 @@ function isStoryCard(card: CardDefinition | null): boolean {
 
 function cleanCardText(text?: string): string {
   if (!text) return '';
-  return text.replace(/\{\{[^}]*$/g, '').replace(/\{\{|\}\}/g, '').trim();
+  return text
+    .replace(/\{\{[^}]*$/g, '')
+    .replace(/\{\{|\}\}/g, '')
+    .replace(/\bonly\s+only\b/gi, 'Only')
+    .trim();
 }
 
-function hasAdventureTapAbility(card: CardDefinition | null): boolean {
-  if (!card) return false;
-  return /Adventure\s*:/i.test(cleanCardText(card.effectText));
+function matchesClientKeyword(card: CardDefinition, filterText: string): boolean {
+  const alts = filterText
+    .split(/\s+or\s+/i)
+    .map((p) => p.replace(/[｢\[「｣\]」]/g, '').trim().toLowerCase())
+    .filter(Boolean);
+  if (alts.length === 0) return true;
+  const cardName = String(card.name || '').trim().toLowerCase();
+  const combined = `${card.traits || ''} ${card.type || ''}`.toLowerCase();
+  for (const target of alts) {
+    if (cardName === target) return true;
+    if (target === 'pet' && KNOWN_PET_NAMES.has(cardName)) return true;
+    if (combined.includes(target)) return true;
+  }
+  return false;
+}
+
+function canItemAdornCharacter(itemCard: CardDefinition, targetChar: CardDefinition | null): boolean {
+  if (!targetChar) return false;
+  const text = cleanCardText(itemCard.effectText);
+  const adornMatch = text.match(
+    /only\s+adorn\s+([｢\[「][^｣\]」]+[｣\]」](?:\s+or\s+[｢\[「][^｣\]」]+[｣\]」])*)/i
+  );
+  if (!adornMatch) return true;
+  return matchesClientKeyword(targetChar, adornMatch[1]);
+}
+
+function hasAdventureTapAbility(slot: AdventureSlot): boolean {
+  const charText = cleanCardText(slot.character?.effectText);
+  if (/Adventure\s*:\s*(?!While\b)/i.test(charText)) return true;
+  for (const it of slot.items || []) {
+    const itText = cleanCardText(it.effectText);
+    if (/adorned\s+character\s+gains\s*:?\s*"[^"]*Adventure\s*:/i.test(itText)) return true;
+  }
+  return false;
 }
 
 function hasManeActivatedAbility(card: CardDefinition | null): boolean {
   if (!card) return false;
-  return /Main Character Ability|Mane Ability|Once per turn|Activate\s*:/i.test(cleanCardText(card.effectText));
+  return /Main Character Ability|Mane Ability|Once per turn|Activate\s*:/i.test(
+    cleanCardText(card.effectText)
+  );
 }
 
-function canAffordCardWithHarmony(player: PlayerState, card: CardDefinition): boolean {
-  const cost = Math.max(0, Number(card.cost) || 0);
+function getClientEffectiveCost(
+  player: PlayerState,
+  card: CardDefinition,
+  rival?: PlayerState
+): number {
+  let cost = Math.max(0, Number(card.cost) || 0);
+  if (cost === 0) return 0;
+  const text = cleanCardText(card.effectText);
+  const cardType = String(card.type || '').toLowerCase();
+
+  // Self-scaling cost reduction (e.g., "-1 Cost ... for each Plan / Treat / Pet")
+  const selfDisc = text.match(
+    /-(\d+)\s*cost(?:\s+of\s+force\s+of\s+harmony)?\s+when\s+played\s+from\s+hand\s+(for\s+each\s+[^.]+)/i
+  );
+  if (selfDisc) {
+    const perUnit = parseInt(selfDisc[1], 10) || 1;
+    const clause = selfDisc[2];
+    const allLanes: ('left' | 'center' | 'right')[] = ['left', 'center', 'right'];
+    let mult = 0;
+    if (/for\s+each\s+plan\s+in\s+your\s+story\s+area/i.test(clause)) {
+      mult = player.storyStages.filter((s) => s.planCard !== null && !s.isPlanRevealed).length;
+    } else if (/for\s+each\s+plan\s+in\s+rival'?s\s+story\s+area/i.test(clause) && rival) {
+      mult = rival.storyStages.filter((s) => s.planCard !== null && !s.isPlanRevealed).length;
+    } else if (/for\s+each\s+character\s+that\s+has\s+had\s+a\s+treat/i.test(clause)) {
+      mult = allLanes.filter((l) => player.adventureArea[l].character && player.adventureArea[l].hadTreat).length;
+    } else if (/for\s+each\s+present/i.test(clause)) {
+      mult =
+        allLanes.reduce((s, l) => s + (player.adventureArea[l].presents?.length || 0), 0) +
+        (rival ? allLanes.reduce((s, l) => s + (rival.adventureArea[l].presents?.length || 0), 0) : 0);
+    } else {
+      const bm = clause.match(/for\s+each\s+([｢\[「][^｣\]」]+[｣\]」](?:\s+or\s+[｢\[「][^｣\]」]+[｣\]」])*)/i);
+      if (bm) {
+        mult = allLanes.filter((l) => {
+          const c = player.adventureArea[l].character;
+          return c !== null && matchesClientKeyword(c, bm[1]);
+        }).length;
+      }
+    }
+    cost = Math.max(0, cost - perUnit * mult);
+  }
+
+  if (player.nextCardCostDiscount) {
+    const d = player.nextCardCostDiscount;
+    const typeOk = !d.cardType || cardType.includes(d.cardType.toLowerCase());
+    const nameOk = !d.filter || matchesClientKeyword(card, d.filter);
+    if (typeOk && nameOk) cost = Math.max(0, cost - d.amount);
+  }
+
+  return cost;
+}
+
+function canAffordCardWithHarmony(
+  player: PlayerState,
+  card: CardDefinition,
+  rival?: PlayerState
+): boolean {
+  const cost = getClientEffectiveCost(player, card, rival);
   if (cost === 0) return true;
   const readyScenes = player.sceneArea.filter((s) => !s.isExhausted);
   if (readyScenes.length < cost) return false;
@@ -302,69 +417,126 @@ function computeClientPowerDetails(
   player: PlayerState,
   laneKey: 'left' | 'center' | 'right'
 ): PowerBreakdownDetails {
+  const rivalId: '0' | '1' = player.id === '0' ? '1' : '0';
+  const rival = gameState.players[rivalId];
   const slot = player.adventureArea[laneKey];
   const char = slot.character!;
   const basePower = Number(char.power) || 0;
   const lines: { label: string; bonus: number; color: string }[] = [];
   const isOwnersTurn = gameState.turnPlayerId === player.id;
+  const allLanes: ('left' | 'center' | 'right')[] = ['left', 'center', 'right'];
 
-  const checkPassive = (rawText?: string): number => {
+  const getScale = (text: string): number => {
+    if (/for\s+each\s+character\s+in\s+your\s+and\s+your\s+rival'?s\s+adventure\s+area/i.test(text)) {
+      return (
+        allLanes.filter((l) => player.adventureArea[l].character !== null).length +
+        allLanes.filter((l) => rival.adventureArea[l].character !== null).length
+      );
+    }
+    if (/for\s+each\s+character\s+in\s+your\s+adventure\s+area/i.test(text)) {
+      return allLanes.filter((l) => player.adventureArea[l].character !== null).length;
+    }
+    if (/for\s+each\s+empty\s+slot/i.test(text)) {
+      return allLanes.filter((l) => player.adventureArea[l].character === null).length;
+    }
+    if (/for\s+each\s+event\s+in\s+your\s+retirement/i.test(text)) {
+      return player.retirement.filter((c) => String(c.type || '').toLowerCase() === 'event').length;
+    }
+    const bm = text.match(/for\s+each\s+([｢\[「][^｣\]」]+[｣\]」](?:\s+or\s+[｢\[「][^｣\]」]+[｣\]」])*)\s+in\s+your\s+adventure/i);
+    if (bm) {
+      return allLanes.filter((l) => {
+        const c = player.adventureArea[l].character;
+        return c !== null && matchesClientKeyword(c, bm[1]);
+      }).length;
+    }
+    return 1;
+  };
+
+  const checkPassive = (rawText?: string, isSelf = false, isAttached = false): number => {
     const text = cleanCardText(rawText);
     if (
       !text ||
-      /Inspo Boost|Inspiration Boost|Adventure\s*:|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted|at the end of/i.test(
+      /Inspo Boost|Inspiration Boost|Pre-Plan|Appear\s*:|Farewell\s*:|When promoted|until the end of|at the end of/i.test(
         text
       )
     ) {
       return 0;
     }
+    const isContAdv = /^adventure\s*:\s*(?:while|this\s+character|each\s+character)/i.test(text);
+    if (/^adventure\s*:/i.test(text) && !isContAdv) return 0;
+
     const m = text.match(/get[s]?\s*\+(\d+)\s*(?:Inspiration|Power)/i);
     if (!m) return 0;
-    if (/during your turn/i.test(text) && !isOwnersTurn) return 0;
+    if (/(?:during|in)\s+your\s+turn/i.test(text) && !isOwnersTurn) return 0;
+    if (/(?:during|in)\s+rival'?s\s+turn/i.test(text) && isOwnersTurn) return 0;
+    if (/this\s+character\s+gets/i.test(text) && !isSelf && !isAttached) return 0;
+    if (/adorned\s+character\s+gets/i.test(text) && !isAttached) return 0;
     if (/left\s+lane/i.test(text) && laneKey !== 'left') return 0;
     if (/center\s+lane/i.test(text) && laneKey !== 'center') return 0;
     if (/right\s+lane/i.test(text) && laneKey !== 'right') return 0;
-    if (/your\s+friend/i.test(text) && !String(char.type || '').toLowerCase().includes('friend')) return 0;
-    if (
-      /while\s+there\s+(?:is|are)\s+(?:any\s+)?untapped\s+scenes?\s+in\s+your\s+scene\s+area/i.test(
-        text
-      ) &&
-      !player.sceneArea.some((sc) => !sc.isExhausted)
-    ) {
-      return 0;
+
+    const whileB = text.match(/while\s+there\s+(?:is|are)\s+(?:any|a|an)\s+([｢\[「][^｣\]」]+[｣\]」](?:\s+or\s+[｢\[「][^｣\]」]+[｣\]」])*)\s+in\s+your\s+adventure/i);
+    if (whileB) {
+      const ok = allLanes.some((l) => {
+        const c = player.adventureArea[l].character;
+        return c !== null && matchesClientKeyword(c, whileB[1]);
+      });
+      if (!ok) return 0;
     }
-    return parseInt(m[1], 10) || 0;
+    if (/while\s+there\s+(?:is|are)\s+(?:any\s+)?untapped\s+scenes?/i.test(text)) {
+      if (!player.sceneArea.some((sc) => !sc.isExhausted)) return 0;
+    }
+    return (parseInt(m[1], 10) || 0) * getScale(text);
   };
 
+  const selfB = checkPassive(char.effectText, true, false);
+  if (selfB > 0) {
+    lines.push({ label: `Passive (${char.name})`, bonus: selfB, color: '#fde047' });
+  }
+
   for (const it of slot.items) {
-    lines.push({
-      label: `Item (${it.name})`,
-      bonus: Number(it.power) || 1,
-      color: '#38bdf8',
-    });
+    const itBonus = (Number(it.power) || 0) + checkPassive(it.effectText, false, true);
+    if (itBonus !== 0) {
+      lines.push({ label: `Item (${it.name})`, bonus: itBonus, color: '#38bdf8' });
+    }
+  }
+
+  // Adjacent / other-lane item auras
+  for (const otherLane of allLanes) {
+    if (otherLane === laneKey) continue;
+    const oSlot = player.adventureArea[otherLane];
+    if (!oSlot.character) continue;
+    const isAdj =
+      (laneKey === 'left' && otherLane === 'center') ||
+      (laneKey === 'center' && (otherLane === 'left' || otherLane === 'right')) ||
+      (laneKey === 'right' && otherLane === 'center');
+    for (const oIt of oSlot.items) {
+      const t = cleanCardText(oIt.effectText);
+      if (
+        /other\s+characters?\s+in\s+your\s+adventure\s+area\s+get/i.test(t) ||
+        (isAdj && /characters?\s+next\s+to\s+adorned\s+character\s+get/i.test(t))
+      ) {
+        const m = t.match(/get[s]?\s*\+(\d+)\s*(?:Inspiration|Power)/i);
+        if (m) lines.push({ label: `Item Aura (${oIt.name})`, bonus: parseInt(m[1], 10) || 1, color: '#38bdf8' });
+      }
+    }
   }
 
   if (player.leader) {
     const lb = checkPassive(player.leader.effectText);
-    if (lb > 0) {
-      lines.push({ label: `Main Character Passive (${player.leader.name})`, bonus: lb, color: '#fde047' });
-    }
+    if (lb > 0) lines.push({ label: `Main Character (${player.leader.name})`, bonus: lb, color: '#fde047' });
   }
 
   for (const sc of player.sceneArea) {
     if (!sc.isFaceUp) continue;
     const sb = checkPassive(sc.card.effectText);
-    if (sb > 0) {
-      lines.push({ label: `Scene Passive (${sc.card.name})`, bonus: sb, color: '#34d399' });
-    }
+    if (sb > 0) lines.push({ label: `Scene (${sc.card.name})`, bonus: sb, color: '#34d399' });
   }
 
   for (const st of player.storyStages) {
     if (!st.isStoryCompleted || !st.storyCard) continue;
     const stb = checkPassive(st.storyCard.effectText);
-    if (stb > 0) {
-      lines.push({ label: `Story Stage ${st.stage} (${st.storyCard.name})`, bonus: stb, color: '#c084fc' });
-    }
+    if (stb > 0) lines.push({ label: `Story Stage ${st.stage}`, bonus: stb, color: '#c084fc' });
   }
 
   if ((slot.inspoBoost || 0) !== 0) {
@@ -389,54 +561,20 @@ function checkSceneInspireEligibility(
   scene: SceneCardInPlay,
   targetChar: CardDefinition | null
 ): { eligible: boolean; reason?: string } {
-  if (scene.isLockedFaceDown) {
-    return { eligible: false, reason: 'First-Turn Locked Scene' };
-  }
-  if (!scene.isFaceUp) {
-    return { eligible: false, reason: 'Already flipped face-down' };
-  }
-  if (!targetChar) {
-    return { eligible: false, reason: 'No character in active lane' };
-  }
+  if (scene.isLockedFaceDown) return { eligible: false, reason: 'First-Turn Locked Scene' };
+  if (!scene.isFaceUp) return { eligible: false, reason: 'Already flipped face-down' };
+  if (!targetChar) return { eligible: false, reason: 'No character in active lane' };
 
   const text = cleanCardText(scene.card.effectText);
   const id = String(scene.card.id || '').toUpperCase();
   const hasInspo =
     /Inspo Boost|Inspiration Boost|\+\d+\s*Inspiration/i.test(text) || id.includes('-ER');
 
-  if (!hasInspo) {
-    return { eligible: false, reason: 'No Inspiration Boost text on card' };
-  }
-
-  const actualCharName = String(targetChar.name || '').toLowerCase();
+  if (!hasInspo) return { eligible: false, reason: 'No Inspiration Boost text on card' };
 
   const charBracketMatch = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
-  if (charBracketMatch) {
-    const requiredName = charBracketMatch[1].trim().toLowerCase();
-    if (!actualCharName.includes(requiredName)) {
-      return { eligible: false, reason: `Only boosts ${charBracketMatch[1].trim()}` };
-    }
-  } else {
-    const namedPonies = [
-      'Twilight Sparkle',
-      'Rainbow Dash',
-      'Applejack',
-      'Rarity',
-      'Fluttershy',
-      'Pinkie Pie',
-      'Spike',
-      'Princess Celestia',
-      'Princess Luna',
-      'Princess Cadance',
-      'Starlight Glimmer',
-      'Trixie',
-    ];
-    for (const pony of namedPonies) {
-      const ponyRegex = new RegExp(`\\b${pony}\\b`, 'i');
-      if (ponyRegex.test(text) && !actualCharName.includes(pony.toLowerCase())) {
-        return { eligible: false, reason: `Only boosts ${pony}` };
-      }
-    }
+  if (charBracketMatch && !matchesClientKeyword(targetChar, charBracketMatch[1])) {
+    return { eligible: false, reason: `Only boosts ${charBracketMatch[1].trim()}` };
   }
 
   const elements = ['magic', 'loyalty', 'honesty', 'generosity', 'kindness', 'laughter'];
@@ -611,18 +749,10 @@ export default function GameBoard({
 
       const targetAngle =
         gameState.wheelSpinDegrees || (gameState.firstPlayerId === '0' ? 2070 : 1890);
-      const kickTimer = setTimeout(() => {
-        setWheelAngle(targetAngle);
-      }, 80);
-
-      const settleTimer = setTimeout(() => {
-        setWheelSettled(true);
-      }, 3200);
-
+      const kickTimer = setTimeout(() => setWheelAngle(targetAngle), 80);
+      const settleTimer = setTimeout(() => setWheelSettled(true), 3200);
       const ackTimer = !isSpectator
-        ? setTimeout(() => {
-            sendAction('ACK_VS_INTRO');
-          }, 4300)
+        ? setTimeout(() => sendAction('ACK_VS_INTRO'), 4300)
         : undefined;
 
       return () => {
@@ -636,9 +766,7 @@ export default function GameBoard({
   useEffect(() => {
     if (gameState.phase === 'CLASH_HOLD' && gameState.lastClashEvent && !isSpectator) {
       if (!gameState.lastClashEvent.acknowledgedBy.includes(mySeat)) {
-        const timer = setTimeout(() => {
-          sendAction('ACK_CLASH_ANIMATION');
-        }, 3800);
+        const timer = setTimeout(() => sendAction('ACK_CLASH_ANIMATION'), 3800);
         return () => clearTimeout(timer);
       }
     }
@@ -649,7 +777,7 @@ export default function GameBoard({
     ws.send(JSON.stringify({ type: 'GAME_ACTION', action, payload }));
   };
 
-const handleSubmitMatchBug = async (e: React.FormEvent) => {
+  const handleSubmitMatchBug = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inMatchBugSummary.trim()) return;
     setSubmittingMatchBug(true);
@@ -718,7 +846,6 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
       }
       throw new Error(data.error || `HTTP ${res.status}`);
     } catch {
-      // Fallback over the active match WebSocket so reports never fail during live gameplay
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(
           JSON.stringify({
@@ -763,7 +890,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
       const slot = me.adventureArea[lane];
       const normType = String(selectedHandCard.type || '').toLowerCase();
       if (normType.includes('character') && slot.character !== null) return;
-      if (normType === 'item' && slot.character === null) return;
+      if (normType === 'item' && !canItemAdornCharacter(selectedHandCard, slot.character)) return;
 
       sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane });
       setSelectedHandCardId(null);
@@ -931,7 +1058,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
               gameState.phase === 'MAIN_PHASE' &&
               slot.character !== null &&
               !slot.isExhausted &&
-              hasAdventureTapAbility(slot.character);
+              hasAdventureTapAbility(slot);
 
             const isPendingAbilityTarget =
               isMyTurn &&
@@ -947,7 +1074,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
               gameState.phase === 'MAIN_PHASE' &&
               selectedHandCard &&
               ((selectedType.includes('character') && slot.character === null) ||
-                (selectedType === 'item' && slot.character !== null));
+                (selectedType === 'item' && canItemAdornCharacter(selectedHandCard, slot.character)));
 
             const isTargetable = Boolean(isPendingAbilityTarget || isDeployTarget);
 
@@ -1064,7 +1191,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
                       <button
                         type="button"
                         className="adventure-tap-btn"
-                        title={cleanCardText(slot.character.effectText)}
+                        title={cleanCardText(slot.character.effectText || slot.items[0]?.effectText)}
                         onClick={(e) => {
                           e.stopPropagation();
                           sendAction('ACTIVATE_ADVENTURE', { laneIndex: laneKey });
@@ -1120,6 +1247,14 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
           </div>
 
           <div className="hud-pills">
+            {player.nextCardCostDiscount && (
+              <span
+                className="hud-pill"
+                style={{ background: '#fef08a', borderColor: '#f59e0b', color: '#78350f' }}
+              >
+                🏷️ Next {player.nextCardCostDiscount.cardType || player.nextCardCostDiscount.filter || 'Card'} -{player.nextCardCostDiscount.amount} Cost
+              </span>
+            )}
             <span className="hud-pill story-pill">
               📖 Story Stages: {me.storyProgress}/4 (You) vs {opp.storyProgress}/4 (Opp)
             </span>
@@ -1137,7 +1272,6 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
           </div>
         </div>
 
-        {/* Row: Main Character + 4 Landscape Story Stages + Retirement Area */}
         <div className="core-story-row">
           <div
             className="side-portrait-zone"
@@ -1253,7 +1387,6 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
           </div>
         </div>
 
-        {/* Row: Scene Deck + Scene Area + Main Deck */}
         <div className="resource-deck-row">
           <div className="side-portrait-zone">
             <div className="deck-pile-wrapper">
@@ -1327,7 +1460,6 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* Card Flight Animation Toast (Draw / Discard / Retire) */}
       {cardFlightToast && (
         <div key={cardFlightToast.id} className="card-flight-toast">
           <img src={CARD_BACK_URL} alt="Card Motion" />
@@ -1343,7 +1475,6 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* Visual Action Spotlight Banner with Comic Callout */}
       {spotlightBanner && (
         <div className="action-spotlight-banner">
           {spotlightBanner.card?.imageUrl && (
@@ -1526,7 +1657,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* 1. VS Intro Splash with 2-Player 50/50 Animated Spin Wheel */}
+      {/* 1. VS Intro Splash */}
       {gameState.phase === 'VS_INTRO' && (
         <div className="vs-intro-overlay">
           <div className="vs-fighters-stage" style={{ gap: '28px', flexWrap: 'wrap' }}>
@@ -1548,10 +1679,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
 
             <div className="spin-wheel-arena">
               <div className="spin-wheel-pointer" />
-              <div
-                className="spin-wheel-disc"
-                style={{ transform: `rotate(${wheelAngle}deg)` }}
-              >
+              <div className="spin-wheel-disc" style={{ transform: `rotate(${wheelAngle}deg)` }}>
                 <span className="wheel-slice-label slice-p0">
                   {gameState.players['0'].displayName}
                 </span>
@@ -1642,7 +1770,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* 2B. Interactive Hand / Retirement / Reveal / Top-or-Bottom Deck Choice Modal */}
+      {/* 2B. Interactive Hand / Retirement / Scene / Top-or-Bottom Choice Modal */}
       {showHandChoiceModalForMe && gameState.pendingHandChoice && (
         <div className="inspector-backdrop">
           <div className="hand-choice-modal">
@@ -1769,9 +1897,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
                       eligibility.eligible ? 'eligible' : 'ineligible'
                     } ${sc.isFaceUp ? getCardFoilClass(sc.card) : ''}`}
                     onClick={() => {
-                      if (eligibility.eligible) {
-                        sendAction('INSPIRE_SCENE', { sceneIndex: idx });
-                      }
+                      if (eligibility.eligible) sendAction('INSPIRE_SCENE', { sceneIndex: idx });
                     }}
                     onContextMenu={(e) => handleContextMenu(e, sc.isFaceUp ? sc.card : null)}
                     onTouchStart={() => handleTouchStartInspect(sc.isFaceUp ? sc.card : null)}
@@ -2031,7 +2157,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* 6. Fanfare Winner Screen with Confetti + Pony Points Reward Breakdown */}
+      {/* 6. Fanfare Winner Screen */}
       {gameState.phase === 'GAME_OVER' && winnerPlayer && (
         <div className="victory-fanfare-overlay">
           <div className="confetti-container">
@@ -2130,7 +2256,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* Inspiration & Passive Aura Breakdown Popover Modal */}
+      {/* Inspiration & Passive Aura Breakdown Modal */}
       {powerBreakdown && (
         <div className="inspector-backdrop" onClick={() => setPowerBreakdown(null)}>
           <div
@@ -2165,7 +2291,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
                   style={{ display: 'flex', justifyContent: 'space-between', color: line.color }}
                 >
                   <span>{line.label}:</span>
-                  <strong>+{line.bonus}</strong>
+                  <strong>{line.bonus >= 0 ? `+${line.bonus}` : line.bonus}</strong>
                 </div>
               ))}
               <div
@@ -2194,7 +2320,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* Viewable Retirement Area Container Modal */}
+      {/* Viewable Retirement Area Modal */}
       {viewedRetirement && (
         <div className="inspector-backdrop" onClick={() => setViewedRetirement(null)}>
           <div className="retirement-viewer-modal" onClick={(e) => e.stopPropagation()}>
@@ -2245,39 +2371,8 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* Enlarged Card Inspector Modal */}
-      {inspectedCard && (
-        <div className="inspector-backdrop" onClick={() => setInspectedCard(null)}>
-          <div
-            className={`inspector-card-box ${
-              isStoryCard(inspectedCard) ? 'story-landscape' : ''
-            } ${getCardFoilClass(inspectedCard)}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img src={inspectedCard.imageUrl} alt={inspectedCard.name} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-              <h3 style={{ margin: 0, color: '#fbcfe8', fontSize: '23px' }}>
-                {inspectedCard.name}
-              </h3>
-              <div style={{ fontSize: '14px', color: '#fde047', fontWeight: 800 }}>
-                {inspectedCard.type} • {inspectedCard.element} • Cost: {inspectedCard.cost} •
-                Inspiration: {inspectedCard.power}
-              </div>
-              <p style={{ fontSize: '16px', lineHeight: 1.55, color: '#f3e8ff', margin: 0 }}>
-                {cleanCardText(inspectedCard.effectText) || 'No special ability text.'}
-              </p>
-              <button
-                type="button"
-                className="action-bar-btn gold"
-                style={{ marginTop: 'auto', fontSize: '14px', padding: '10px 22px' }}
-                onClick={() => setInspectedCard(null)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Unified Visual Reference Card Preview Modal */}
+      <CardPreviewModal card={inspectedCard} onClose={() => setInspectedCard(null)} />
 
       {/* Live In-Match Bug Reporter Snapshot Modal */}
       {showInMatchBugModal && (
@@ -2332,7 +2427,7 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* Dedicated Top Action Bar with 4-Step Rules v1.3.0 Turn-Phase Indicator, Cast Event, Report Bug & Sound Toggle */}
+      {/* Dedicated Top Action Bar */}
       <div
         className={`center-action-bar ${
           isMyTurn ? 'my-turn-bar' : isOppTurn ? 'opp-turn-bar' : ''
@@ -2482,10 +2577,8 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         </div>
       </div>
 
-      {/* Both Mane Characters & Speech Bubbles Always Visible */}
       {renderDualManePresenceBar()}
 
-      {/* Delayed Triggers Queue Dock (Shows End-of-Turn Scheduled Effects) */}
       {delayedTriggers.length > 0 && (
         <div className="delayed-triggers-strip">
           <strong style={{ color: '#fde047' }}>
@@ -2511,7 +2604,6 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* FULL-SCREEN DUAL-LANE ADVENTURE ARENA */}
       <div className="dual-adventure-arena">
         {renderLaneStrip(opp, true)}
 
@@ -2524,17 +2616,15 @@ const handleSubmitMatchBug = async (e: React.FormEvent) => {
         {renderLaneStrip(me, false)}
       </div>
 
-      {/* Color-Coded Story, Scene & Deck Playmat */}
       {zoneFocus === 'ME' ? renderPlayerZonesMat(me, false) : renderPlayerZonesMat(opp, true)}
 
-      {/* Player Hand Dock */}
       {!isSpectator && (
         <div className="player-hand-section">
           <div className="my-hand-label-pill">🃏 My Hand ({me.hand.length})</div>
           <div className="player-hand-dock">
             {me.hand.map((card, idx) => {
               const isSelected = selectedHandCardId === card.id;
-              const canAfford = canAffordCardWithHarmony(me, card);
+              const canAfford = canAffordCardWithHarmony(me, card, opp);
               return (
                 <div
                   key={`${card.id}-${idx}`}
