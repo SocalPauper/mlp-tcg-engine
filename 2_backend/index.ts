@@ -71,6 +71,32 @@ setInterval(() => {
   }
 }, 60_000);
 
+async function requireAdmin(
+  req: AuthenticatedRequest,
+  res: express.Response,
+  next: express.NextFunction
+) {
+  if (!req.user?.id) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+  if (req.user.isAdmin) {
+    return next();
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT is_admin FROM auth.users WHERE id::text = $1 OR LOWER(username) = LOWER($2) LIMIT 1`,
+      [String(req.user.id), String(req.user.username || '')]
+    );
+    if (rows[0]?.is_admin === true) {
+      req.user.isAdmin = true;
+      return next();
+    }
+  } catch (err: any) {
+    console.error('[ADMIN CHECK ERROR]', err.message);
+  }
+  return res.status(403).json({ error: 'Admin access required.' });
+}
+
 function buildDiagnosticClues(params: {
   category?: string;
   roomCode?: string | null;
@@ -426,80 +452,88 @@ async function startServer() {
   );
 
   // Admin: List All Bug Reports
-  app.get('/api/admin/bug-reports', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin access required.' });
-    try {
-      await ensureBugReportsSchema();
-      const { rows } = await pool.query(
-        `SELECT id, reporter_id, reporter_name, category, room_code, seat, summary,
-                board_snapshot, diagnostic_clues, priority, admin_notes, status, created_at, updated_at
-         FROM game.bug_reports
-         ORDER BY
-           CASE status WHEN 'OPEN' THEN 1 WHEN 'IN_PROGRESS' THEN 2 ELSE 3 END,
-           CASE priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
-           created_at DESC`
-      );
-      res.json({ success: true, reports: rows });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+  app.get(
+    '/api/admin/bug-reports',
+    authenticateToken,
+    requireAdmin,
+    async (_req: AuthenticatedRequest, res) => {
+      try {
+        await ensureBugReportsSchema();
+        const { rows } = await pool.query(
+          `SELECT id, reporter_id, reporter_name, category, room_code, seat, summary,
+                  board_snapshot, diagnostic_clues, priority, admin_notes, status, created_at, updated_at
+           FROM game.bug_reports
+           ORDER BY
+             CASE status WHEN 'OPEN' THEN 1 WHEN 'IN_PROGRESS' THEN 2 ELSE 3 END,
+             CASE priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
+             created_at DESC`
+        );
+        res.json({ success: true, reports: rows });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
     }
-  });
+  );
 
   // Admin: Manually Create a Bug / Tracking Item
-  app.post('/api/admin/bug-reports', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin access required.' });
-    const { category, priority, roomCode, summary, initialNote } = req.body || {};
-    const cleanSummary = String(summary || '').trim().slice(0, 2000);
-    if (!cleanSummary) {
-      return res.status(400).json({ error: 'Bug summary is required.' });
-    }
+  app.post(
+    '/api/admin/bug-reports',
+    authenticateToken,
+    requireAdmin,
+    async (req: AuthenticatedRequest, res) => {
+      const { category, priority, roomCode, summary, initialNote } = req.body || {};
+      const cleanSummary = String(summary || '').trim().slice(0, 2000);
+      if (!cleanSummary) {
+        return res.status(400).json({ error: 'Bug summary is required.' });
+      }
 
-    const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-    const cleanPriority = validPriorities.includes(String(priority || '').toUpperCase())
-      ? String(priority).toUpperCase()
-      : 'MEDIUM';
+      const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+      const cleanPriority = validPriorities.includes(String(priority || '').toUpperCase())
+        ? String(priority).toUpperCase()
+        : 'MEDIUM';
 
-    const initialNotes =
-      initialNote && String(initialNote).trim()
-        ? [
-            {
-              id: `note-${Date.now()}`,
-              author: req.user.username || 'Admin',
-              text: String(initialNote).trim().slice(0, 1500),
-              createdAt: new Date().toISOString(),
-            },
+      const initialNotes =
+        initialNote && String(initialNote).trim()
+          ? [
+              {
+                id: `note-${Date.now()}`,
+                author: req.user?.username || 'Admin',
+                text: String(initialNote).trim().slice(0, 1500),
+                createdAt: new Date().toISOString(),
+              },
+            ]
+          : [];
+
+      try {
+        await ensureBugReportsSchema();
+        const { rows } = await pool.query(
+          `INSERT INTO game.bug_reports
+             (reporter_id, reporter_name, category, room_code, summary, priority, admin_notes, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 'OPEN')
+           RETURNING *`,
+          [
+            req.user?.id || null,
+            req.user?.username || 'Admin',
+            String(category || 'ADMIN_MANUAL').slice(0, 40),
+            roomCode ? String(roomCode).trim().slice(0, 40) : null,
+            cleanSummary,
+            cleanPriority,
+            JSON.stringify(initialNotes),
           ]
-        : [];
-
-    try {
-      await ensureBugReportsSchema();
-      const { rows } = await pool.query(
-        `INSERT INTO game.bug_reports
-           (reporter_id, reporter_name, category, room_code, summary, priority, admin_notes, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 'OPEN')
-         RETURNING *`,
-        [
-          req.user.id,
-          req.user.username || 'Admin',
-          String(category || 'ADMIN_MANUAL').slice(0, 40),
-          roomCode ? String(roomCode).trim().slice(0, 40) : null,
-          cleanSummary,
-          cleanPriority,
-          JSON.stringify(initialNotes),
-        ]
-      );
-      res.status(201).json({ success: true, report: rows[0] });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+        );
+        res.status(201).json({ success: true, report: rows[0] });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
     }
-  });
+  );
 
   // Admin: Update Status, Priority, or Append Progress Comment
   app.patch(
     '/api/admin/bug-reports/:id',
     authenticateToken,
+    requireAdmin,
     async (req: AuthenticatedRequest, res) => {
-      if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin access required.' });
       const reportId = parseInt(req.params.id, 10);
       if (isNaN(reportId)) return res.status(400).json({ error: 'Invalid report ID.' });
 
@@ -529,7 +563,7 @@ async function startServer() {
         if (newComment && String(newComment).trim()) {
           notesArray.push({
             id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            author: req.user.username || 'Admin',
+            author: req.user?.username || 'Admin',
             text: String(newComment).trim().slice(0, 1500),
             createdAt: new Date().toISOString(),
           });
@@ -556,8 +590,8 @@ async function startServer() {
   app.delete(
     '/api/admin/bug-reports/:id',
     authenticateToken,
+    requireAdmin,
     async (req: AuthenticatedRequest, res) => {
-      if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin access required.' });
       const reportId = parseInt(req.params.id, 10);
       if (isNaN(reportId)) return res.status(400).json({ error: 'Invalid report ID.' });
 
