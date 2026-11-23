@@ -2,7 +2,11 @@ import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
 import { initDatabase, pool } from '../4_data/db.js';
-import { optionalAuthenticateToken, AuthenticatedRequest } from './middleware/authMiddleware.js';
+import {
+  authenticateToken,
+  optionalAuthenticateToken,
+  AuthenticatedRequest,
+} from './middleware/authMiddleware.js';
 
 import authRouter from './routes/auth.js';
 import cardsRouter from './routes/cards.js';
@@ -51,7 +55,9 @@ function createRateLimiter(maxRequests: number, windowMs: number, prefix: string
       return next();
     }
     if (entry.count >= maxRequests) {
-      return res.status(429).json({ error: 'Too many requests. Please slow down and try again shortly.' });
+      return res
+        .status(429)
+        .json({ error: 'Too many requests. Please slow down and try again shortly.' });
     }
     entry.count += 1;
     next();
@@ -64,6 +70,139 @@ setInterval(() => {
     if (now > v.resetAt) rateBuckets.delete(k);
   }
 }, 60_000);
+
+function buildDiagnosticClues(params: {
+  category?: string;
+  roomCode?: string | null;
+  seat?: string | null;
+  summary: string;
+  boardSnapshot?: any;
+  clientMeta?: any;
+}) {
+  const snap = params.boardSnapshot || null;
+  const actionLog = Array.isArray(snap?.actionLog) ? snap.actionLog : [];
+  const debugTrace = Array.isArray(snap?.debugTrace) ? snap.debugTrace : [];
+
+  const recentActions = actionLog.slice(-12).map((a: any) => ({
+    turn: a.turn,
+    actor: a.actor,
+    category: a.category,
+    sourceCard: a.sourceCard || null,
+    text: a.text,
+  }));
+
+  const recentDebugTraces = debugTrace.slice(-15).map((d: any) => ({
+    turn: d.turn,
+    phase: d.phase,
+    actor: d.actor,
+    card: `${d.cardName} (${d.cardId})`,
+    cardText: d.cardText,
+    trigger: d.triggerType,
+    parsedKind: d.parsedKind,
+    status: d.status,
+    targetsOrChoice: d.targetsOrChoice,
+    notes: d.notes,
+  }));
+
+  const flaggedAnomalies = debugTrace
+    .filter((d: any) => ['SKIPPED', 'AWAITING_INPUT', 'QUEUED_STACK'].includes(d.status))
+    .slice(-10)
+    .map((d: any) => `[T${d.turn} ${d.status}] ${d.cardName} (${d.cardId}): ${d.notes}`);
+
+  const summarizePlayer = (p: any) => {
+    if (!p) return null;
+    const adv = p.adventureArea || {};
+    return {
+      displayName: p.displayName,
+      mane: p.leader ? `${p.leader.name} (${p.leader.id})` : 'None',
+      storyProgress: `${p.storyProgress ?? 0}/4`,
+      scenesTotal: Array.isArray(p.sceneArea) ? p.sceneArea.length : 0,
+      scenesReady: Array.isArray(p.sceneArea)
+        ? p.sceneArea.filter((s: any) => !s.isExhausted).length
+        : 0,
+      handCount: Array.isArray(p.hand) ? p.hand.length : p.handCount ?? 0,
+      retirementCount: Array.isArray(p.retirement) ? p.retirement.length : 0,
+      lanes: {
+        left: adv.left?.character
+          ? `${adv.left.character.name} (${adv.left.character.id})${
+              adv.left.items?.length ? ` [Item: ${adv.left.items[0].name}]` : ''
+            }`
+          : 'Empty',
+        center: adv.center?.character
+          ? `${adv.center.character.name} (${adv.center.character.id})${
+              adv.center.items?.length ? ` [Item: ${adv.center.items[0].name}]` : ''
+            }`
+          : 'Empty',
+        right: adv.right?.character
+          ? `${adv.right.character.name} (${adv.right.character.id})${
+              adv.right.items?.length ? ` [Item: ${adv.right.items[0].name}]` : ''
+            }`
+          : 'Empty',
+      },
+    };
+  };
+
+  return {
+    capturedAt: new Date().toISOString(),
+    matchContext: snap
+      ? {
+          roomId: snap.roomId || params.roomCode || null,
+          phase: snap.phase,
+          turnNumber: snap.turnNumber,
+          turnPlayerId: snap.turnPlayerId,
+          reporterSeat: params.seat || null,
+          pendingTarget: snap.pendingTarget
+            ? {
+                sourceCard: snap.pendingTarget.sourceCard?.name,
+                effectAction: snap.pendingTarget.effectAction,
+                validTargets: snap.pendingTarget.validTargets,
+              }
+            : null,
+          pendingHandChoice: snap.pendingHandChoice
+            ? {
+                sourceCard: snap.pendingHandChoice.sourceCard?.name,
+                choiceType: snap.pendingHandChoice.choiceType,
+                count: snap.pendingHandChoice.count,
+              }
+            : null,
+          players: {
+            '0': summarizePlayer(snap.players?.['0']),
+            '1': summarizePlayer(snap.players?.['1']),
+          },
+        }
+      : null,
+    flaggedAnomalies,
+    recentActions,
+    recentDebugTraces,
+    clientEnvironment: params.clientMeta || null,
+  };
+}
+
+async function ensureBugReportsSchema() {
+  await pool.query(`
+    CREATE SCHEMA IF NOT EXISTS game;
+    CREATE TABLE IF NOT EXISTS game.bug_reports (
+      id SERIAL PRIMARY KEY,
+      reporter_id VARCHAR(100),
+      reporter_name VARCHAR(120) NOT NULL,
+      category VARCHAR(50) DEFAULT 'IN_MATCH',
+      room_code VARCHAR(50),
+      seat VARCHAR(20),
+      summary TEXT NOT NULL,
+      board_snapshot JSONB,
+      diagnostic_clues JSONB,
+      priority VARCHAR(20) DEFAULT 'MEDIUM',
+      admin_notes JSONB DEFAULT '[]'::jsonb,
+      status VARCHAR(30) DEFAULT 'OPEN',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    ALTER TABLE game.bug_reports ADD COLUMN IF NOT EXISTS diagnostic_clues JSONB;
+    ALTER TABLE game.bug_reports ADD COLUMN IF NOT EXISTS priority VARCHAR(20) DEFAULT 'MEDIUM';
+    ALTER TABLE game.bug_reports ADD COLUMN IF NOT EXISTS admin_notes JSONB DEFAULT '[]'::jsonb;
+    ALTER TABLE game.bug_reports ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+  `);
+}
 
 const PORT = process.env.PORT || 3001;
 
@@ -215,6 +354,8 @@ async function startServer() {
       );
     `);
 
+    await ensureBugReportsSchema();
+
     console.log('[DATABASE] Initialization and schema hardening complete.');
   } catch (err: any) {
     console.error('[DATABASE INIT ERROR]', err.message);
@@ -231,14 +372,14 @@ async function startServer() {
   app.use('/api', cardsRouter);
   app.use('/api', decksRouter);
 
-  // Public / In-Match Bug Report Submission Endpoint
-// Public / In-Match Bug Report Submission Endpoint
+  // Public / In-Match Bug Report Submission Endpoint (Auto-attaches diagnostic clues)
   app.post(
     '/api/bug-reports',
-    createRateLimiter(15, 60_000, 'bugs'),
+    createRateLimiter(20, 60_000, 'bugs'),
     optionalAuthenticateToken,
     async (req: AuthenticatedRequest, res) => {
-      const { category, roomCode, seat, summary, boardSnapshot, reporterName } = req.body || {};
+      const { category, roomCode, seat, summary, boardSnapshot, reporterName, clientMeta } =
+        req.body || {};
       const cleanSummary = String(summary || '').trim().slice(0, 2000);
       if (!cleanSummary) {
         return res.status(400).json({ error: 'Please describe the issue before submitting.' });
@@ -249,26 +390,21 @@ async function startServer() {
         req.user?.username || reporterName || 'Alpha Tester'
       ).slice(0, 100);
 
-      try {
-        await pool.query(`
-          CREATE SCHEMA IF NOT EXISTS game;
-          CREATE TABLE IF NOT EXISTS game.bug_reports (
-            id SERIAL PRIMARY KEY,
-            reporter_id VARCHAR(100),
-            reporter_name VARCHAR(120) NOT NULL,
-            category VARCHAR(50) DEFAULT 'IN_MATCH',
-            room_code VARCHAR(50),
-            seat VARCHAR(20),
-            summary TEXT NOT NULL,
-            board_snapshot JSONB,
-            status VARCHAR(30) DEFAULT 'OPEN',
-            created_at TIMESTAMPTZ DEFAULT NOW()
-          );
-        `);
+      const clues = buildDiagnosticClues({
+        category,
+        roomCode,
+        seat,
+        summary: cleanSummary,
+        boardSnapshot,
+        clientMeta,
+      });
 
+      try {
+        await ensureBugReportsSchema();
         const { rows } = await pool.query(
-          `INSERT INTO game.bug_reports (reporter_id, reporter_name, category, room_code, seat, summary, board_snapshot)
-           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+          `INSERT INTO game.bug_reports
+             (reporter_id, reporter_name, category, room_code, seat, summary, board_snapshot, diagnostic_clues, priority, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, 'MEDIUM', 'OPEN')
            RETURNING id, created_at`,
           [
             finalReporterId,
@@ -278,12 +414,158 @@ async function startServer() {
             seat ? String(seat).slice(0, 20) : null,
             cleanSummary,
             boardSnapshot ? JSON.stringify(boardSnapshot) : null,
+            JSON.stringify(clues),
           ]
         );
         res.status(201).json({ success: true, reportId: rows[0].id });
       } catch (err: any) {
         console.error('[BUG REPORT SAVE ERROR]', err.message);
         res.status(500).json({ error: `Database error saving report: ${err.message}` });
+      }
+    }
+  );
+
+  // Admin: List All Bug Reports
+  app.get('/api/admin/bug-reports', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin access required.' });
+    try {
+      await ensureBugReportsSchema();
+      const { rows } = await pool.query(
+        `SELECT id, reporter_id, reporter_name, category, room_code, seat, summary,
+                board_snapshot, diagnostic_clues, priority, admin_notes, status, created_at, updated_at
+         FROM game.bug_reports
+         ORDER BY
+           CASE status WHEN 'OPEN' THEN 1 WHEN 'IN_PROGRESS' THEN 2 ELSE 3 END,
+           CASE priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
+           created_at DESC`
+      );
+      res.json({ success: true, reports: rows });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Manually Create a Bug / Tracking Item
+  app.post('/api/admin/bug-reports', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin access required.' });
+    const { category, priority, roomCode, summary, initialNote } = req.body || {};
+    const cleanSummary = String(summary || '').trim().slice(0, 2000);
+    if (!cleanSummary) {
+      return res.status(400).json({ error: 'Bug summary is required.' });
+    }
+
+    const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+    const cleanPriority = validPriorities.includes(String(priority || '').toUpperCase())
+      ? String(priority).toUpperCase()
+      : 'MEDIUM';
+
+    const initialNotes =
+      initialNote && String(initialNote).trim()
+        ? [
+            {
+              id: `note-${Date.now()}`,
+              author: req.user.username || 'Admin',
+              text: String(initialNote).trim().slice(0, 1500),
+              createdAt: new Date().toISOString(),
+            },
+          ]
+        : [];
+
+    try {
+      await ensureBugReportsSchema();
+      const { rows } = await pool.query(
+        `INSERT INTO game.bug_reports
+           (reporter_id, reporter_name, category, room_code, summary, priority, admin_notes, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 'OPEN')
+         RETURNING *`,
+        [
+          req.user.id,
+          req.user.username || 'Admin',
+          String(category || 'ADMIN_MANUAL').slice(0, 40),
+          roomCode ? String(roomCode).trim().slice(0, 40) : null,
+          cleanSummary,
+          cleanPriority,
+          JSON.stringify(initialNotes),
+        ]
+      );
+      res.status(201).json({ success: true, report: rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: Update Status, Priority, or Append Progress Comment
+  app.patch(
+    '/api/admin/bug-reports/:id',
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin access required.' });
+      const reportId = parseInt(req.params.id, 10);
+      if (isNaN(reportId)) return res.status(400).json({ error: 'Invalid report ID.' });
+
+      const { status, priority, newComment } = req.body || {};
+      const validStatuses = ['OPEN', 'IN_PROGRESS', 'RESOLVED'];
+      const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+
+      try {
+        await ensureBugReportsSchema();
+        const existingRes = await pool.query(
+          `SELECT admin_notes, status, priority FROM game.bug_reports WHERE id = $1`,
+          [reportId]
+        );
+        if (existingRes.rows.length === 0) {
+          return res.status(404).json({ error: 'Bug report not found.' });
+        }
+
+        const current = existingRes.rows[0];
+        const nextStatus = validStatuses.includes(String(status || '').toUpperCase())
+          ? String(status).toUpperCase()
+          : current.status;
+        const nextPriority = validPriorities.includes(String(priority || '').toUpperCase())
+          ? String(priority).toUpperCase()
+          : current.priority;
+
+        const notesArray = Array.isArray(current.admin_notes) ? [...current.admin_notes] : [];
+        if (newComment && String(newComment).trim()) {
+          notesArray.push({
+            id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            author: req.user.username || 'Admin',
+            text: String(newComment).trim().slice(0, 1500),
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        const { rows } = await pool.query(
+          `UPDATE game.bug_reports
+           SET status = $1,
+               priority = $2,
+               admin_notes = $3::jsonb,
+               updated_at = NOW()
+           WHERE id = $4
+           RETURNING *`,
+          [nextStatus, nextPriority, JSON.stringify(notesArray), reportId]
+        );
+        res.json({ success: true, report: rows[0] });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
+  // Admin: Delete a Bug Report
+  app.delete(
+    '/api/admin/bug-reports/:id',
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin access required.' });
+      const reportId = parseInt(req.params.id, 10);
+      if (isNaN(reportId)) return res.status(400).json({ error: 'Invalid report ID.' });
+
+      try {
+        await pool.query(`DELETE FROM game.bug_reports WHERE id = $1`, [reportId]);
+        res.json({ success: true });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
       }
     }
   );
