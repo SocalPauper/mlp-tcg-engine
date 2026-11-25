@@ -28,7 +28,7 @@
 
   // Tier 3 Parallel Foil: Special Parallel Rare (SPR) and Super Secret Rare (SSR)
   if (rar === 'SPR' || rar === 'SSR') {
-    return 'foil-spr-ssr';
+    return 'foil-sr foil-spr-ssr';
   }
 
   // Tier 4 Holofoil: Super Rare (SR)

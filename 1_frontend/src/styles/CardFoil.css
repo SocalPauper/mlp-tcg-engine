@@ -1,5 +1,5 @@
 /* ========================================================================= */
-/* HIGH-RARITY, SHINING (-S), GOLD RARE (GR) & DIAMOND RARE (DR) SHADERS     */
+/* TIERED FOIL SHADERS: SR/SPR, UR/CR CRYSTAL PRISM & GR/DR/SHINING CORONA   */
 /* ========================================================================= */
 
 .foil-sr,
@@ -9,44 +9,92 @@
   overflow: hidden;
 }
 
-/* SR & SSR: Silver/Pearl Diagonal Sheen on Hover */
+/* ========================================================================= */
+/* TIER 3 & 4: SR, SSR & SPR — SILKY IRIDESCENT FOIL SHEEN                   */
+/* ========================================================================= */
+.foil-sr {
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.35);
+}
+
+.foil-spr-ssr {
+  box-shadow: 0 0 13px rgba(244, 114, 182, 0.5), inset 0 0 8px rgba(255, 255, 255, 0.25);
+}
+
+.foil-sr::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(244, 114, 182, 0.1) 0%,
+    rgba(192, 132, 252, 0.12) 50%,
+    rgba(56, 189, 248, 0.1) 100%
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 5;
+}
+
 .foil-sr::after {
   content: '';
   position: absolute;
-  inset: -40%;
+  top: -45%;
+  left: -85%;
+  width: 60%;
+  height: 190%;
   background: linear-gradient(
     115deg,
-    transparent 35%,
-    rgba(255, 255, 255, 0.38) 50%,
-    transparent 65%
+    transparent 25%,
+    rgba(255, 255, 255, 0.42) 50%,
+    transparent 75%
   );
-  transform: translateX(-100%);
-  transition: transform 0.65s ease;
+  transform: rotate(24deg);
+  animation: foilBeamSweep 5.2s ease-in-out infinite;
   pointer-events: none;
   z-index: 6;
 }
 
-.foil-sr:hover::after {
-  transform: translateX(100%);
-}
-
-/* UR & CR: Prismatic Rainbow Holographic Sweep */
-.foil-ur {
-  box-shadow: 0 0 12px rgba(236, 72, 153, 0.55), inset 0 0 8px rgba(56, 189, 248, 0.45);
+/* ========================================================================= */
+/* TIER 2: UR & CR — CRYSTAL PRISM REFRACTION & DIAMOND FACET TEXTURE        */
+/* ========================================================================= */
+.foil-ur,
+.foil-crystal-ur {
+  border: 2px solid #38bdf8 !important;
+  box-shadow:
+    0 0 16px rgba(56, 189, 248, 0.65),
+    0 0 28px rgba(168, 85, 247, 0.45),
+    inset 0 0 12px rgba(255, 255, 255, 0.35);
 }
 
 .foil-ur::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    130deg,
-    rgba(255, 0, 128, 0.14) 0%,
-    rgba(0, 224, 255, 0.16) 35%,
-    rgba(255, 215, 0, 0.18) 70%,
-    rgba(168, 85, 247, 0.15) 100%
-  );
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.09) 0px,
+      rgba(255, 255, 255, 0.09) 2px,
+      transparent 2px,
+      transparent 7px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(56, 189, 248, 0.14) 0px,
+      rgba(56, 189, 248, 0.14) 2px,
+      transparent 2px,
+      transparent 7px
+    ),
+    conic-gradient(
+      from 0deg at 50% 50%,
+      rgba(56, 189, 248, 0.24),
+      rgba(232, 121, 249, 0.26),
+      rgba(253, 224, 71, 0.24),
+      rgba(52, 211, 153, 0.24),
+      rgba(56, 189, 248, 0.24)
+    );
   mix-blend-mode: color-dodge;
+  animation: prismHueCycle 5.5s linear infinite;
   pointer-events: none;
   z-index: 5;
 }
@@ -55,90 +103,126 @@
   content: '';
   position: absolute;
   top: -50%;
-  left: -80%;
-  width: 55%;
+  left: -85%;
+  width: 62%;
   height: 200%;
   background: linear-gradient(
     to right,
     transparent 0%,
-    rgba(255, 255, 255, 0.48) 50%,
+    rgba(255, 255, 255, 0.58) 50%,
     transparent 100%
   );
   transform: rotate(24deg);
-  animation: foilBeamSweep 4.2s ease-in-out infinite;
+  animation: foilBeamSweep 3.8s ease-in-out infinite;
   pointer-events: none;
   z-index: 6;
 }
 
-/* SHINING (-S), DIAMOND RARE (DR) & GOLD RARE (GR): Prismatic Diamond Facets + Continuous Starlight */
-.foil-shining {
-  border: 2px solid #fde047 !important;
-  box-shadow:
-    0 0 15px rgba(253, 224, 71, 0.85),
-    0 0 26px rgba(56, 189, 248, 0.5);
+/* ========================================================================= */
+/* TIER 1 CROWN CHASE: GR, DR & SHINING (-S) — GOLD CORONA + ETCHED TEXTURE  */
+/* ========================================================================= */
+.foil-shining,
+.foil-diamond-gold {
+  border: 2.5px solid #ffd700 !important;
+  animation: goldCoronaAura 3s ease-in-out infinite;
 }
 
+/* Rotating Solar Gold Corona + Micro-Etched Filigree Grain & Starbursts */
 .foil-shining::before {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -38%;
   background-image:
-    radial-gradient(circle at 20% 25%, rgba(255, 255, 255, 0.92) 0 1.8px, transparent 3px),
-    radial-gradient(circle at 78% 20%, rgba(253, 224, 71, 0.95) 0 2.2px, transparent 3.4px),
-    radial-gradient(circle at 66% 74%, rgba(255, 255, 255, 0.9) 0 1.8px, transparent 3px),
-    radial-gradient(circle at 28% 80%, rgba(56, 189, 248, 0.95) 0 2px, transparent 3.4px),
-    repeating-linear-gradient(
-      45deg,
-      rgba(255, 255, 255, 0.08) 0px,
-      rgba(255, 255, 255, 0.08) 6px,
-      rgba(56, 189, 248, 0.1) 6px,
-      rgba(56, 189, 248, 0.1) 12px
+    radial-gradient(circle at 26% 28%, rgba(255, 255, 255, 0.95) 0 1.8px, transparent 3.2px),
+    radial-gradient(circle at 74% 24%, rgba(254, 240, 138, 0.98) 0 2.2px, transparent 3.6px),
+    radial-gradient(circle at 68% 72%, rgba(255, 255, 255, 0.92) 0 1.8px, transparent 3.2px),
+    radial-gradient(circle at 30% 76%, rgba(253, 224, 71, 0.95) 0 2px, transparent 3.4px),
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      rgba(255, 215, 0, 0.15) 0px,
+      rgba(255, 215, 0, 0.15) 1.5px,
+      transparent 1.5px,
+      transparent 6px
     ),
-    linear-gradient(
-      125deg,
-      rgba(253, 224, 71, 0.18) 0%,
-      rgba(244, 114, 182, 0.22) 50%,
-      rgba(56, 189, 248, 0.22) 100%
+    conic-gradient(
+      from 0deg at 50% 50%,
+      rgba(255, 215, 0, 0.06) 0deg,
+      rgba(255, 251, 235, 0.52) 32deg,
+      rgba(245, 158, 11, 0.14) 88deg,
+      rgba(254, 240, 138, 0.56) 150deg,
+      rgba(217, 119, 6, 0.12) 215deg,
+      rgba(255, 255, 255, 0.6) 290deg,
+      rgba(255, 215, 0, 0.06) 360deg
     );
-  mix-blend-mode: screen;
-  animation: starlightTwinkle 2.4s ease-in-out infinite alternate;
+  mix-blend-mode: color-dodge;
+  animation: coronaRotate 7.5s linear infinite;
   pointer-events: none;
   z-index: 6;
 }
 
+/* Specular Liquid-Gold Glint Sweep */
 .foil-shining::after {
   content: '';
   position: absolute;
   top: -50%;
-  left: -85%;
-  width: 68%;
+  left: -90%;
+  width: 72%;
   height: 200%;
   background: linear-gradient(
-    to right,
-    transparent 0%,
-    rgba(254, 249, 195, 0.72) 50%,
-    transparent 100%
+    115deg,
+    transparent 18%,
+    rgba(254, 240, 138, 0.38) 42%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(245, 158, 11, 0.38) 58%,
+    transparent 82%
   );
   transform: rotate(22deg);
-  animation: foilBeamSweep 3s ease-in-out infinite;
+  animation: foilBeamSweep 2.8s ease-in-out infinite;
   pointer-events: none;
   z-index: 7;
 }
 
 @keyframes foilBeamSweep {
-  0%, 55% {
-    transform: translateX(-130%) rotate(24deg);
+  0%, 52% {
+    transform: translateX(-135%) rotate(23deg);
   }
   100% {
-    transform: translateX(360%) rotate(24deg);
+    transform: translateX(365%) rotate(23deg);
   }
 }
 
-@keyframes starlightTwinkle {
+@keyframes prismHueCycle {
   0% {
-    opacity: 0.68;
+    filter: hue-rotate(0deg) brightness(1.05);
+  }
+  50% {
+    filter: hue-rotate(42deg) brightness(1.22);
   }
   100% {
-    opacity: 1;
+    filter: hue-rotate(0deg) brightness(1.05);
+  }
+}
+
+@keyframes coronaRotate {
+  0% {
+    transform: rotate(0deg) scale(1.06);
+  }
+  100% {
+    transform: rotate(360deg) scale(1.06);
+  }
+}
+
+@keyframes goldCoronaAura {
+  0%, 100% {
+    box-shadow:
+      0 0 16px rgba(255, 215, 0, 0.72),
+      0 0 30px rgba(245, 158, 11, 0.48),
+      inset 0 0 12px rgba(254, 240, 138, 0.42);
+  }
+  50% {
+    box-shadow:
+      0 0 26px rgba(255, 251, 235, 0.98),
+      0 0 46px rgba(245, 158, 11, 0.78),
+      inset 0 0 18px rgba(255, 255, 255, 0.68);
   }
 }

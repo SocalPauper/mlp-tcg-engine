@@ -24,7 +24,7 @@ const KNOWN_PET_NAMES = new Set([
 const NON_CHARACTER_TYPES = new Set(['event', 'scene', 'item', 'story', 'plan']);
 
 export function isReactiveAdventureClause(clauseText?: string): boolean {
-  const text = sanitizeCardText(clauseText).replace(/^Tap\s*:\s*/i, '').trim();
+  const text = sanitizeCardText(clauseText).replace(/^(?<!un)\btap\s*:\s*/i, '').trim();
   if (!text) return false;
   return /^(?:at\s+the\s+end\s+of|when\s+(?:this\s+character|it)\s+intervenes\s+(?:the\s+)?plan)/i.test(
     text
@@ -60,6 +60,7 @@ export function detectEffectKeywords(raw?: string): string[] {
   if (/\bIf\b/i.test(text)) tags.push('If (Condition)');
   if (/\bOnly\b/i.test(text)) tags.push('Only (Restriction)');
   if (/\b(?:Choose|Select)\b/i.test(text)) tags.push('Choose/Select (Player Input)');
+  if (/(?<!un)\btap\b/i.test(text)) tags.push('Tap');
   if (/for each/i.test(text)) tags.push('Scaling: For Each');
   if (/treat/i.test(text)) tags.push('Mechanic: Treat');
   if (/present/i.test(text)) tags.push('Mechanic: Present');
@@ -72,7 +73,11 @@ export function detectEffectKeywords(raw?: string): string[] {
   return Array.from(new Set(tags));
 }
 
-export function matchesCardKeywordExact(card: CardDefinition, filterText: string): boolean {
+export function matchesCardKeywordExact(
+  card: CardDefinition,
+  filterText: string,
+  requireCharacterType = false
+): boolean {
   const alternatives = filterText
     .split(/\s+or\s+/i)
     .map((part) => part.replace(/[｢\[「｣\]」]/g, '').trim().toLowerCase())
@@ -82,11 +87,12 @@ export function matchesCardKeywordExact(card: CardDefinition, filterText: string
 
   const cardTypeLower = String(card.type || '').trim().toLowerCase();
   const isNonCharacter = NON_CHARACTER_TYPES.has(cardTypeLower);
+  if (requireCharacterType && isNonCharacter) return false;
+
   const cardName = String(card.name || '').trim().toLowerCase();
 
   for (const target of alternatives) {
-    if (cardName === target) return true;
-
+    if (!isNonCharacter && cardName === target) return true;
     if (isNonCharacter) continue;
 
     const extraText = String((card as any).traitsText || '').toLowerCase();
@@ -149,7 +155,7 @@ export function canPlayCardRestrictions(
   const adornRequired = extractAdornRestriction(card);
   if (adornRequired && targetLane) {
     const targetChar = state.players[playerId].adventureArea[targetLane]?.character;
-    if (!targetChar || !matchesCardKeywordExact(targetChar, adornRequired)) {
+    if (!targetChar || !matchesCardKeywordExact(targetChar, adornRequired, true)) {
       return {
         allowed: false,
         reason: `Only adorn ${adornRequired}`,
@@ -238,7 +244,6 @@ export function canPayHarmonyCost(
   const requiredCost = getEffectiveCardCost(player, card, rivalPlayer);
   if (requiredCost === 0) return true;
 
-  // Both face-up and face-down untapped Scenes provide 1 Force of Harmony
   const readyScenes = player.sceneArea.filter((s) => !s.isExhausted);
   if (readyScenes.length < requiredCost) return false;
 
@@ -248,7 +253,6 @@ export function canPayHarmonyCost(
   }
 
   return readyScenes.some((s) => {
-    // Face-down Scenes provide wild/Everyday Force of Harmony (they only restrict Inspiration Boost)
     if (!s.isFaceUp) return true;
     const sEl = String(s.card.element || 'Everyday').trim().toLowerCase();
     return sEl === cardEl || sEl === 'everyday' || sEl === 'none';
@@ -310,7 +314,7 @@ export function evaluateScalingMultiplier(
   if (bracketEach) {
     return allLanes.filter((l) => {
       const c = ownerPlayer.adventureArea[l].character;
-      return c !== null && matchesCardKeywordExact(c, bracketEach[1]);
+      return c !== null && matchesCardKeywordExact(c, bracketEach[1], true);
     }).length;
   }
 
@@ -440,6 +444,21 @@ function doesPassiveTextApplyToCharacter(
     return 0;
   }
 
+  // Ticket #18 Fix: "While there is any Character adorned with Item in your Adventure Area"
+  if (
+    /while\s+there\s+(?:is|are)\s+(?:any|a|an)\s+character\s+adorned\s+with\s+(?:an\s+)?item\s+in\s+your\s+adventure\s+area/i.test(
+      text
+    ) &&
+    ownerPlayer
+  ) {
+    const hasAdorned = (['left', 'center', 'right'] as LaneKey[]).some(
+      (l) =>
+        ownerPlayer.adventureArea[l].character !== null &&
+        ownerPlayer.adventureArea[l].items.length > 0
+    );
+    if (!hasAdorned) return 0;
+  }
+
   const costLess = text.match(
     /adorned\s+character\s+with\s+cost(?:\s+of\s+force\s+of\s+harmony)?\s+(\d+)\s+or\s+less/i
   );
@@ -460,7 +479,7 @@ function doesPassiveTextApplyToCharacter(
     const required = whileBracketInAdv[1].trim();
     const hasMatch = (['left', 'center', 'right'] as LaneKey[]).some((l) => {
       const c = ownerPlayer.adventureArea[l].character;
-      return c !== null && matchesCardKeywordExact(c, required);
+      return c !== null && matchesCardKeywordExact(c, required, true);
     });
     if (!hasMatch) return 0;
   }
@@ -519,7 +538,7 @@ function doesPassiveTextApplyToCharacter(
 
   if (!isContinuousAdventure && !isSelfCard && !isAttachedItem) {
     const charBracketMatch = text.match(/[｢\[「]([^｣\]」]+)[｣\]」]/);
-    if (charBracketMatch && !matchesCardKeywordExact(character, charBracketMatch[1])) {
+    if (charBracketMatch && !matchesCardKeywordExact(character, charBracketMatch[1], true)) {
       return 0;
     }
   }
@@ -782,7 +801,8 @@ export function evaluateBoardCondition(
   conditionText?: string
 ): boolean {
   if (!conditionText) return true;
-  const cond = sanitizeCardText(conditionText);
+  // Ticket #13 Fix: strip leading "if " so delayed trigger conditions evaluate properly
+  const cond = sanitizeCardText(conditionText).replace(/^if\s+/i, '').trim();
   const oppId: '0' | '1' = ownerId === '0' ? '1' : '0';
   const player = state.players[ownerId];
   const rival = state.players[oppId];
@@ -820,7 +840,7 @@ export function evaluateBoardCondition(
     );
   }
   if (
-    /there\s+is\s+(?:any|a|an)\s+character\s+adorned\s+with\s+an\s+item\s+in\s+your\s+adventure\s+area/i.test(
+    /there\s+is\s+(?:any|a|an)\s+character\s+adorned\s+with\s+(?:an\s+)?item\s+in\s+your\s+adventure\s+area/i.test(
       cond
     )
   ) {
@@ -901,9 +921,9 @@ export function evaluateBoardCondition(
       .map((l) => player.adventureArea[l].character)
       .filter(Boolean) as CardDefinition[];
     return (
-      deployedChars.some((c) => matchesCardKeywordExact(c, 'Unicorn')) &&
-      deployedChars.some((c) => matchesCardKeywordExact(c, 'Pegasus')) &&
-      deployedChars.some((c) => matchesCardKeywordExact(c, 'Earth Pony'))
+      deployedChars.some((c) => matchesCardKeywordExact(c, 'Unicorn', true)) &&
+      deployedChars.some((c) => matchesCardKeywordExact(c, 'Pegasus', true)) &&
+      deployedChars.some((c) => matchesCardKeywordExact(c, 'Earth Pony', true))
     );
   }
 
@@ -915,7 +935,7 @@ export function evaluateBoardCondition(
     const maxCost = parseInt(bracketCostInAdv[2], 10) || 0;
     return allLanes.some((l) => {
       const c = player.adventureArea[l].character;
-      return c !== null && matchesCardKeywordExact(c, reqName) && (Number(c.cost) || 0) <= maxCost;
+      return c !== null && matchesCardKeywordExact(c, reqName, true) && (Number(c.cost) || 0) <= maxCost;
     });
   }
 
@@ -925,7 +945,7 @@ export function evaluateBoardCondition(
   if (bracketInAdv) {
     return allLanes.some((l) => {
       const char = player.adventureArea[l].character;
-      return char !== null && matchesCardKeywordExact(char, bracketInAdv[1].trim());
+      return char !== null && matchesCardKeywordExact(char, bracketInAdv[1].trim(), true);
     });
   }
 
@@ -1038,7 +1058,7 @@ export function extractTriggerClause(
 
   const escaped = triggerType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(
-    `${escaped}\\s*(?:Tap\\s*:|:)\\s*([\\s\\S]*?)(?=(?:\\n|\\r|(?:Appear|Farewell|Adventure|Inspo Boost|Inspiration Boost|Pre-Plan|Mane Ability|Activate|Treat for you!|Deliver Present|Unwrap Present)\\s*(?:Tap\\s*:|:)|$))`,
+    `${escaped}\\s*(?:(?<!un)\\btap\\s*:|:)\\s*([\\s\\S]*?)(?=(?:\\n|\\r|(?:Appear|Farewell|Adventure|Inspo Boost|Inspiration Boost|Pre-Plan|Mane Ability|Activate|Treat for you!|Deliver Present|Unwrap Present)\\s*(?:(?<!un)\\btap\\s*:|:)|$))`,
     'i'
   );
   const match = text.match(regex);
@@ -1065,7 +1085,7 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   let text = sanitizeCardText(clauseText);
   if (!text) return null;
 
-  text = text.replace(/^Tap\s*:\s*/i, '').trim();
+  text = text.replace(/^(?<!un)\btap\s*:\s*/i, '').trim();
 
   if (/^while\b/i.test(text)) {
     return { kind: 'NONE_PASSIVE', amount: 0 };
@@ -1344,13 +1364,15 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     return { kind: 'TARGET_READY_FRIENDLY', amount: 1, requiresChoice: true };
   }
 
+  // Ticket #14 Fix: Require Character type when bracketed name filter is used without explicit Item/Event/Scene type
   if (/retirement\s+(?:area|pile)/i.test(text) && /add\s+(?:it|them)\s+to\s+(?:your\s+)?hand/i.test(text)) {
     const typeMatch = text.match(/(?:choose|select)\s+(?:1|any)\s+(Item|Event|Character|Scene)/i);
+    const inferredType = typeMatch ? typeMatch[1] : nameFilter ? 'Character' : undefined;
     return {
       kind: 'RECOVER_RETIREMENT',
       amount: 1,
       maxLimit: parsedMaxLimit,
-      requiredTypeFilter: typeMatch ? typeMatch[1] : undefined,
+      requiredTypeFilter: inferredType,
       requiredNameFilter: nameFilter,
       requiresChoice: true,
     };

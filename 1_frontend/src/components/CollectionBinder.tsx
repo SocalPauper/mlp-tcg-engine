@@ -24,6 +24,34 @@ interface CollectionBinderProps {
 const CARDS_PER_LEAF = 9;    // 3x3 pockets per binder sheet
 const CARDS_PER_SPREAD = 18; // Left page (9) + Right page (9)
 
+const RARITY_TIERS: Record<string, { label: string; matches: (card: BinderCard) => boolean }> = {
+  ALL: { label: 'All Rarities', matches: () => true },
+  BASE: {
+    label: 'Base Pool (C / U / R / SPR)',
+    matches: (c) =>
+      ['C', 'U', 'R', 'SPR'].includes((c.rarity || 'C').toUpperCase()) &&
+      !c.id.toUpperCase().endsWith('-S'),
+  },
+  SUPER: {
+    label: 'Super Rare (SR / SSR)',
+    matches: (c) =>
+      ['SR', 'SSR'].includes((c.rarity || '').toUpperCase()) &&
+      !c.id.toUpperCase().endsWith('-S'),
+  },
+  ULTRA: {
+    label: 'Ultra & Crystal (UR / CR)',
+    matches: (c) =>
+      ['UR', 'CR'].includes((c.rarity || '').toUpperCase()) &&
+      !c.id.toUpperCase().endsWith('-S'),
+  },
+  CHASE: {
+    label: 'Chase Foils (GR / DR / Shining -S)',
+    matches: (c) =>
+      ['GR', 'DR', 'DIAMOND'].includes((c.rarity || '').toUpperCase()) ||
+      c.id.toUpperCase().endsWith('-S'),
+  },
+};
+
 export default function CollectionBinder({ onBackToStable }: CollectionBinderProps) {
   const [cards, setCards] = useState<BinderCard[]>([]);
   const [ownedQuantities, setOwnedQuantities] = useState<Record<string, number>>({});
@@ -138,12 +166,12 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
   }, [cards]);
 
   const filteredCards = useMemo(() => {
+    const tierSpec = RARITY_TIERS[selectedRarity] || RARITY_TIERS.ALL;
     return cards
       .filter((card) => {
         const setMatch =
           selectedSet === 'ALL' || (card.set_code || '').toUpperCase() === selectedSet;
-        const rarityMatch =
-          selectedRarity === 'ALL' || (card.rarity || '').toUpperCase() === selectedRarity;
+        const rarityMatch = tierSpec.matches(card);
         const searchMatch =
           !searchQuery.trim() ||
           card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -275,7 +303,7 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
   if (loading) {
     return (
       <div className="binder-viewport">
-        <div className="binder-loading">Fetching Your Equestria Collector's Binder... 📖✨</div>
+        <div className="binder-loading">Fetching Your Equestria Collector&apos;s Binder... 📖✨</div>
       </div>
     );
   }
@@ -363,7 +391,7 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
                 <div className="binder-cover-title-plate">
                   <h1 className="binder-cover-title">{coverTitle}</h1>
                   <p className="binder-cover-desc">
-                    Official 3-Ring Collector's Album • 9-Pocket Ultra-Clear Protective Sleeves
+                    Official 3-Ring Collector&apos;s Album • 9-Pocket Ultra-Clear Protective Sleeves
                   </p>
                 </div>
 
@@ -412,17 +440,11 @@ export default function CollectionBinder({ onBackToStable }: CollectionBinderPro
                   value={selectedRarity}
                   onChange={(e) => setSelectedRarity(e.target.value)}
                 >
-                  <option value="ALL">All Rarities</option>
-                  <option value="C">Common (C)</option>
-                  <option value="U">Uncommon (U)</option>
-                  <option value="R">Rare (R)</option>
-                  <option value="SR">Super Rare (SR)</option>
-                  <option value="SSR">Super Secret Rare (SSR)</option>
-                  <option value="UR">Ultra Rare (UR)</option>
-                  <option value="GR">Gold Rare (GR)</option>
-                  <option value="CR">Crystal Rare (CR)</option>
-                  <option value="DR">Diamond Rare (DR)</option>
-                  <option value="SPR">Special Parallel (SPR)</option>
+                  {Object.entries(RARITY_TIERS).map(([key, tier]) => (
+                    <option key={key} value={key}>
+                      {tier.label}
+                    </option>
+                  ))}
                 </select>
                 <select
                   className="binder-select"
