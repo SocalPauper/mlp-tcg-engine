@@ -486,6 +486,107 @@ router.delete('/chat-messages/:id', authenticateToken, requireAdmin, async (req,
   }
 });
 
+// Bulk import / seed Meta Decks into auth.decks (is_public = TRUE)
+router.post('/seed-meta-decks', authenticateToken, requireAdmin, async (req, res) => {
+  const decksInput = Array.isArray(req.body?.decks) ? req.body.decks : [];
+  if (decksInput.length === 0) {
+    return res.status(400).json({ success: false, error: 'Provide a non-empty decks array.' });
+  }
+
+  try {
+    const cardsRes = await pool.query(`SELECT id, card_type FROM game.cards`);
+    const cardTypeMap = new Map<string, string>();
+    for (const row of cardsRes.rows) {
+      cardTypeMap.set(String(row.id).toUpperCase(), String(row.card_type || '').toLowerCase());
+    }
+
+    const imported: string[] = [];
+    const unknownIds = new Set<string>();
+
+    for (const item of decksInput) {
+      const name = String(item.name || '').trim();
+      const author = String(item.author || 'Equestria Meta Archive').trim();
+      if (!name) continue;
+
+      const slug = `meta-${name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 48)}`;
+
+      let maneId: string | null = item.mane_character
+        ? String(item.mane_character).trim().toUpperCase()
+        : null;
+      const storyDeck: string[] = [];
+      const sceneDeck: string[] = [];
+      const mainDeck: string[] = [];
+
+      if (typeof item.decklistText === 'string') {
+        const lines = item.decklistText.split(/\r?\n/);
+        for (const rawLine of lines) {
+          const match = rawLine.trim().match(/^(\d+)\s*x?\s+([※A-Za-z0-9_-]+)/i);
+          if (!match) continue;
+          const qty = Math.min(15, Math.max(1, parseInt(match[1], 10)));
+          const cid = match[2].toUpperCase();
+          const cType = cardTypeMap.get(cid) || '';
+
+          if (!cType) {
+            unknownIds.add(cid);
+            continue;
+          }
+
+          if (cType.includes('mane') || cType.includes('maincharacter')) {
+            maneId = cid;
+          } else if (cType.includes('story')) {
+            for (let i = 0; i < qty; i++) storyDeck.push(cid);
+          } else if (cType.includes('scene')) {
+            for (let i = 0; i < qty; i++) sceneDeck.push(cid);
+          } else {
+            for (let i = 0; i < qty; i++) mainDeck.push(cid);
+          }
+        }
+      } else {
+        if (Array.isArray(item.story_deck)) storyDeck.push(...item.story_deck);
+        if (Array.isArray(item.scene_deck)) sceneDeck.push(...item.scene_deck);
+        if (Array.isArray(item.main_deck)) mainDeck.push(...item.main_deck);
+      }
+
+      await pool.query(
+        `INSERT INTO auth.decks (id, name, author, author_id, is_public, mane_character, cards)
+         VALUES ($1, $2, $3, NULL, TRUE, $4::jsonb, $5::jsonb)
+         ON CONFLICT (id) DO UPDATE
+         SET name = EXCLUDED.name,
+             author = EXCLUDED.author,
+             is_public = TRUE,
+             mane_character = EXCLUDED.mane_character,
+             cards = EXCLUDED.cards`,
+        [
+          slug,
+          name,
+          author,
+          maneId ? JSON.stringify({ id: maneId }) : null,
+          JSON.stringify({
+            story_deck: storyDeck.slice(0, 4),
+            scene_deck: sceneDeck.slice(0, 15),
+            main_deck: mainDeck.slice(0, 50),
+          }),
+        ]
+      );
+      imported.push(name);
+    }
+
+    return res.json({
+      success: true,
+      importedCount: imported.length,
+      imported,
+      unknownIds: Array.from(unknownIds),
+    });
+  } catch (err: any) {
+    console.error('[SEED META DECKS ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 1. Search or list users from auth.users
 router.get('/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
   const search = String(req.query.search || '').trim();
@@ -497,8 +598,7 @@ router.get('/users', authenticateToken, requireAdmin, async (req: AuthenticatedR
     let params: any[] = [];
 
     if (search) {
-      query += ` WHERE username ILIKE $1 OR COALESCE(display_name, '') ILIKE $1 OR COALESCE(email, '') ILIKE $1`;
-      params.push(`%${search}%`);
+      query += ` WHERE username ILIKE $1 OR COALESCE(display_name, '') ILIKE $1 OR COALESCE(email, '') ILIKE $1`; params.push(`\%${search}%`);
     }
     query += ` ORDER BY created_at DESC LIMIT 50`;
 
@@ -596,7 +696,7 @@ router.post('/users/moderate', authenticateToken, requireAdmin, async (req: Auth
 
     const { rows } = await pool.query(updateQuery, params);
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    res.json({ success: true, message: `User ${rows[0].username} status updated to ${action.toUpperCase()}` });
+    res.json({ success: true, message: `User ${rows[0].username} status updated to${action.toUpperCase()}` });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

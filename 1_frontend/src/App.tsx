@@ -13,6 +13,7 @@ import RulesGlossaryTab from './components/RulesGlossaryTab';
 import AdminPanel from './components/AdminPanel';
 import FanPageHub from './components/FanPageHub';
 import StandingsHub from './components/StandingsHub';
+import CommunityDecksHub from './components/CommunityDecksHub';
 import AuthModal from './components/AuthModal';
 import './index.css';
 import './styles/CardFoil.css';
@@ -209,7 +210,6 @@ function AppContent() {
         if (data.type === 'STATE_UPDATE' && data.state) {
           if (data.state.phase === 'GAME_OVER') {
             localStorage.removeItem(MATCH_SESSION_KEY);
-            // Sync live Pony Points balance if match awarded rewards to this seat
             const activeSeat = data.seat || seat;
             if (
               (activeSeat === '0' || activeSeat === '1') &&
@@ -350,6 +350,15 @@ function AppContent() {
     }
   };
 
+  const openDeckInStable = (deckId: string, mode: BuilderMode) => {
+    if (mode === 'COPY' && !user) {
+      setShowAuthModal(true);
+      return;
+    }
+    setCurrentTab('stable');
+    setBuilderConfig({ id: deckId, mode });
+  };
+
   return (
     <div className="app-container">
       {!activeMatch && (
@@ -400,9 +409,10 @@ function AppContent() {
                   )}
                   {currentTab === 'shop' && <ShopView />}
                   {currentTab === 'community' && (
-                    <div className="placeholder-tab">
-                      <h2>Community Decks Coming Soon</h2>
-                    </div>
+                    <CommunityDecksHub
+                      onViewDeckInBuilder={(id) => openDeckInStable(id, 'VIEW')}
+                      onCopyDeckToStable={(id) => openDeckInStable(id, 'COPY')}
+                    />
                   )}
                   {currentTab === 'standings' && (
                     <StandingsHub

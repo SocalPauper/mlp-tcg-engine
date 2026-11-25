@@ -105,14 +105,14 @@ const ADMIN_TABS: { key: AdminTabKey; label: string }[] = [
   { key: 'BUGS', label: '🐞 Bug Tracker' },
   { key: 'USERS', label: '👥 Users & Moderation' },
   { key: 'THEME_BINDER', label: '🎨 Theme & Binder' },
-  { key: 'AUDIT', label: '🔍 Audit Decks' },
+  { key: 'AUDIT', label: '🏆 Meta & Audit' },
 ];
 
 export default function AdminPanel() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTabKey>('STATS');
 
-  // Website Statistics State (cached server-side / refreshed periodically)
+  // Website Statistics State
   const [siteStats, setSiteStats] = useState<SiteStatsData>({
     newAccountsToday: 0,
     gamesCreated: 0,
@@ -125,14 +125,14 @@ export default function AdminPanel() {
   });
   const [loadingStats, setLoadingStats] = useState(false);
 
-  // Global Announcements State (Create / Edit / Delete)
+  // Global Announcements State
   const [announcement, setAnnouncement] = useState('');
   const [announcementsList, setAnnouncementsList] = useState<GlobalAnnouncementItem[]>([]);
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | number | null>(null);
   const [editingAnnouncementText, setEditingAnnouncementText] = useState('');
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(false);
 
-  // Chat Moderation State (Main Hub & Fan Page)
+  // Chat Moderation State
   const [chatChannelFilter, setChatChannelFilter] = useState<'ALL' | 'HUB' | 'FAN_PAGE'>('ALL');
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessageItem[]>([]);
@@ -177,6 +177,12 @@ export default function AdminPanel() {
   );
   const [newBugRoomCode, setNewBugRoomCode] = useState('');
   const [newBugNote, setNewBugNote] = useState('');
+
+  // Meta Deck Importer States (for Current Meta tab)
+  const [metaDeckName, setMetaDeckName] = useState('');
+  const [metaDeckAuthor, setMetaDeckAuthor] = useState('Equestria Meta Archive');
+  const [metaDecklistText, setMetaDecklistText] = useState('');
+  const [importingMetaDeck, setImportingMetaDeck] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/media/settings`)
@@ -297,7 +303,7 @@ export default function AdminPanel() {
     alert(`Global Announcement Published: "${trimmed}"`);
   };
 
-const handleSaveEditedAnnouncement = async (id: string | number) => {
+  const handleSaveEditedAnnouncement = async (id: string | number) => {
     const trimmed = editingAnnouncementText.trim();
     if (!trimmed) return;
 
@@ -556,6 +562,86 @@ const handleSaveEditedAnnouncement = async (id: string | number) => {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportAllOpenTickets = () => {
+    const openTickets = bugReports.filter((b) => b.status !== 'RESOLVED');
+    if (openTickets.length === 0) {
+      alert('No open or in-progress tickets to export!');
+      return;
+    }
+
+    const exportPayload = {
+      exportedAt: new Date().toISOString(),
+      totalOpenTickets: openTickets.length,
+      tickets: openTickets.map((t) => ({
+        id: t.id,
+        priority: t.priority || 'MEDIUM',
+        status: t.status,
+        category: t.category,
+        reporter: t.reporter_name,
+        roomCode: t.room_code,
+        seat: t.seat,
+        summary: t.summary,
+        createdAt: t.created_at,
+        adminNotes: t.admin_notes || [],
+        flaggedAnomalies: t.diagnostic_clues?.flaggedAnomalies || [],
+        diagnosticClues: t.diagnostic_clues || null,
+        boardSnapshot: t.board_snapshot || null,
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `equestria-clash-open-tickets-${dateStamp}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportMetaDeck = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!metaDeckName.trim() || !metaDecklistText.trim()) return;
+    setImportingMetaDeck(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/seed-meta-decks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          decks: [
+            {
+              name: metaDeckName.trim(),
+              author: metaDeckAuthor.trim() || 'Equestria Meta Archive',
+              decklistText: metaDecklistText,
+            },
+          ],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Failed to import meta decklist.');
+        return;
+      }
+      const warn =
+        Array.isArray(data.unknownIds) && data.unknownIds.length > 0
+          ? `\nSkipped unrecognized IDs: ${data.unknownIds.join(', ')}`
+          : '';
+      alert(`🏆 Published "${metaDeckName.trim()}" to Current Meta!${warn}`);
+      setMetaDeckName('');
+      setMetaDecklistText('');
+    } catch (err) {
+      console.error('Meta deck import failed:', err);
+      alert('Network error importing meta deck.');
+    } finally {
+      setImportingMetaDeck(false);
+    }
+  };
+
   const handleTabChange = (tab: string) => {
     setSelectedBgTab(tab);
     const saved = settings[`bg_${tab}_opacity`];
@@ -714,6 +800,7 @@ const handleSaveEditedAnnouncement = async (id: string | number) => {
     return channelOk && searchOk;
   });
 
+  const openBugCount = bugReports.filter((b) => b.status !== 'RESOLVED').length;
   const currentTabBgUrl = settings[`bg_${selectedBgTab}`] || '';
   const currentBinderCoverUrl = settings['bg_binder_cover'] || '';
 
@@ -739,10 +826,8 @@ const handleSaveEditedAnnouncement = async (id: string | number) => {
             onClick={() => setActiveTab(t.key)}
           >
             {t.label}
-            {t.key === 'BUGS' && bugReports.filter((b) => b.status === 'OPEN').length > 0 && (
-              <span className="admin-tab-badge">
-                {bugReports.filter((b) => b.status === 'OPEN').length}
-              </span>
+            {t.key === 'BUGS' && openBugCount > 0 && (
+              <span className="admin-tab-badge">{openBugCount}</span>
             )}
           </button>
         ))}
@@ -1020,6 +1105,14 @@ const handleSaveEditedAnnouncement = async (id: string | number) => {
             </div>
 
             <div className="mod-buttons">
+              <button
+                type="button"
+                className="admin-action-btn inspect"
+                onClick={handleExportAllOpenTickets}
+                title="Download all OPEN and IN_PROGRESS bug reports as a single JSON file"
+              >
+                📦 Export Open Tickets ({openBugCount})
+              </button>
               <button
                 type="button"
                 className="admin-action-btn edit"
@@ -1511,18 +1604,64 @@ const handleSaveEditedAnnouncement = async (id: string | number) => {
       )}
 
       {/* ===================================================================== */}
-      {/* TAB 7: AUDIT DECKS & CONTENT                                          */}
+      {/* TAB 7: META DECK IMPORTER & CONTENT AUDIT                             */}
       {/* ===================================================================== */}
       {activeTab === 'AUDIT' && (
-        <div className="panel-box">
-          <h3>🔍 Audit Decks &amp; Content</h3>
-          <p className="admin-subtext">
-            Review user-submitted deck lists for policy compliance and ban flagged card combinations.
-          </p>
-          <div>
-            <button type="button" className="mlp-btn">
-              Audit Database Decks
+        <div className="admin-two-col-grid">
+          <form onSubmit={handleImportMetaDeck} className="panel-box">
+            <h3>🏆 Publish Decklist to Current Meta</h3>
+            <p className="admin-subtext">
+              Paste any decklist exported from PonyRec or DreamTCG (e.g., <code>1x SD01-RR04</code>,{' '}
+              <code>4x BP04-SR01</code>). The server automatically sorts Mane, Story, Scene, and Main cards.
+            </p>
+
+            <label className="admin-field-label">
+              Meta Deck Name:
+              <input
+                type="text"
+                required
+                placeholder="e.g., Applejack Ramp (BP04 Top Cut)"
+                value={metaDeckName}
+                onChange={(e) => setMetaDeckName(e.target.value)}
+              />
+            </label>
+
+            <label className="admin-field-label">
+              Pilot / Source Credit:
+              <input
+                type="text"
+                placeholder="e.g., Equestria Meta Archive / DreamTCG"
+                value={metaDeckAuthor}
+                onChange={(e) => setMetaDeckAuthor(e.target.value)}
+              />
+            </label>
+
+            <label className="admin-field-label">
+              Card IDs &amp; Quantities:
+              <textarea
+                rows={8}
+                required
+                placeholder={`1x SD01-RR04\n1x SD01D-C06\n1x SD01D-C07\n1x SD01D-C08\n1x SD01D-C09\n15x SD01-ER04\n4x SD01D-SR01\n...`}
+                value={metaDecklistText}
+                onChange={(e) => setMetaDecklistText(e.target.value)}
+              />
+            </label>
+
+            <button type="submit" disabled={importingMetaDeck} className="mlp-btn">
+              {importingMetaDeck ? 'Importing Deck...' : '🏆 Publish to Current Meta'}
             </button>
+          </form>
+
+          <div className="panel-box">
+            <h3>🔍 Audit Decks &amp; Content</h3>
+            <p className="admin-subtext">
+              Review user-submitted deck lists for Rules v1.3.0 compliance and manage public featured lists.
+            </p>
+            <div>
+              <button type="button" className="mlp-btn">
+                Audit Database Decks
+              </button>
+            </div>
           </div>
         </div>
       )}

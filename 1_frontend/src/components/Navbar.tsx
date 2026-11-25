@@ -22,7 +22,7 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenAuth }: Navbar
     { id: 'stable', label: '🐎 The Stable' },
     { id: 'collection', label: '📖 Binder' },
     { id: 'shop', label: '🛍️ Pony Shop' },
-    { id: 'community', label: '💬 Community' },
+    { id: 'community', label: '🌟 Current Meta' },
     { id: 'standings', label: '🏆 Standings' },
     { id: 'fanPage', label: '🎨 Fan Page' },
     { id: 'rules', label: '📜 Rules' },

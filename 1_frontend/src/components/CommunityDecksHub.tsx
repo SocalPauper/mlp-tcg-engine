@@ -37,6 +37,7 @@ export default function CommunityDecksHub({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [elementFilter, setElementFilter] = useState('ALL');
+  const [tierFilter, setTierFilter] = useState<'ALL' | 'META' | 'COMMUNITY'>('ALL');
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/decks`)
@@ -51,10 +52,14 @@ export default function CommunityDecksHub({
         setLoading(false);
       })
       .catch((err) => {
-        console.error('Failed to load community decks:', err);
+        console.error('Failed to load meta/public decks:', err);
         setLoading(false);
       });
   }, []);
+
+  const isMetaFeatured = (d: PublicDeck) =>
+    String(d.id || '').startsWith('meta-') ||
+    String(d.author || '').toLowerCase().includes('meta archive');
 
   const filteredDecks = decks.filter((d) => {
     const matchesSearch =
@@ -63,7 +68,11 @@ export default function CommunityDecksHub({
     const matchesElement =
       elementFilter === 'ALL' ||
       String(d.element || '').toLowerCase() === elementFilter.toLowerCase();
-    return matchesSearch && matchesElement;
+    const matchesTier =
+      tierFilter === 'ALL' ||
+      (tierFilter === 'META' && isMetaFeatured(d)) ||
+      (tierFilter === 'COMMUNITY' && !isMetaFeatured(d));
+    return matchesSearch && matchesElement && matchesTier;
   });
 
   return (
@@ -71,13 +80,22 @@ export default function CommunityDecksHub({
       <div className="community-decks-container">
         <div className="community-decks-header">
           <div>
-            <h2>🌍 Community Public Decks ✨</h2>
+            <h2>🌟 Current Meta &amp; Public Decks ✨</h2>
             <span className="community-decks-subtitle">
-              Browse decks shared by fellow duelists, inspect their lists, or copy one into your Stable!
+              Explore featured Kayou MLP TCG meta archetypes and public community lists, inspect cards, or copy directly to your Stable!
             </span>
           </div>
 
           <div className="community-decks-filters">
+            <select
+              className="community-filter-select"
+              value={tierFilter}
+              onChange={(e) => setTierFilter(e.target.value as 'ALL' | 'META' | 'COMMUNITY')}
+            >
+              <option value="ALL">All Lists ({decks.length})</option>
+              <option value="META">🏆 Featured Meta</option>
+              <option value="COMMUNITY">🌍 Community Shared</option>
+            </select>
             <input
               type="text"
               className="community-filter-input"
@@ -103,14 +121,14 @@ export default function CommunityDecksHub({
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: '60px', color: '#ffd700', fontWeight: 900 }}>
-            Gathering public decklists from Equestria... ✨
+            Gathering Current Meta &amp; public decklists from Equestria... ✨
           </div>
         ) : filteredDecks.length === 0 ? (
           <div className="community-empty-box">
             <div style={{ fontSize: '40px', marginBottom: '10px' }}>📚✨</div>
-            <h3 style={{ margin: '0 0 6px', color: '#ffd700' }}>No Public Decks Match Your Filter</h3>
+            <h3 style={{ margin: '0 0 6px', color: '#ffd700' }}>No Decks Match Your Filter</h3>
             <p style={{ margin: 0, fontSize: '14px' }}>
-              Build a deck in <strong>The Stable</strong> and toggle <strong>Public Deck 🌍</strong> to be the first to share your list!
+              Build a deck in <strong>The Stable</strong> and toggle <strong>Public Deck 🌍</strong> to publish your list here!
             </p>
           </div>
         ) : (
@@ -125,6 +143,7 @@ export default function CommunityDecksHub({
                 id: deck.mane_character,
                 rarity: deck.mane_rarity,
               });
+              const featured = isMetaFeatured(deck);
 
               return (
                 <div key={deck.id} className="community-deck-card">
@@ -139,6 +158,7 @@ export default function CommunityDecksHub({
                     }}
                   >
                     <span className="community-deck-element-pill">
+                      {featured ? '🏆 META • ' : ''}
                       {deck.element || 'Unaligned'}
                     </span>
                   </div>
@@ -147,7 +167,7 @@ export default function CommunityDecksHub({
                     <div>
                       <h3>{deck.name}</h3>
                       <div className="community-deck-meta">
-                        Created by <strong>{deck.author || 'Duelist'}</strong> • {totalCount}/70 Cards
+                        By <strong>{deck.author || 'Duelist'}</strong> • {totalCount}/70 Cards
                       </div>
                     </div>
 
