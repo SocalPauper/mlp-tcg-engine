@@ -25,6 +25,7 @@ import {
   extractItemGrantedAdventureClause,
   canPlayCardRestrictions,
   canPayHarmonyCost,
+  exhaustScenesWithElementPriority,
   getEffectiveCardCost,
   calculateLanePowerBreakdown,
   evaluateScalingMultiplier,
