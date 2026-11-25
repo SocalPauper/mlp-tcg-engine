@@ -364,7 +364,6 @@ function getClientEffectiveCost(
   const text = cleanCardText(card.effectText);
   const cardType = String(card.type || '').toLowerCase();
 
-  // Self-scaling cost reduction (e.g., "-1 Cost ... for each Plan / Treat / Pet")
   const selfDisc = text.match(
     /-(\d+)\s*cost(?:\s+of\s+force\s+of\s+harmony)?\s+when\s+played\s+from\s+hand\s+(for\s+each\s+[^.]+)/i
   );
@@ -519,7 +518,6 @@ function computeClientPowerDetails(
     }
   }
 
-  // Adjacent / other-lane item auras
   for (const otherLane of allLanes) {
     if (otherLane === laneKey) continue;
     const oSlot = player.adventureArea[otherLane];
@@ -606,6 +604,14 @@ function checkSceneInspireEligibility(
   return { eligible: true };
 }
 
+function detectMobilePhoneViewport(): boolean {
+  if (typeof window === 'undefined') return false;
+  const isTouchLike =
+    typeof navigator !== 'undefined' &&
+    (/Android|iPhone|iPod|Mobile/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1);
+  return window.innerWidth <= 640 || (isTouchLike && window.innerWidth <= 768 && window.innerHeight > window.innerWidth);
+}
+
 const CONFETTI_COLORS = ['#fde047', '#f472b6', '#38bdf8', '#a855f7', '#34d399', '#fb7185'];
 
 export default function GameBoard({
@@ -625,6 +631,13 @@ export default function GameBoard({
   const [secondsLeft, setSecondsLeft] = useState<number>(180);
 
   const [isMuted, setIsMuted] = useState<boolean>(() => soundFX.isMuted());
+
+  // One-Hand Magic Arena Mobile Mode State
+  const [isOneHandMobile, setIsOneHandMobile] = useState<boolean>(() =>
+    detectMobilePhoneViewport()
+  );
+  const [mobileViewTab, setMobileViewTab] = useState<'ARENA' | 'MY_ZONES' | 'OPP_ZONES'>('ARENA');
+  const [mobileToolsOpen, setMobileToolsOpen] = useState<boolean>(false);
 
   const [wheelAngle, setWheelAngle] = useState<number>(0);
   const [wheelSettled, setWheelSettled] = useState<boolean>(false);
@@ -659,6 +672,14 @@ export default function GameBoard({
   const opp = gameState.players[oppSeat];
   const isMyTurn = !isSpectator && gameState.turnPlayerId === mySeat;
   const isOppTurn = gameState.turnPlayerId === oppSeat;
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsOneHandMobile(detectMobilePhoneViewport());
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowLogOnboardingBubble(false), 9000);
@@ -844,6 +865,7 @@ export default function GameBoard({
       userAgent: navigator.userAgent,
       seat,
       zoneFocus,
+      isOneHandMobile,
       selectedHandCardId,
       submittedAtLocal: new Date().toString(),
     };
@@ -924,6 +946,7 @@ export default function GameBoard({
 
       sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane });
       setSelectedHandCardId(null);
+      if (isOneHandMobile) setMobileViewTab('ARENA');
     }
   };
 
@@ -991,13 +1014,13 @@ export default function GameBoard({
     return 1;
   })();
 
-  const renderDualManePresenceBar = () => {
-    const canActivateMyMane =
-      isMyTurn &&
-      gameState.phase === 'MAIN_PHASE' &&
-      !me.leaderAbilityUsedThisTurn &&
-      hasManeActivatedAbility(me.leader);
+  const canActivateMyMane =
+    isMyTurn &&
+    gameState.phase === 'MAIN_PHASE' &&
+    !me.leaderAbilityUsedThisTurn &&
+    hasManeActivatedAbility(me.leader);
 
+  const renderDualManePresenceBar = () => {
     return (
       <div className="dual-mane-presence-bar">
         <div
@@ -1015,7 +1038,7 @@ export default function GameBoard({
           />
           <div className="mane-presence-info">
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              <strong style={{ fontSize: '12px', color: '#0369a1' }}>
+              <strong style={{ fontSize: '12px', color: '#7dd3fc' }}>
                 ✨ {me.displayName} ({me.leader?.name || 'Mane'})
               </strong>
               {canActivateMyMane && (
@@ -1052,7 +1075,7 @@ export default function GameBoard({
             onTouchEnd={handleTouchEndInspect}
           />
           <div className="mane-presence-info">
-            <strong style={{ fontSize: '12px', color: '#be123c' }}>
+            <strong style={{ fontSize: '12px', color: '#f9a8d4' }}>
               👑 {opp.displayName} ({opp.leader?.name || 'Rival Mane'})
             </strong>
             <div
@@ -1233,7 +1256,7 @@ export default function GameBoard({
                   </>
                 ) : (
                   <span className="slot-empty-label">
-                    {isTargetable ? 'Click to Deploy' : `${laneKey.toUpperCase()}`}
+                    {isTargetable ? (isOneHandMobile ? 'Tap Deploy' : 'Click to Deploy') : `${laneKey.toUpperCase()}`}
                   </span>
                 )}
               </div>
@@ -1267,12 +1290,12 @@ export default function GameBoard({
             <strong>{player.displayName}</strong>
             {isPlayersTurn && <span className="active-turn-mat-badge">Active Turn</span>}
             {player.isConnected === false && (
-              <span style={{ marginLeft: '8px', fontSize: '11px', color: '#dc2626' }}>
+              <span style={{ marginLeft: '8px', fontSize: '11px', color: '#fda4af' }}>
                 ⚠️ Disconnected (3m timer active)
               </span>
             )}
             {gameState.firstPlayerId === player.id && (
-              <span style={{ marginLeft: '6px', fontSize: '11px', color: '#ec4899' }}>★ 1st</span>
+              <span style={{ marginLeft: '6px', fontSize: '11px', color: '#fde047' }}>★ 1st</span>
             )}
           </div>
 
@@ -1280,25 +1303,27 @@ export default function GameBoard({
             {player.nextCardCostDiscount && (
               <span
                 className="hud-pill"
-                style={{ background: '#fef08a', borderColor: '#f59e0b', color: '#78350f' }}
+                style={{ background: 'rgba(253, 224, 71, 0.2)', borderColor: '#fde047', color: '#fde047' }}
               >
                 🏷️ Next {player.nextCardCostDiscount.cardType || player.nextCardCostDiscount.filter || 'Card'} -{player.nextCardCostDiscount.amount} Cost
               </span>
             )}
             <span className="hud-pill story-pill">
-              📖 Story Stages: {me.storyProgress}/4 (You) vs {opp.storyProgress}/4 (Opp)
+              📖 Story: {me.storyProgress}/4 (You) vs {opp.storyProgress}/4 (Opp)
             </span>
             <span className="hud-pill">
-              🌈 Force of Harmony: {readyHarmony}/{player.sceneArea.length}
+              🌈 Harmony: {readyHarmony}/{player.sceneArea.length}
             </span>
             <span className="hud-pill">🃏 Hand: {player.hand.length}</span>
-            <button
-              type="button"
-              className="board-camera-switch-btn"
-              onClick={() => setZoneFocus((prev) => (prev === 'ME' ? 'OPPONENT' : 'ME'))}
-            >
-              {zoneFocus === 'ME' ? "👁️ View Opponent's Story/Scenes" : '👁️ View My Story/Scenes'}
-            </button>
+            {!isOneHandMobile && (
+              <button
+                type="button"
+                className="board-camera-switch-btn"
+                onClick={() => setZoneFocus((prev) => (prev === 'ME' ? 'OPPONENT' : 'ME'))}
+              >
+                {zoneFocus === 'ME' ? "👁️ View Opponent's Story/Scenes" : '👁️ View My Story/Scenes'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -1384,7 +1409,15 @@ export default function GameBoard({
 
           <div
             className="side-portrait-zone retirement-pile-zone"
-            title="Right-click or long-press to view all cards in Retirement Area"
+            title="Right-click or tap/hold to view all cards in Retirement Area"
+            onClick={() => {
+              if (isOneHandMobile) {
+                setViewedRetirement({
+                  ownerName: player.displayName,
+                  cards: [...player.retirement].reverse(),
+                });
+              }
+            }}
             onContextMenu={(e) => {
               e.preventDefault();
               setViewedRetirement({
@@ -1408,7 +1441,9 @@ export default function GameBoard({
                   src={player.retirement[player.retirement.length - 1].imageUrl}
                   alt="Retirement Area Top"
                 />
-                <span className="retirement-inspect-pill">🔍 Hold / R-Click</span>
+                <span className="retirement-inspect-pill">
+                  {isOneHandMobile ? '🔍 Tap' : '🔍 Hold / R-Click'}
+                </span>
               </>
             ) : (
               <span className="slot-empty-label">Empty</span>
@@ -1445,6 +1480,9 @@ export default function GameBoard({
                       ? 'Inspiration Boost already used'
                       : sc.card.name
                   }
+                  onClick={() => {
+                    if (isOneHandMobile && sc.isFaceUp) setInspectedCard(sc.card);
+                  }}
                   onContextMenu={(e) => handleContextMenu(e, sc.isFaceUp ? sc.card : null)}
                   onTouchStart={() => handleTouchStartInspect(sc.isFaceUp ? sc.card : null)}
                   onTouchEnd={handleTouchEndInspect}
@@ -1476,14 +1514,139 @@ export default function GameBoard({
     );
   };
 
+  // Magic Arena-inspired Primary Thumb CTA button for One-Hand Mobile Mode
+  const renderMobileArenaPrimaryButton = () => {
+    if (isSpectator) {
+      return (
+        <span className="arena-thumb-status-pill">👁️ Spectating Turn {gameState.turnNumber}</span>
+      );
+    }
+
+    if (!isMyTurn) {
+      return (
+        <span className="arena-thumb-status-pill opp">
+          ⏳ {opp.displayName}&apos;s Turn ({formatTimer(secondsLeft)})
+        </span>
+      );
+    }
+
+    if (gameState.phase === 'PENDING_TARGET' && gameState.pendingTarget) {
+      return (
+        <button
+          type="button"
+          className="arena-thumb-cta-btn secondary"
+          onClick={() => sendAction('CANCEL_TARGET')}
+        >
+          ✕ Cancel Target
+        </button>
+      );
+    }
+
+    if (gameState.phase === 'BREAKTHROUGH_CHOICE') {
+      return (
+        <div className="arena-thumb-cta-group">
+          {canProgressStory && (
+            <button
+              type="button"
+              className="arena-thumb-cta-btn primary"
+              onClick={() => sendAction('BREAKTHROUGH_CHOICE', { choice: 'PROGRESS_STORY' })}
+            >
+              🔮 Story ({me.storyProgress + 1}/4)
+            </button>
+          )}
+          {nextOpponentPlanStage && (
+            <button
+              type="button"
+              className="arena-thumb-cta-btn gold"
+              onClick={() => sendAction('BREAKTHROUGH_CHOICE', { choice: 'INTERVENE_PLAN' })}
+            >
+              ⚡ Intervene P{nextOpponentPlanStage.stage}
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    if (gameState.phase === 'MAIN_PHASE') {
+      if (
+        selectedHandCard &&
+        String(selectedHandCard.type || '').toLowerCase() === 'event'
+      ) {
+        return (
+          <button
+            type="button"
+            className="arena-thumb-cta-btn primary"
+            onClick={() => {
+              sendAction('PLAY_CARD', { cardId: selectedHandCard.id });
+              setSelectedHandCardId(null);
+            }}
+          >
+            ✨ Cast {selectedHandCard.name}
+          </button>
+        );
+      }
+
+      if (selectedHandCard) {
+        return (
+          <span className="arena-thumb-status-pill select-hint">
+            👆 Tap a highlighted lane to deploy {selectedHandCard.name}
+          </span>
+        );
+      }
+
+      if (me.turnsTaken > 1) {
+        const hasUnactedChar = (['left', 'center', 'right'] as const).some(
+          (l) => me.adventureArea[l].character !== null && !me.actedLanesThisTurn?.includes(l)
+        );
+        return (
+          <div className="arena-thumb-cta-group">
+            <button
+              type="button"
+              className="arena-thumb-cta-btn primary"
+              onClick={() => sendAction('START_CONTACT')}
+            >
+              ⚔️ Contact
+            </button>
+            {!hasUnactedChar && (
+              <button
+                type="button"
+                className="arena-thumb-cta-btn gold"
+                onClick={() => sendAction('END_TURN')}
+              >
+                Pass Turn ⏭️
+              </button>
+            )}
+          </div>
+        );
+      }
+
+      return (
+        <button
+          type="button"
+          className="arena-thumb-cta-btn gold"
+          onClick={() => sendAction('END_TURN')}
+        >
+          End Turn 1 ⏭️
+        </button>
+      );
+    }
+
+    return <span className="arena-thumb-status-pill">✨ Resolving {gameState.phase}...</span>;
+  };
+
   const winnerPlayer = gameState.winnerId ? gameState.players[gameState.winnerId] : null;
   const actionLogs = gameState.actionLog || [];
   const debugTraces = gameState.debugTrace || [];
   const delayedTriggers = gameState.delayedTriggers || [];
   const myReward = !isSpectator ? gameState.rewardSummary?.[mySeat] : undefined;
+  const myReadyHarmony = me.sceneArea.filter((s) => !s.isExhausted).length;
+  const oppReadyHarmony = opp.sceneArea.filter((s) => !s.isExhausted).length;
 
   return (
-    <div className="kayou-playmat-wrapper">
+    <div className={`kayou-playmat-wrapper cosmic-galaxy-theme ${isOneHandMobile ? 'one-hand-arena-mode' : ''}`}>
+      {/* Subtle Cosmic Starfield Layer */}
+      <div className="cosmic-starfield-layer" aria-hidden="true" />
+
       {isReconnecting && (
         <div className="reconnecting-banner">
           🔄 Connection interrupted — Reconnecting to match room...
@@ -1532,8 +1695,8 @@ export default function GameBoard({
       )}
 
       {/* Collapsible Action Log & Debug Trace Drawer */}
-      <div className="action-log-dock">
-        {showLogOnboardingBubble && !isLogOpen && (
+      <div className={`action-log-dock ${isOneHandMobile ? 'mobile-dock-hidden-trigger' : ''}`}>
+        {!isOneHandMobile && showLogOnboardingBubble && !isLogOpen && (
           <div className="action-log-onboarding-bubble">
             💬 <strong>Tip:</strong> View live card logs &amp; the 🐞 Debug Trace right here!
           </div>
@@ -1666,19 +1829,21 @@ export default function GameBoard({
           </div>
         )}
 
-        <button
-          type="button"
-          className="action-log-toggle-pill"
-          onClick={() => {
-            setIsLogOpen((prev) => !prev);
-            setShowLogOnboardingBubble(false);
-          }}
-        >
-          <span>
-            📜 Log ({actionLogs.length}) • 🐞 ({debugTraces.length})
-          </span>
-          <span>{isLogOpen ? '▼' : '▲'}</span>
-        </button>
+        {!isOneHandMobile && (
+          <button
+            type="button"
+            className="action-log-toggle-pill"
+            onClick={() => {
+              setIsLogOpen((prev) => !prev);
+              setShowLogOnboardingBubble(false);
+            }}
+          >
+            <span>
+              📜 Log ({actionLogs.length}) • 🐞 ({debugTraces.length})
+            </span>
+            <span>{isLogOpen ? '▼' : '▲'}</span>
+          </button>
+        )}
       </div>
 
       {turnBannerText && gameState.phase !== 'REVEAL_HOLD' && gameState.phase !== 'CLASH_HOLD' && (
@@ -1687,7 +1852,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 1. VS Intro Splash */}
+      {/* 1. VS Intro Splash with 2-Player 50/50 Spin Wheel */}
       {gameState.phase === 'VS_INTRO' && (
         <div className="vs-intro-overlay">
           <div className="vs-fighters-stage" style={{ gap: '28px', flexWrap: 'wrap' }}>
@@ -2187,7 +2352,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 6. Fanfare Winner Screen */}
+      {/* 6. Fanfare Winner Screen & End-of-Match Reward Summary */}
       {gameState.phase === 'GAME_OVER' && winnerPlayer && (
         <div className="victory-fanfare-overlay">
           <div className="confetti-container">
@@ -2457,242 +2622,512 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Dedicated Top Action Bar */}
-      <div
-        className={`center-action-bar ${
-          isMyTurn ? 'my-turn-bar' : isOppTurn ? 'opp-turn-bar' : ''
-        }`}
-      >
-        <div className="action-bar-status">
-          <span className="turn-badge">TURN {gameState.turnNumber}</span>
-          <span>
-            {isMyTurn ? '🔵 YOUR TURN: ' : '🔴 OPPONENT TURN: '}
-            <strong>{gameState.players[gameState.turnPlayerId].displayName}</strong>
-          </span>
+      {/* ===================================================================== */}
+      {/* ONE-HAND MAGIC ARENA MOBILE LAYOUT VS DESKTOP COSMIC BOARD            */}
+      {/* ===================================================================== */}
+      {isOneHandMobile ? (
+        <>
+          {/* Compact Top Cosmic Status Strip */}
+          <div className={`arena-mobile-top-hud ${isMyTurn ? 'my-turn' : 'opp-turn'}`}>
+            <div className="arena-mobile-player-chip opp" onClick={() => setInspectedCard(opp.leader)}>
+              <img src={opp.leader?.imageUrl || CARD_BACK_URL} alt={opp.displayName} />
+              <div className="arena-chip-meta">
+                <span className="arena-chip-name">👑 {opp.displayName}</span>
+                <span className="arena-chip-stats">
+                  📖 {opp.storyProgress}/4 • 🌈 {oppReadyHarmony}/{opp.sceneArea.length} • 🃏 {opp.hand.length}
+                </span>
+              </div>
+            </div>
 
-          <div className="phase-stepper-bar" title="Rules v1.3.0 Turn Phases">
-            <span className={`phase-step-pill ${activeStepIndex === 0 ? 'active' : ''}`}>
-              1. Start
-            </span>
-            <span className={`phase-step-pill ${activeStepIndex === 1 ? 'active' : ''}`}>
-              2. Main
-            </span>
-            <span className={`phase-step-pill ${activeStepIndex === 2 ? 'active' : ''}`}>
-              3. Contact
-            </span>
-            <span className={`phase-step-pill ${activeStepIndex === 3 ? 'active' : ''}`}>
-              4. End
-            </span>
-          </div>
-
-          <span style={{ fontSize: '11px', color: secondsLeft <= 30 ? '#fca5a5' : '#fde047' }}>
-            ⏱️ {formatTimer(secondsLeft)}
-          </span>
-        </div>
-
-        <div className="action-bar-buttons">
-          {isMyTurn && gameState.phase === 'PENDING_TARGET' && gameState.pendingTarget && (
-            <>
-              <span style={{ fontSize: '12px', color: '#fde047', fontWeight: 900 }}>
-                🎯 {gameState.pendingTarget.promptText}
+            <div className="arena-mobile-turn-pill">
+              <span>T{gameState.turnNumber}</span>
+              <span style={{ color: secondsLeft <= 30 ? '#fca5a5' : '#fde047' }}>
+                {formatTimer(secondsLeft)}
               </span>
               <button
                 type="button"
-                className="action-bar-btn secondary"
-                onClick={() => sendAction('CANCEL_TARGET')}
+                className="arena-mode-switch-mini"
+                title="Switch to Full Desktop Layout"
+                onClick={() => setIsOneHandMobile(false)}
               >
-                Cancel
+                🖥️
               </button>
-            </>
-          )}
+            </div>
 
-          {isMyTurn && gameState.phase === 'MAIN_PHASE' && (
-            <>
-              {selectedHandCard &&
-                String(selectedHandCard.type || '').toLowerCase() === 'event' && (
-                  <button
-                    type="button"
-                    className="action-bar-btn primary"
-                    style={{
-                      boxShadow: '0 0 18px rgba(253, 224, 71, 0.85)',
-                      border: '1.5px solid #fde047',
-                    }}
-                    onClick={() => {
-                      sendAction('PLAY_CARD', { cardId: selectedHandCard.id });
-                      setSelectedHandCardId(null);
-                    }}
-                  >
-                    ✨ Cast Event: {selectedHandCard.name}
-                  </button>
-                )}
+            <div className="arena-mobile-player-chip self" onClick={() => setInspectedCard(me.leader)}>
+              <div className="arena-chip-meta" style={{ textAlign: 'right' }}>
+                <span className="arena-chip-name">✨ {me.displayName}</span>
+                <span className="arena-chip-stats">
+                  📖 {me.storyProgress}/4 • 🌈 {myReadyHarmony}/{me.sceneArea.length}
+                </span>
+              </div>
+              <img src={me.leader?.imageUrl || CARD_BACK_URL} alt={me.displayName} />
+            </div>
+          </div>
 
-              {me.turnsTaken > 1 ? (
-                <>
-                  <button
-                    type="button"
-                    className="action-bar-btn primary"
-                    onClick={() => sendAction('START_CONTACT')}
-                  >
-                    ⚔️ Contact Phase
-                  </button>
-                  {!(['left', 'center', 'right'] as const).some(
-                    (l) =>
-                      me.adventureArea[l].character !== null &&
-                      !me.actedLanesThisTurn?.includes(l)
-                  ) && (
-                    <button
-                      type="button"
-                      className="action-bar-btn gold"
-                      onClick={() => sendAction('END_TURN')}
-                    >
-                      End Turn ⏭️
-                    </button>
-                  )}
-                </>
+          {/* Active Speech / Prompt Ticker */}
+          {(me.speechBubble?.text || opp.speechBubble?.text || (isMyTurn && gameState.phase === 'PENDING_TARGET')) && (
+            <div className="arena-mobile-speech-ticker">
+              {isMyTurn && gameState.phase === 'PENDING_TARGET' && gameState.pendingTarget ? (
+                <span style={{ color: '#fde047', fontWeight: 900 }}>
+                  🎯 {gameState.pendingTarget.promptText}
+                </span>
+              ) : isMyTurn ? (
+                <span>💬 {me.speechBubble?.text || 'Your move! Tap a card in hand or lane.'}</span>
               ) : (
-                <>
-                  <span style={{ fontSize: '11px', color: '#fbcfe8', fontStyle: 'italic' }}>
-                    (Turn 1: No Contact)
-                  </span>
-                  <button
-                    type="button"
-                    className="action-bar-btn gold"
-                    onClick={() => sendAction('END_TURN')}
-                  >
-                    End Turn ⏭️
-                  </button>
-                </>
+                <span>💬 {opp.speechBubble?.text || `${opp.displayName} is thinking...`}</span>
               )}
-            </>
-          )}
-
-          {isMyTurn && gameState.phase === 'BREAKTHROUGH_CHOICE' && (
-            <>
-              {canProgressStory && (
-                <button
-                  type="button"
-                  className="action-bar-btn primary"
-                  onClick={() => sendAction('BREAKTHROUGH_CHOICE', { choice: 'PROGRESS_STORY' })}
-                >
-                  🔮 Progress Story Stage ({me.storyProgress + 1}/4)
-                </button>
-              )}
-
-              {nextOpponentPlanStage && (
+              {canActivateMyMane && (
                 <button
                   type="button"
                   className="action-bar-btn gold"
-                  onClick={() => sendAction('BREAKTHROUGH_CHOICE', { choice: 'INTERVENE_PLAN' })}
+                  style={{ padding: '2px 8px', fontSize: '10px', marginLeft: 'auto' }}
+                  onClick={() => sendAction('ACTIVATE_MANE_ABILITY')}
                 >
-                  ⚡ Intervene Plan (Flip Story Stage {nextOpponentPlanStage.stage})
+                  ✨ Mane
                 </button>
               )}
-            </>
+            </div>
           )}
 
-          <button
-            type="button"
-            className="action-bar-btn secondary"
-            style={{ borderColor: '#38bdf8', color: '#7dd3fc' }}
-            title="Capture current board state & debug log to report a bug"
-            onClick={() => setShowInMatchBugModal(true)}
+          {delayedTriggers.length > 0 && (
+            <div className="delayed-triggers-strip" style={{ padding: '4px 10px', fontSize: '11px' }}>
+              <strong style={{ color: '#fde047' }}>⏳ End Triggers ({delayedTriggers.length}):</strong>
+              {delayedTriggers.map((trig) => (
+                <span
+                  key={trig.id}
+                  className="delayed-trigger-chip"
+                  onClick={() => setInspectedCard(trig.sourceCard)}
+                >
+                  {trig.sourceCard.name}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Main One-Hand Viewport Stage */}
+          <div className="arena-mobile-stage-viewport">
+            {mobileViewTab === 'ARENA' && (
+              <div className="dual-adventure-arena arena-mobile-lanes">
+                {renderLaneStrip(opp, true)}
+                <div className="center-clash-divider">
+                  <span className="lane-axis-pill">LEFT</span>
+                  <span className="lane-axis-pill">CENTER</span>
+                  <span className="lane-axis-pill">RIGHT</span>
+                </div>
+                {renderLaneStrip(me, false)}
+              </div>
+            )}
+            {mobileViewTab === 'MY_ZONES' && renderPlayerZonesMat(me, false)}
+            {mobileViewTab === 'OPP_ZONES' && renderPlayerZonesMat(opp, true)}
+          </div>
+
+          {/* Slide-Up Mobile Utility Sheet */}
+          {mobileToolsOpen && (
+            <div className="arena-mobile-tools-popover">
+              <button
+                type="button"
+                className="action-bar-btn secondary"
+                onClick={() => {
+                  setIsLogOpen((prev) => !prev);
+                  setMobileToolsOpen(false);
+                }}
+              >
+                📜 Log ({actionLogs.length}) / 🐞 Debug ({debugTraces.length})
+              </button>
+              <button
+                type="button"
+                className="action-bar-btn secondary"
+                onClick={() => {
+                  setShowInMatchBugModal(true);
+                  setMobileToolsOpen(false);
+                }}
+              >
+                🐞 Report In-Match Bug
+              </button>
+              <button
+                type="button"
+                className="action-bar-btn secondary"
+                onClick={() => setIsMuted(soundFX.toggleMute())}
+              >
+                {isMuted ? '🔇 Unmute Audio' : '🔊 Mute Audio'}
+              </button>
+              <button
+                type="button"
+                className="action-bar-btn secondary"
+                style={{ borderColor: '#fb7185', color: '#fda4af' }}
+                onClick={() => {
+                  if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'LEAVE_ROOM' }));
+                  }
+                  onLeaveMatch();
+                }}
+              >
+                🚪 Leave / Forfeit
+              </button>
+            </div>
+          )}
+
+          {/* One-Hand Bottom Thumb Dock (Magic Arena Style) */}
+          <div className="arena-mobile-bottom-dock">
+            {/* Thumb Reachable Action & Zone Switcher Row */}
+            <div className="arena-thumb-controls-row">
+              <div className="arena-thumb-zone-tabs">
+                <button
+                  type="button"
+                  className={`arena-zone-tab ${mobileViewTab === 'ARENA' ? 'active' : ''}`}
+                  onClick={() => setMobileViewTab('ARENA')}
+                >
+                  ⚔️ Lanes
+                </button>
+                <button
+                  type="button"
+                  className={`arena-zone-tab ${mobileViewTab === 'MY_ZONES' ? 'active' : ''}`}
+                  onClick={() => setMobileViewTab('MY_ZONES')}
+                >
+                  📖 Mine ({myReadyHarmony}/{me.sceneArea.length})
+                </button>
+                <button
+                  type="button"
+                  className={`arena-zone-tab ${mobileViewTab === 'OPP_ZONES' ? 'active' : ''}`}
+                  onClick={() => setMobileViewTab('OPP_ZONES')}
+                >
+                  👑 Opp
+                </button>
+              </div>
+
+              <div className="arena-thumb-right-cluster">
+                {renderMobileArenaPrimaryButton()}
+                <button
+                  type="button"
+                  className="arena-thumb-menu-btn"
+                  aria-label="Match Menu"
+                  onClick={() => setMobileToolsOpen((prev) => !prev)}
+                >
+                  ☰
+                </button>
+              </div>
+            </div>
+
+            {/* Fanned One-Thumb Hand Arc */}
+            {!isSpectator && (
+              <div className="arena-mobile-hand-fan">
+                {me.hand.map((card, idx) => {
+                  const isSelected = selectedHandCardId === card.id;
+                  const canAfford = canAffordCardWithHarmony(me, card, opp);
+                  const total = me.hand.length;
+                  const mid = (total - 1) / 2;
+                  const offset = idx - mid;
+                  const fanRotate = total > 1 ? offset * 3.2 : 0;
+                  const fanLift = total > 1 ? Math.abs(offset) * 2.5 : 0;
+
+                  return (
+                    <div
+                      key={`${card.id}-${idx}`}
+                      className={`arena-fan-card ${isSelected ? 'selected' : ''} ${
+                        !canAfford ? 'unaffordable' : getCardFoilClass(card)
+                      }`}
+                      style={{
+                        transform: isSelected
+                          ? 'translateY(-22px) scale(1.14) rotate(0deg)'
+                          : `translateY(${fanLift}px) rotate(${fanRotate}deg)`,
+                        zIndex: isSelected ? 40 : 10 + idx,
+                      }}
+                      onClick={() => {
+                        if (!isMyTurn || gameState.phase !== 'MAIN_PHASE') {
+                          setInspectedCard(card);
+                          return;
+                        }
+                        if (!canAfford) {
+                          setInspectedCard(card);
+                          return;
+                        }
+                        if (isSelected) {
+                          setSelectedHandCardId(null);
+                        } else {
+                          setSelectedHandCardId(card.id);
+                          const normType = String(card.type || '').toLowerCase();
+                          if (normType.includes('character') || normType === 'item') {
+                            setMobileViewTab('ARENA');
+                          }
+                        }
+                      }}
+                      onContextMenu={(e) => handleContextMenu(e, card)}
+                      onTouchStart={() => handleTouchStartInspect(card)}
+                      onTouchEnd={handleTouchEndInspect}
+                    >
+                      <img src={card.imageUrl} alt={card.name} />
+                      {isSelected && (
+                        <button
+                          type="button"
+                          className="arena-card-inspect-chip"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInspectedCard(card);
+                          }}
+                        >
+                          🔍
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        /* ===================================================================== */
+        /* DESKTOP COSMIC GALAXY BOARD                                           */
+        /* ===================================================================== */
+        <>
+          <div
+            className={`center-action-bar ${
+              isMyTurn ? 'my-turn-bar' : isOppTurn ? 'opp-turn-bar' : ''
+            }`}
           >
-            🐞 Report Bug
-          </button>
-
-          <button
-            type="button"
-            className="action-bar-btn secondary"
-            title={isMuted ? 'Unmute Tabletop Sound Effects' : 'Mute Tabletop Sound Effects'}
-            onClick={() => setIsMuted(soundFX.toggleMute())}
-          >
-            {isMuted ? '🔇' : '🔊'}
-          </button>
-
-          <button
-            type="button"
-            className="action-bar-btn secondary"
-            onClick={() => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'LEAVE_ROOM' }));
-              }
-              onLeaveMatch();
-            }}
-          >
-            Leave / Forfeit
-          </button>
-        </div>
-      </div>
-
-      {renderDualManePresenceBar()}
-
-      {delayedTriggers.length > 0 && (
-        <div className="delayed-triggers-strip">
-          <strong style={{ color: '#fde047' }}>
-            ⏳ Queued End-of-Turn Triggers ({delayedTriggers.length}):
-          </strong>
-          {delayedTriggers.map((trig) => (
-            <div
-              key={trig.id}
-              className="delayed-trigger-chip"
-              title="Click to inspect source card"
-              onClick={() => setInspectedCard(trig.sourceCard)}
-            >
-              {trig.sourceCard.imageUrl && (
-                <img src={trig.sourceCard.imageUrl} alt={trig.sourceCard.name} />
-              )}
+            <div className="action-bar-status">
+              <span className="turn-badge">TURN {gameState.turnNumber}</span>
               <span>
-                <strong>{trig.ownerName}</strong> • {trig.sourceCard.name}:{' '}
-                {trig.conditionText ? `If ${trig.conditionText}, ` : ''}
-                {trig.effectClause}
+                {isMyTurn ? '🔵 YOUR TURN: ' : '🔴 OPPONENT TURN: '}
+                <strong>{gameState.players[gameState.turnPlayerId].displayName}</strong>
+              </span>
+
+              <div className="phase-stepper-bar" title="Rules v1.3.0 Turn Phases">
+                <span className={`phase-step-pill ${activeStepIndex === 0 ? 'active' : ''}`}>
+                  1. Start
+                </span>
+                <span className={`phase-step-pill ${activeStepIndex === 1 ? 'active' : ''}`}>
+                  2. Main
+                </span>
+                <span className={`phase-step-pill ${activeStepIndex === 2 ? 'active' : ''}`}>
+                  3. Contact
+                </span>
+                <span className={`phase-step-pill ${activeStepIndex === 3 ? 'active' : ''}`}>
+                  4. End
+                </span>
+              </div>
+
+              <span style={{ fontSize: '11px', color: secondsLeft <= 30 ? '#fca5a5' : '#fde047' }}>
+                ⏱️ {formatTimer(secondsLeft)}
               </span>
             </div>
-          ))}
-        </div>
-      )}
 
-      <div className="dual-adventure-arena">
-        {renderLaneStrip(opp, true)}
+            <div className="action-bar-buttons">
+              {isMyTurn && gameState.phase === 'PENDING_TARGET' && gameState.pendingTarget && (
+                <>
+                  <span style={{ fontSize: '12px', color: '#fde047', fontWeight: 900 }}>
+                    🎯 {gameState.pendingTarget.promptText}
+                  </span>
+                  <button
+                    type="button"
+                    className="action-bar-btn secondary"
+                    onClick={() => sendAction('CANCEL_TARGET')}
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
 
-        <div className="center-clash-divider">
-          <span className="lane-axis-pill">LEFT LANE</span>
-          <span className="lane-axis-pill">CENTER LANE</span>
-          <span className="lane-axis-pill">RIGHT LANE</span>
-        </div>
+              {isMyTurn && gameState.phase === 'MAIN_PHASE' && (
+                <>
+                  {selectedHandCard &&
+                    String(selectedHandCard.type || '').toLowerCase() === 'event' && (
+                      <button
+                        type="button"
+                        className="action-bar-btn primary"
+                        style={{
+                          boxShadow: '0 0 18px rgba(253, 224, 71, 0.85)',
+                          border: '1.5px solid #fde047',
+                        }}
+                        onClick={() => {
+                          sendAction('PLAY_CARD', { cardId: selectedHandCard.id });
+                          setSelectedHandCardId(null);
+                        }}
+                      >
+                        ✨ Cast Event: {selectedHandCard.name}
+                      </button>
+                    )}
 
-        {renderLaneStrip(me, false)}
-      </div>
+                  {me.turnsTaken > 1 ? (
+                    <>
+                      <button
+                        type="button"
+                        className="action-bar-btn primary"
+                        onClick={() => sendAction('START_CONTACT')}
+                      >
+                        ⚔️ Contact Phase
+                      </button>
+                      {!(['left', 'center', 'right'] as const).some(
+                        (l) =>
+                          me.adventureArea[l].character !== null &&
+                          !me.actedLanesThisTurn?.includes(l)
+                      ) && (
+                        <button
+                          type="button"
+                          className="action-bar-btn gold"
+                          onClick={() => sendAction('END_TURN')}
+                        >
+                          End Turn ⏭️
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: '11px', color: '#fbcfe8', fontStyle: 'italic' }}>
+                        (Turn 1: No Contact)
+                      </span>
+                      <button
+                        type="button"
+                        className="action-bar-btn gold"
+                        onClick={() => sendAction('END_TURN')}
+                      >
+                        End Turn ⏭️
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
 
-      {zoneFocus === 'ME' ? renderPlayerZonesMat(me, false) : renderPlayerZonesMat(opp, true)}
+              {isMyTurn && gameState.phase === 'BREAKTHROUGH_CHOICE' && (
+                <>
+                  {canProgressStory && (
+                    <button
+                      type="button"
+                      className="action-bar-btn primary"
+                      onClick={() => sendAction('BREAKTHROUGH_CHOICE', { choice: 'PROGRESS_STORY' })}
+                    >
+                      🔮 Progress Story Stage ({me.storyProgress + 1}/4)
+                    </button>
+                  )}
 
-      {!isSpectator && (
-        <div className="player-hand-section">
-          <div className="my-hand-label-pill">🃏 My Hand ({me.hand.length})</div>
-          <div className="player-hand-dock">
-            {me.hand.map((card, idx) => {
-              const isSelected = selectedHandCardId === card.id;
-              const canAfford = canAffordCardWithHarmony(me, card, opp);
-              return (
-                <div
-                  key={`${card.id}-${idx}`}
-                  className={`hand-card-item ${isSelected ? 'selected' : ''} ${
-                    !canAfford ? 'unaffordable' : getCardFoilClass(card)
-                  }`}
-                  onClick={() => {
-                    if (!isMyTurn || gameState.phase !== 'MAIN_PHASE') return;
-                    if (!canAfford) return;
-                    setSelectedHandCardId(isSelected ? null : card.id);
-                  }}
-                  onContextMenu={(e) => handleContextMenu(e, card)}
-                  onTouchStart={() => handleTouchStartInspect(card)}
-                  onTouchEnd={handleTouchEndInspect}
-                >
-                  <img src={card.imageUrl} alt={card.name} />
-                </div>
-              );
-            })}
+                  {nextOpponentPlanStage && (
+                    <button
+                      type="button"
+                      className="action-bar-btn gold"
+                      onClick={() => sendAction('BREAKTHROUGH_CHOICE', { choice: 'INTERVENE_PLAN' })}
+                    >
+                      ⚡ Intervene Plan (Flip Story Stage {nextOpponentPlanStage.stage})
+                    </button>
+                  )}
+                </>
+              )}
+
+              <button
+                type="button"
+                className="action-bar-btn secondary"
+                style={{ borderColor: '#c084fc', color: '#e9d5ff' }}
+                title="Switch to One-Hand Magic Arena Mobile Layout"
+                onClick={() => setIsOneHandMobile(true)}
+              >
+                📱 1-Hand View
+              </button>
+
+              <button
+                type="button"
+                className="action-bar-btn secondary"
+                style={{ borderColor: '#38bdf8', color: '#7dd3fc' }}
+                title="Capture current board state & debug log to report a bug"
+                onClick={() => setShowInMatchBugModal(true)}
+              >
+                🐞 Report Bug
+              </button>
+
+              <button
+                type="button"
+                className="action-bar-btn secondary"
+                title={isMuted ? 'Unmute Tabletop Sound Effects' : 'Mute Tabletop Sound Effects'}
+                onClick={() => setIsMuted(soundFX.toggleMute())}
+              >
+                {isMuted ? '🔇' : '🔊'}
+              </button>
+
+              <button
+                type="button"
+                className="action-bar-btn secondary"
+                onClick={() => {
+                  if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'LEAVE_ROOM' }));
+                  }
+                  onLeaveMatch();
+                }}
+              >
+                Leave / Forfeit
+              </button>
+            </div>
           </div>
-        </div>
+
+          {renderDualManePresenceBar()}
+
+          {delayedTriggers.length > 0 && (
+            <div className="delayed-triggers-strip">
+              <strong style={{ color: '#fde047' }}>
+                ⏳ Queued End-of-Turn Triggers ({delayedTriggers.length}):
+              </strong>
+              {delayedTriggers.map((trig) => (
+                <div
+                  key={trig.id}
+                  className="delayed-trigger-chip"
+                  title="Click to inspect source card"
+                  onClick={() => setInspectedCard(trig.sourceCard)}
+                >
+                  {trig.sourceCard.imageUrl && (
+                    <img src={trig.sourceCard.imageUrl} alt={trig.sourceCard.name} />
+                  )}
+                  <span>
+                    <strong>{trig.ownerName}</strong> • {trig.sourceCard.name}:{' '}
+                    {trig.conditionText ? `If ${trig.conditionText}, ` : ''}
+                    {trig.effectClause}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="dual-adventure-arena">
+            {renderLaneStrip(opp, true)}
+
+            <div className="center-clash-divider">
+              <span className="lane-axis-pill">LEFT LANE</span>
+              <span className="lane-axis-pill">CENTER LANE</span>
+              <span className="lane-axis-pill">RIGHT LANE</span>
+            </div>
+
+            {renderLaneStrip(me, false)}
+          </div>
+
+          {zoneFocus === 'ME' ? renderPlayerZonesMat(me, false) : renderPlayerZonesMat(opp, true)}
+
+          {!isSpectator && (
+            <div className="player-hand-section">
+              <div className="my-hand-label-pill">🃏 My Hand ({me.hand.length})</div>
+              <div className="player-hand-dock">
+                {me.hand.map((card, idx) => {
+                  const isSelected = selectedHandCardId === card.id;
+                  const canAfford = canAffordCardWithHarmony(me, card, opp);
+                  return (
+                    <div
+                      key={`${card.id}-${idx}`}
+                      className={`hand-card-item ${isSelected ? 'selected' : ''} ${
+                        !canAfford ? 'unaffordable' : getCardFoilClass(card)
+                      }`}
+                      onClick={() => {
+                        if (!isMyTurn || gameState.phase !== 'MAIN_PHASE') return;
+                        if (!canAfford) return;
+                        setSelectedHandCardId(isSelected ? null : card.id);
+                      }}
+                      onContextMenu={(e) => handleContextMenu(e, card)}
+                      onTouchStart={() => handleTouchStartInspect(card)}
+                      onTouchEnd={handleTouchEndInspect}
+                    >
+                      <img src={card.imageUrl} alt={card.name} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

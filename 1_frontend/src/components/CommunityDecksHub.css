@@ -1,0 +1,186 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Nunito:wght@600;700;800;900&display=swap');
+
+.community-decks-viewport {
+  min-height: calc(100vh - 64px);
+  padding: 28px 24px 64px;
+  background: radial-gradient(circle at 50% 12%, #3a1c54 0%, #210c2c 55%, #100418 100%);
+  color: #fce7f3;
+  font-family: 'Nunito', sans-serif;
+  box-sizing: border-box;
+}
+
+.community-decks-container {
+  max-width: 1380px;
+  margin: 0 auto;
+}
+
+.community-decks-header {
+  background: radial-gradient(circle at 50% 0%, rgba(93, 44, 128, 0.45) 0%, rgba(45, 16, 70, 0.62) 100%);
+  backdrop-filter: blur(10px);
+  border: 3px solid rgba(255, 158, 187, 0.65);
+  border-radius: 30px;
+  padding: 22px 28px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.community-decks-header h2 {
+  margin: 0 0 4px;
+  color: #ffd700;
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 1.8rem;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
+}
+
+.community-decks-subtitle {
+  font-size: 0.92rem;
+  color: #fbcfe8;
+  font-weight: 700;
+}
+
+.community-decks-filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.community-filter-input,
+.community-filter-select {
+  padding: 10px 16px;
+  border-radius: 16px;
+  border: 2px solid #c084fc;
+  background: rgba(18, 5, 29, 0.82);
+  color: #fff;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  outline: none;
+}
+
+.community-filter-select {
+  color: #fde047;
+  cursor: pointer;
+}
+
+.community-filter-input:focus,
+.community-filter-select:focus {
+  border-color: #ffd700;
+}
+
+.community-decks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 22px;
+}
+
+.community-deck-card {
+  background: linear-gradient(145deg, rgba(45, 16, 70, 0.86), rgba(22, 7, 38, 0.94));
+  border: 2.5px solid rgba(255, 158, 187, 0.6);
+  border-radius: 24px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.community-deck-card:hover {
+  transform: translateY(-5px);
+  border-color: #ffd700;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), 0 0 22px rgba(253, 224, 71, 0.25);
+}
+
+.community-deck-banner {
+  height: 140px;
+  border-bottom: 2px solid #ffd700;
+  position: relative;
+  background-repeat: no-repeat;
+}
+
+.community-deck-element-pill {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(18, 5, 29, 0.88);
+  border: 1.5px solid #ffd700;
+  color: #fde047;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.community-deck-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.community-deck-body h3 {
+  margin: 0 0 4px;
+  color: #fffdf7;
+  font-size: 1.12rem;
+  font-weight: 900;
+}
+
+.community-deck-meta {
+  font-size: 12px;
+  color: #fbcfe8;
+  font-weight: 700;
+}
+
+.community-deck-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.community-btn-inspect {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 2px solid #f472b6;
+  background: rgba(112, 26, 117, 0.85);
+  color: #fff;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: 12px;
+  cursor: pointer;
+  transition: filter 0.18s ease, transform 0.18s ease;
+}
+
+.community-btn-copy {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 2px solid #ffd700;
+  background: linear-gradient(135deg, #ff4d94, #a21caf);
+  color: #fff;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: 12px;
+  cursor: pointer;
+  transition: filter 0.18s ease, transform 0.18s ease;
+}
+
+.community-btn-inspect:hover,
+.community-btn-copy:hover {
+  filter: brightness(1.12);
+  transform: translateY(-2px);
+}
+
+.community-empty-box {
+  background: rgba(24, 8, 38, 0.72);
+  border: 2.5px dashed #f472b6;
+  border-radius: 26px;
+  padding: 48px 24px;
+  text-align: center;
+  color: #e9d5ff;
+}
