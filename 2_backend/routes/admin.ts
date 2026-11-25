@@ -253,7 +253,7 @@ router.get('/stats', authenticateToken, requireAdmin, async (req, res) => {
 router.get('/announcements', authenticateToken, requireAdmin, async (_req, res) => {
   try {
     await ensureAdminTables();
-    const { rows } = await pool.query(
+    let { rows } = await pool.query(
       `SELECT id,
               message,
               updated_by AS "updatedBy",
@@ -263,6 +263,30 @@ router.get('/announcements', authenticateToken, requireAdmin, async (_req, res) 
        ORDER BY COALESCE(updated_at, created_at) DESC
        LIMIT 50`
     );
+
+    if (rows.length === 0) {
+      const legacyRes = await pool.query(
+        `SELECT setting_value, updated_by, updated_at
+         FROM auth.site_settings
+         WHERE setting_key = 'site_announcement' AND COALESCE(setting_value, '') <> ''
+         LIMIT 1`
+      );
+      if (legacyRes.rows.length > 0) {
+        const legacy = legacyRes.rows[0];
+        const inserted = await pool.query(
+          `INSERT INTO game.global_announcements (message, updated_by, created_at, updated_at)
+           VALUES ($1, $2, COALESCE($3, NOW()), COALESCE($3, NOW()))
+           RETURNING id,
+                     message,
+                     updated_by AS "updatedBy",
+                     created_at AS "createdAt",
+                     updated_at AS "updatedAt"`,
+          [legacy.setting_value, legacy.updated_by || 'admin', legacy.updated_at]
+        );
+        rows = inserted.rows;
+      }
+    }
+
     return res.json({ success: true, announcements: rows });
   } catch (err: any) {
     console.error('[ADMIN ANNOUNCEMENTS GET ERROR]', err.message);

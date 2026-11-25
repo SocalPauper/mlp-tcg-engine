@@ -297,12 +297,21 @@ export default function AdminPanel() {
     alert(`Global Announcement Published: "${trimmed}"`);
   };
 
-  const handleSaveEditedAnnouncement = async (id: string | number) => {
+const handleSaveEditedAnnouncement = async (id: string | number) => {
     const trimmed = editingAnnouncementText.trim();
     if (!trimmed) return;
+
+    const numericId = typeof id === 'number' ? id : Number(id);
+    const isPersistedRow = Number.isInteger(numericId) && numericId > 0;
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/announcements/${id}`, {
-        method: 'PATCH',
+      const endpoint = isPersistedRow
+        ? `${API_BASE_URL}/api/admin/announcements/${numericId}`
+        : `${API_BASE_URL}/api/admin/announcements`;
+      const method = isPersistedRow ? 'PATCH' : 'POST';
+
+      const res = await fetch(endpoint, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           ...authHeaders(),
@@ -312,30 +321,27 @@ export default function AdminPanel() {
           updatedBy: user?.username || 'admin',
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setAnnouncementsList((prev) =>
-          prev.map((item) =>
-            item.id === id
-              ? data.announcement || { ...item, message: trimmed, updatedAt: new Date().toISOString() }
-              : item
-          )
-        );
-        setEditingAnnouncementId(null);
-        setEditingAnnouncementText('');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        alert(data.error || `Failed to save announcement edit (HTTP ${res.status}).`);
         return;
       }
-    } catch (err) {
-      console.error('Failed to update announcement:', err);
-    }
 
-    setAnnouncementsList((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, message: trimmed, updatedAt: new Date().toISOString() } : item
-      )
-    );
-    setEditingAnnouncementId(null);
-    setEditingAnnouncementText('');
+      if (data.announcement) {
+        setAnnouncementsList((prev) =>
+          isPersistedRow
+            ? prev.map((item) => (item.id === id ? data.announcement : item))
+            : [data.announcement, ...prev.filter((item) => item.id !== id)]
+        );
+      } else {
+        await fetchAnnouncements();
+      }
+      setEditingAnnouncementId(null);
+      setEditingAnnouncementText('');
+    } catch (err: any) {
+      console.error('Failed to update announcement:', err);
+      alert(`Network error saving announcement: ${err?.message || 'Unknown error'}`);
+    }
   };
 
   const handleDeleteAnnouncement = async (id: string | number) => {
