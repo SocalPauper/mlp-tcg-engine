@@ -4087,42 +4087,47 @@ export function forfeitMatch(
 export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameState {
   if (state.turnPlayerId !== playerId) return state;
 
-  let workingState: KayouGameState = {
-    ...state,
-    phase: 'END_PHASE',
-  };
+  const isAlreadyInEndPhase = state.phase === 'END_PHASE';
+  let workingState: KayouGameState = isAlreadyInEndPhase
+    ? state
+    : {
+        ...state,
+        phase: 'END_PHASE',
+      };
 
-  for (const checkPid of ['0', '1'] as const) {
-    const checkPlayer = workingState.players[checkPid];
-    for (const laneKey of ['left', 'center', 'right'] as const) {
-      const char = checkPlayer.adventureArea[laneKey]?.character;
-      if (!char) continue;
-      const advClause = extractTriggerClause(char.effectText, 'Adventure');
-      if (!advClause) continue;
-      const delayedSpec = extractDelayedTiming(advClause);
-      if (!delayedSpec) continue;
-      const appliesNow =
-        (delayedSpec.timing === 'END_OF_YOUR_TURN' && checkPid === playerId) ||
-        delayedSpec.timing === 'END_OF_ANY_TURN';
-      if (!appliesNow) continue;
+  if (!isAlreadyInEndPhase) {
+    for (const checkPid of ['0', '1'] as const) {
+      const checkPlayer = workingState.players[checkPid];
+      for (const laneKey of ['left', 'center', 'right'] as const) {
+        const char = checkPlayer.adventureArea[laneKey]?.character;
+        if (!char) continue;
+        const advClause = extractTriggerClause(char.effectText, 'Adventure');
+        if (!advClause) continue;
+        const delayedSpec = extractDelayedTiming(advClause);
+        if (!delayedSpec) continue;
+        const appliesNow =
+          (delayedSpec.timing === 'END_OF_YOUR_TURN' && checkPid === playerId) ||
+          delayedSpec.timing === 'END_OF_ANY_TURN';
+        if (!appliesNow) continue;
 
-      const alreadyScheduled = (workingState.delayedTriggers || []).some(
-        (t) =>
-          t.ownerId === checkPid &&
-          t.sourceCard.id === char.id &&
-          t.sourceLane === laneKey &&
-          t.createdTurn === workingState.turnNumber
-      );
-      if (!alreadyScheduled) {
-        workingState = scheduleDelayedTrigger(
-          workingState,
-          checkPid,
-          char,
-          laneKey,
-          delayedSpec.timing,
-          delayedSpec.conditionText,
-          delayedSpec.innerEffectClause
+        const alreadyScheduled = (workingState.delayedTriggers || []).some(
+          (t) =>
+            t.ownerId === checkPid &&
+            t.sourceCard.id === char.id &&
+            t.sourceLane === laneKey &&
+            t.createdTurn === workingState.turnNumber
         );
+        if (!alreadyScheduled) {
+          workingState = scheduleDelayedTrigger(
+            workingState,
+            checkPid,
+            char,
+            laneKey,
+            delayedSpec.timing,
+            delayedSpec.conditionText,
+            delayedSpec.innerEffectClause
+          );
+        }
       }
     }
   }
@@ -4144,7 +4149,7 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
 
   if (nextTriggerIdx !== -1) {
     const trig = allDelayed[nextTriggerIdx];
-    const remainingTriggers = allDelayed.filter((_, idx) => idx !== nextTriggerIdx);
+    const remainingTriggers = allDelayed.filter((t) => t.id !== trig.id);
     workingState = {
       ...workingState,
       delayedTriggers: remainingTriggers,
