@@ -4,12 +4,71 @@ import { authenticateToken, AuthenticatedRequest } from '../middleware/authMiddl
 
 const router = express.Router();
 
-const requireAdmin = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
+const STATS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour cache to keep DB overhead minimal
+
+interface CachedStatsPayload {
+  computedAt: number;
+  data: {
+    newAccountsToday: number;
+    gamesCreated: number;
+    gamesPlayedToday: number;
+    ponyPointsSpent: number;
+    totalWebsiteVisits: number;
+    totalRegisteredUsers: number;
+    openBugReports: number;
+    cachedAt: string;
+    refreshIntervalLabel: string;
+  };
+}
+
+let statsCache: CachedStatsPayload | null = null;
+let schemasEnsured = false;
+
+async function ensureAdminTables() {
+  if (schemasEnsured) return;
+  await pool.query(`
+    CREATE SCHEMA IF NOT EXISTS game;
+    CREATE TABLE IF NOT EXISTS game.global_announcements (
+      id SERIAL PRIMARY KEY,
+      message TEXT NOT NULL,
+      updated_by VARCHAR(100) DEFAULT 'admin',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS game.chat_messages (
+      id SERIAL PRIMARY KEY,
+      channel VARCHAR(30) NOT NULL DEFAULT 'HUB',
+      author_id VARCHAR(100),
+      author_name VARCHAR(120) NOT NULL,
+      content TEXT NOT NULL,
+      is_censored BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS game.site_metrics (
+      metric_key VARCHAR(80) PRIMARY KEY,
+      metric_value BIGINT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    INSERT INTO game.site_metrics (metric_key, metric_value)
+    VALUES ('total_visits', 0)
+    ON CONFLICT (metric_key) DO NOTHING;
+  `);
+  schemasEnsured = true;
+}
+
+const requireAdmin = async (
+  req: AuthenticatedRequest,
+  res: express.Response,
+  next: express.NextFunction
+) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'Unauthorized: No user ID in token' });
 
   try {
-    const { rows } = await pool.query('SELECT id, username, is_admin FROM auth.users WHERE id = $1', [userId]);
+    const { rows } = await pool.query(
+      'SELECT id, username, is_admin FROM auth.users WHERE id = $1',
+      [userId]
+    );
     if (rows.length === 0) {
       return res.status(403).json({ error: 'Forbidden: User record not found' });
     }
@@ -23,6 +82,313 @@ const requireAdmin = async (req: AuthenticatedRequest, res: express.Response, ne
     res.status(500).json({ error: err.message });
   }
 };
+
+// Public lightweight visit incrementer (call from frontend on mount if desired)
+router.post('/visit', async (_req, res) => {
+  try {
+    await ensureAdminTables();
+    const { rows } = await pool.query(
+      `UPDATE game.site_metrics
+       SET metric_value = metric_value + 1, updated_at = NOW()
+       WHERE metric_key = 'total_visits'
+       RETURNING metric_value`
+    );
+    res.json({ success: true, totalWebsiteVisits: Number(rows[0]?.metric_value || 0) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 0. Website Statistics (cached for 1 hour unless ?refresh=1 is passed)
+router.get('/stats', authenticateToken, requireAdmin, async (req, res) => {
+  const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+  const now = Date.now();
+
+  if (!forceRefresh && statsCache && now - statsCache.computedAt < STATS_CACHE_TTL_MS) {
+    return res.json({ success: true, stats: statsCache.data, fromCache: true });
+  }
+
+  try {
+    await ensureAdminTables();
+
+    const usersTotalRes = await pool.query(`SELECT COUNT(*)::int AS total FROM auth.users`);
+    const usersTodayRes = await pool.query(
+      `SELECT COUNT(*)::int AS today FROM auth.users WHERE created_at >= CURRENT_DATE`
+    );
+
+    let gamesCreated = 0;
+    let gamesPlayedToday = 0;
+    try {
+      const [gAll, gToday] = await Promise.all([
+        pool.query(`SELECT COUNT(*)::int AS total FROM game.match_logs`),
+        pool.query(`SELECT COUNT(*)::int AS today FROM game.match_logs WHERE created_at >= CURRENT_DATE`),
+      ]);
+      gamesCreated = Number(gAll.rows[0]?.total || 0);
+      gamesPlayedToday = Number(gToday.rows[0]?.today || 0);
+    } catch {
+      gamesCreated = 0;
+      gamesPlayedToday = 0;
+    }
+
+    let ponyPointsSpent = 0;
+    try {
+      const ptsRes = await pool.query(
+        `SELECT COALESCE(SUM(ABS(delta)), 0)::bigint AS spent
+         FROM auth.point_transactions
+         WHERE delta < 0`
+      );
+      ponyPointsSpent = Number(ptsRes.rows[0]?.spent || 0);
+    } catch {
+      ponyPointsSpent = 0;
+    }
+
+    let openBugReports = 0;
+    try {
+      const bugsRes = await pool.query(
+        `SELECT COUNT(*)::int AS cnt FROM game.bug_reports WHERE status <> 'RESOLVED'`
+      );
+      openBugReports = Number(bugsRes.rows[0]?.cnt || 0);
+    } catch {
+      openBugReports = 0;
+    }
+
+    const visitsRes = await pool.query(
+      `SELECT metric_value FROM game.site_metrics WHERE metric_key = 'total_visits'`
+    );
+    const totalWebsiteVisits = Number(visitsRes.rows[0]?.metric_value || 0);
+
+    const payload = {
+      newAccountsToday: Number(usersTodayRes.rows[0]?.today || 0),
+      gamesCreated,
+      gamesPlayedToday,
+      ponyPointsSpent,
+      totalWebsiteVisits,
+      totalRegisteredUsers: Number(usersTotalRes.rows[0]?.total || 0),
+      openBugReports,
+      cachedAt: new Date(now).toISOString(),
+      refreshIntervalLabel: 'Cached hourly (click Refresh Now for immediate pull)',
+    };
+
+    statsCache = { computedAt: now, data: payload };
+    return res.json({ success: true, stats: payload, fromCache: false });
+  } catch (err: any) {
+    console.error('[ADMIN STATS ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Global Announcements: List, Create, Edit, Delete
+router.get('/announcements', authenticateToken, requireAdmin, async (_req, res) => {
+  try {
+    await ensureAdminTables();
+    const { rows } = await pool.query(
+      `SELECT id,
+              message,
+              updated_by AS "updatedBy",
+              created_at AS "createdAt",
+              updated_at AS "updatedAt"
+       FROM game.global_announcements
+       ORDER BY COALESCE(updated_at, created_at) DESC
+       LIMIT 50`
+    );
+    return res.json({ success: true, announcements: rows });
+  } catch (err: any) {
+    console.error('[ADMIN ANNOUNCEMENTS GET ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/announcements', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    await ensureAdminTables();
+    const message = String(req.body?.message || '').trim();
+    const updatedBy = String(req.body?.updatedBy || req.user?.username || 'admin').slice(0, 80);
+    if (!message) {
+      return res.status(400).json({ success: false, error: 'Announcement message is required' });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO game.global_announcements (message, updated_by, created_at, updated_at)
+       VALUES ($1, $2, NOW(), NOW())
+       RETURNING id,
+                 message,
+                 updated_by AS "updatedBy",
+                 created_at AS "createdAt",
+                 updated_at AS "updatedAt"`,
+      [message, updatedBy]
+    );
+
+    await pool.query(
+      `INSERT INTO auth.site_settings (setting_key, setting_value, updated_by, updated_at)
+       VALUES ('site_announcement', $1, $2, NOW())
+       ON CONFLICT (setting_key)
+       DO UPDATE SET setting_value = EXCLUDED.setting_value,
+                     updated_by = EXCLUDED.updated_by,
+                     updated_at = NOW()`,
+      [message, updatedBy]
+    ).catch(() => {});
+
+    return res.json({ success: true, announcement: rows[0] });
+  } catch (err: any) {
+    console.error('[ADMIN ANNOUNCEMENTS POST ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.patch('/announcements/:id', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    await ensureAdminTables();
+    const id = Number(req.params.id);
+    const message = String(req.body?.message || '').trim();
+    const updatedBy = String(req.body?.updatedBy || req.user?.username || 'admin').slice(0, 80);
+
+    if (!Number.isInteger(id) || !message) {
+      return res.status(400).json({ success: false, error: 'Valid announcement ID and message required' });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE game.global_announcements
+       SET message = $1, updated_by = $2, updated_at = NOW()
+       WHERE id = $3
+       RETURNING id,
+                 message,
+                 updated_by AS "updatedBy",
+                 created_at AS "createdAt",
+                 updated_at AS "updatedAt"`,
+      [message, updatedBy, id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Announcement not found' });
+    }
+
+    await pool.query(
+      `INSERT INTO auth.site_settings (setting_key, setting_value, updated_by, updated_at)
+       VALUES ('site_announcement', $1, $2, NOW())
+       ON CONFLICT (setting_key)
+       DO UPDATE SET setting_value = EXCLUDED.setting_value,
+                     updated_by = EXCLUDED.updated_by,
+                     updated_at = NOW()`,
+      [message, updatedBy]
+    ).catch(() => {});
+
+    return res.json({ success: true, announcement: rows[0] });
+  } catch (err: any) {
+    console.error('[ADMIN ANNOUNCEMENTS PATCH ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/announcements/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await ensureAdminTables();
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ success: false, error: 'Invalid announcement ID' });
+    }
+
+    await pool.query(`DELETE FROM game.global_announcements WHERE id = $1`, [id]);
+
+    const latestRes = await pool.query(
+      `SELECT message FROM game.global_announcements ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 1`
+    );
+    const nextBanner = latestRes.rows[0]?.message || '';
+    await pool.query(
+      `INSERT INTO auth.site_settings (setting_key, setting_value, updated_by, updated_at)
+       VALUES ('site_announcement', $1, 'admin', NOW())
+       ON CONFLICT (setting_key)
+       DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = NOW()`,
+      [nextBanner]
+    ).catch(() => {});
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('[ADMIN ANNOUNCEMENTS DELETE ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Chat Moderation (Main Hub & Fan Page)
+router.get('/chat-messages', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await ensureAdminTables();
+    const channel = String(req.query.channel || 'ALL').toUpperCase();
+
+    let query = `
+      SELECT id,
+             channel,
+             author_id AS "authorId",
+             author_name AS "authorName",
+             content,
+             is_censored AS "isCensored",
+             created_at AS "createdAt"
+      FROM game.chat_messages
+    `;
+    const params: any[] = [];
+    if (channel === 'HUB' || channel === 'FAN_PAGE') {
+      query += ` WHERE UPPER(channel) = $1`;
+      params.push(channel);
+    }
+    query += ` ORDER BY created_at DESC LIMIT 100`;
+
+    const { rows } = await pool.query(query, params);
+    return res.json({ success: true, messages: rows });
+  } catch (err: any) {
+    console.error('[ADMIN CHAT GET ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.patch('/chat-messages/:id/censor', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await ensureAdminTables();
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ success: false, error: 'Invalid message ID' });
+    }
+
+    const replacement = String(req.body?.replacement || '[Message censored by moderator]').trim();
+
+    const { rows } = await pool.query(
+      `UPDATE game.chat_messages
+       SET content = $1, is_censored = TRUE
+       WHERE id = $2
+       RETURNING id,
+                 channel,
+                 author_id AS "authorId",
+                 author_name AS "authorName",
+                 content,
+                 is_censored AS "isCensored",
+                 created_at AS "createdAt"`,
+      [replacement, id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Chat message not found' });
+    }
+
+    return res.json({ success: true, message: rows[0] });
+  } catch (err: any) {
+    console.error('[ADMIN CHAT CENSOR ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/chat-messages/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await ensureAdminTables();
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ success: false, error: 'Invalid message ID' });
+    }
+
+    await pool.query(`DELETE FROM game.chat_messages WHERE id = $1`, [id]);
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('[ADMIN CHAT DELETE ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // 1. Search or list users from auth.users
 router.get('/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
@@ -113,7 +479,7 @@ router.post('/users/moderate', authenticateToken, requireAdmin, async (req: Auth
 
   try {
     let updateQuery = '';
-    let params = [userId];
+    const params = [userId];
 
     switch (action.toUpperCase()) {
       case 'SILENCE':
