@@ -107,7 +107,7 @@ export default function ShopView() {
 
   const handleBuyPack = async (tierKey: string, cost: number, tierName: string) => {
     if (points < cost) {
-      setMessage('Not enough Pony Points! Play public matches or trade in extra copies to earn points.');
+      setMessage('Not enough Pony Points! Play public matches or sell back extra copies to earn points.');
       return;
     }
     setPurchasing(true);
@@ -198,7 +198,7 @@ export default function ShopView() {
     if (tradeInSummary.extraCardsCount <= 0) return;
     if (
       !window.confirm(
-        `Trade in ${tradeInSummary.extraCardsCount} extra card(s) beyond your 4-card playsets for +${tradeInSummary.totalPointsValue} Pony Points?`
+        `Sell back ${tradeInSummary.extraCardsCount} extra card(s) beyond your 4-card playsets for +${tradeInSummary.totalPointsValue} Pony Points?`
       )
     ) {
       return;
@@ -216,10 +216,10 @@ export default function ShopView() {
       syncPoints(data.remainingPoints);
       setTradeInSummary(data.tradeInSummary || { extraCardsCount: 0, totalPointsValue: 0 });
       setMessage(
-        `♻️ Traded in ${data.tradedCount} extra copy/copies beyond 4x playsets for +${data.pointsEarned} Pony Points!`
+        `♻️ Sold back ${data.tradedCount} extra copy/copies beyond 4× playsets for +${data.pointsEarned} Pony Points!`
       );
     } catch (err: any) {
-      setMessage(err.response?.data?.error || 'Failed to trade in extra cards.');
+      setMessage(err.response?.data?.error || 'Failed to sell back extra cards.');
     } finally {
       setPurchasing(false);
     }
@@ -295,8 +295,8 @@ export default function ShopView() {
               title="Convert any cards with more than 4 copies in your collection into Pony Points"
             >
               {tradeInSummary.extraCardsCount > 0
-                ? `♻️ Trade-In ${tradeInSummary.extraCardsCount} Extra(s) (+${tradeInSummary.totalPointsValue} 🪙)`
-                : '♻️ 4x Playset Protection Active'}
+                ? `♻️ Sell Back ${tradeInSummary.extraCardsCount} Extra(s) (+${tradeInSummary.totalPointsValue} 🪙)`
+                : '♻️ 4× Playset Protection Active'}
             </button>
 
             <div className="shop-points-badge">
@@ -436,7 +436,35 @@ export default function ShopView() {
           </div>
         </div>
 
-        {/* ROW 3: EVENT SALES (COMING SOON) */}
+        {/* ROW 3: SELL BACK EXTRA COPIES (BEYOND 4X PLAYSET) */}
+        <div className="shop-section">
+          <div className="shop-section-header">
+            <h3>♻️ Sell Back Extra Copies (Beyond 4× Playset)</h3>
+            <span className="week-tag">
+              {tradeInSummary.extraCardsCount > 0
+                ? `${tradeInSummary.extraCardsCount} Extra(s) Ready`
+                : '0 Extras Found'}
+            </span>
+          </div>
+          <p className="shop-section-desc">
+            Convert any duplicate cards beyond a full <strong>4-card playset</strong> (or 1× for Mane Characters) back into Pony Points:{' '}
+            <strong>SR: 20 🪙 • SSR: 35 🪙 • UR: 50 🪙 • CR: 60 🪙 • DR: 80 🪙 • GR / Shining (-S): 100 🪙</strong>
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="trade-in-btn"
+              disabled={purchasing || tradeInSummary.extraCardsCount <= 0}
+              onClick={handleTradeInExtras}
+            >
+              {tradeInSummary.extraCardsCount > 0
+                ? `♻️ Sell Back ${tradeInSummary.extraCardsCount} Extra Card(s) for +${tradeInSummary.totalPointsValue} 🪙`
+                : '♻️ No Extra Copies Beyond 4× Playset to Sell Back'}
+            </button>
+          </div>
+        </div>
+
+        {/* ROW 4: EVENT SALES (COMING SOON) */}
         <div className="shop-section">
           <div className="shop-section-header">
             <h3>🎪 Event Sales &amp; Seasonal Bundles</h3>
