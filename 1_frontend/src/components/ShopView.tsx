@@ -84,12 +84,36 @@ export default function ShopView() {
     updateUserPoints(newVal);
   };
 
+  const getMaxCopiesForCard = (cardType?: string) => {
+    const t = String(cardType || '').toLowerCase();
+    return t.includes('mane') || t.includes('main') ? 1 : 4;
+  };
+
+  const getOwnedCount = (card: { id: string; card_type?: string; rarity?: string }) => {
+    const maxPlayset = getMaxCopiesForCard(card.card_type);
+    if (ownedQuantities[card.id] !== undefined) {
+      return Number(ownedQuantities[card.id]) || 0;
+    }
+    const id = String(card.id || '').toUpperCase();
+    const rarity = String(card.rarity || 'C').toUpperCase();
+    if (id.endsWith('-S')) return 0;
+    if (/^SD/i.test(id) || ['C', 'U', 'R', 'SPR'].includes(rarity)) return maxPlayset;
+    return 0;
+  };
+
   const fetchShopData = async () => {
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.get(`${API_BASE_URL}/api/shop/status`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const [shopRes, collectionRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/api/shop/status`, { headers }),
+        token
+          ? axios.get(`${API_BASE_URL}/api/auth/me/collection`, { headers }).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
+      const data = shopRes.data;
       syncPoints(data.reward_points);
       setPityCounter(data.pityCounter ?? 0);
       setWeekId(data.weekId || '');
@@ -98,9 +122,16 @@ export default function ShopView() {
       if (data.tradeInSummary) {
         setTradeInSummary(data.tradeInSummary);
       }
-      if (data.ownedQuantities) {
-        setOwnedQuantities(data.ownedQuantities);
+
+      const mergedOwned: Record<string, number> = { ...(data.ownedQuantities || {}) };
+      if (collectionRes && Array.isArray(collectionRes.data)) {
+        for (const row of collectionRes.data) {
+          if (row?.card_id) {
+            mergedOwned[row.card_id] = Number(row.quantity) || 0;
+          }
+        }
       }
+      setOwnedQuantities(mergedOwned);
     } catch (err) {
       console.error('Failed to load shop', err);
     } finally {
@@ -111,19 +142,6 @@ export default function ShopView() {
   useEffect(() => {
     fetchShopData();
   }, []);
-
-  const getOwnedCount = (card: { id: string; card_type?: string; rarity?: string }) => {
-    if (ownedQuantities[card.id] !== undefined) {
-      return ownedQuantities[card.id];
-    }
-    const id = String(card.id || '').toUpperCase();
-    const rarity = String(card.rarity || 'C').toUpperCase();
-    const cType = String(card.card_type || '').toLowerCase();
-    const maxPlayset = cType.includes('mane') || cType.includes('main') ? 1 : 4;
-    if (id.endsWith('-S')) return 0;
-    if (/^SD/i.test(id) || ['C', 'U', 'R', 'SPR'].includes(rarity)) return maxPlayset;
-    return 0;
-  };
 
   const handleBuyPack = async (tierKey: string, cost: number, tierName: string) => {
     if (points < cost) {
@@ -143,7 +161,9 @@ export default function ShopView() {
       syncPoints(data.remainingPoints);
       if (data.pityCounter !== undefined) setPityCounter(data.pityCounter);
       if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
-      if (data.ownedQuantities) setOwnedQuantities(data.ownedQuantities);
+      if (data.ownedQuantities) {
+        setOwnedQuantities((prev) => ({ ...prev, ...data.ownedQuantities }));
+      }
       invalidatePreviewCollectionCache();
       if (data.autoDustEarned > 0) setAutoDustBanner(data.autoDustEarned);
       setPulledCards(data.cards);
@@ -192,20 +212,22 @@ export default function ShopView() {
   };
 
   const handleBuyDeal = async (deal: WeeklyDeal) => {
-    if (points < deal.price) {
-      setMessage('Not enough Pony Points for this weekly deal.');
-      return;
-    }
-    const maxPlayset =
-      deal.card_type.toLowerCase().includes('mane') ||
-      deal.card_type.toLowerCase().includes('main')
-        ? 1
-        : 4;
+    const maxPlayset = getMaxCopiesForCard(deal.card_type);
     const prevOwned = getOwnedCount({
       id: deal.card_id,
       card_type: deal.card_type,
       rarity: deal.rarity,
     });
+
+    if (prevOwned >= maxPlayset) {
+      setMessage(`You already own the maximum playset (${prevOwned}/${maxPlayset}) of ${deal.name}!`);
+      return;
+    }
+
+    if (points < deal.price) {
+      setMessage('Not enough Pony Points for this weekly deal.');
+      return;
+    }
 
     setPurchasing(true);
     setMessage(null);
@@ -219,24 +241,26 @@ export default function ShopView() {
       syncPoints(data.remainingPoints);
       if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
 
-      const resolvedQty =
-        typeof data.newQuantity === 'number'
-          ? data.newQuantity
-          : Math.min(maxPlayset, prevOwned + 1);
+      const resolvedQty = Math.min(
+        maxPlayset,
+        typeof data.newQuantity === 'number' ? data.newQuantity : prevOwned + 1
+      );
       const resolvedMax =
         typeof data.maxPlayset === 'number' ? data.maxPlayset : maxPlayset;
 
       setOwnedQuantities((prev) => ({
-        ...(data.ownedQuantities || prev),
+        ...prev,
+        ...(data.ownedQuantities || {}),
         [deal.card_id]: resolvedQty,
       }));
       invalidatePreviewCollectionCache();
       setMessage(
-        `✨ Added 1 copy of ${deal.name} (${resolvedQty}/${resolvedMax} owned)!`
+        `Added 1 copy of ${deal.name} (${resolvedQty}/${resolvedMax} owned)!`
       );
-      fetchShopData();
+      await fetchShopData();
     } catch (err: any) {
       setMessage(err.response?.data?.error || 'Failed to buy deal.');
+      await fetchShopData();
     } finally {
       setPurchasing(false);
     }
@@ -263,11 +287,14 @@ export default function ShopView() {
       );
       syncPoints(data.remainingPoints);
       setTradeInSummary(data.tradeInSummary || { extraCardsCount: 0, totalPointsValue: 0 });
-      if (data.ownedQuantities) setOwnedQuantities(data.ownedQuantities);
+      if (data.ownedQuantities) {
+        setOwnedQuantities((prev) => ({ ...prev, ...data.ownedQuantities }));
+      }
       invalidatePreviewCollectionCache();
       setMessage(
-        `♻️ Sold back ${data.tradedCount} extra copy/copies beyond 4× playsets for +${data.pointsEarned} Pony Points!`
+        `Sold back ${data.tradedCount} extra copy/copies beyond 4x playsets for +${data.pointsEarned} Pony Points!`
       );
+      await fetchShopData();
     } catch (err: any) {
       setMessage(err.response?.data?.error || 'Failed to sell back extra cards.');
     } finally {
@@ -278,7 +305,7 @@ export default function ShopView() {
   if (loading) {
     return (
       <div className="shop-viewport">
-        <div className="shop-loading">Opening the Canterlot Pony Point Shop... ✨</div>
+        <div className="shop-loading">Opening the Canterlot Pony Point Shop...</div>
       </div>
     );
   }
@@ -327,7 +354,7 @@ export default function ShopView() {
 
         <div className="shop-header">
           <div>
-            <h2>✨ The Pony Point Shop ✨</h2>
+            <h2>The Pony Point Shop</h2>
             <span className="shop-subtitle">
               All C, U, R &amp; SPR cards are free! Spend Pony Points on high-rarity chase packs &amp; Shining foils
             </span>
@@ -338,7 +365,7 @@ export default function ShopView() {
               className="week-tag"
               title="Guaranteed CR, Shining (-S), or GR every 10th Standard chase slot"
             >
-              ✨ CR+ Pity: {pityCounter}/10
+              CR+ Pity: {pityCounter}/10
             </span>
 
             <button
@@ -349,47 +376,45 @@ export default function ShopView() {
               title="Convert any cards with more than 4 copies in your collection into Pony Points"
             >
               {tradeInSummary.extraCardsCount > 0
-                ? `♻️ Sell Back ${tradeInSummary.extraCardsCount} Extra(s) (+${tradeInSummary.totalPointsValue} 🪙)`
-                : '♻️ 4× Playset Protection Active'}
+                ? `Sell Back ${tradeInSummary.extraCardsCount} Extra(s) (+${tradeInSummary.totalPointsValue} Pts)`
+                : '4x Playset Protection Active'}
             </button>
 
             <div className="shop-points-badge">
-              🪙 Pony Points: <strong>{points}</strong>
+              Pony Points: <strong>{points}</strong>
             </div>
           </div>
         </div>
 
         {message && <div className="shop-message-banner">{message}</div>}
 
-        {/* ROW 1: CARDS OF THE WEEK ON MINIATURE EASELS WITH SPOTLIGHTS */}
         <div className="shop-section">
           <div className="shop-section-header">
-            <h3>🌟 Cards of the Week</h3>
+            <h3>Cards of the Week</h3>
             {weekId && <span className="week-tag">Auto-Rotating • {weekId}</span>}
           </div>
           <p className="shop-section-desc">
-            Spotlighted single cards available up to a full playset (4× standard / 1× Mane Character). Click any card to inspect its rules!
+            Spotlighted single cards available up to a full playset (4x standard / 1x Mane Character). Click any card to inspect its rules!
           </p>
 
           <div className="weekly-easels-grid">
             {deals.map((deal) => {
-              const maxCopies =
-                deal.card_type.toLowerCase().includes('mane') ||
-                deal.card_type.toLowerCase().includes('main')
-                  ? 1
-                  : 4;
-              const owned = getOwnedCount({
-                id: deal.card_id,
-                card_type: deal.card_type,
-                rarity: deal.rarity,
-              });
+              const maxCopies = getMaxCopiesForCard(deal.card_type);
+              const owned = Math.min(
+                maxCopies,
+                getOwnedCount({
+                  id: deal.card_id,
+                  card_type: deal.card_type,
+                  rarity: deal.rarity,
+                })
+              );
               const isMaxed = owned >= maxCopies;
 
               return (
                 <div key={deal.id} className="easel-stage">
                   <div className="easel-spotlight-beam" aria-hidden="true" />
                   <span className="easel-rarity-pill">
-                    {deal.card_id.endsWith('-S') ? `✨ ${deal.rarity}-S` : deal.rarity}
+                    {deal.card_id.endsWith('-S') ? `${deal.rarity}-S` : deal.rarity}
                   </span>
 
                   <div className="mini-easel-assembly">
@@ -435,7 +460,7 @@ export default function ShopView() {
                         marginBottom: '10px',
                       }}
                     >
-                      📖 Copies Owned: {owned} / {maxCopies}
+                      Copies Owned: {owned} / {maxCopies}
                     </div>
                     <button
                       type="button"
@@ -445,7 +470,7 @@ export default function ShopView() {
                     >
                       {isMaxed
                         ? `Max Playset (${owned}/${maxCopies})`
-                        : `Buy Copy (${deal.price} 🪙)`}
+                        : `Buy Copy (${deal.price} Pts)`}
                     </button>
                   </div>
                 </div>
@@ -454,10 +479,9 @@ export default function ShopView() {
           </div>
         </div>
 
-        {/* ROW 2: 3 SHINY FOIL BOOSTER PACK OBJECTS + DISTRIBUTION BOXES */}
         <div className="shop-section">
           <div className="shop-section-header">
-            <h3>🎁 Shiny Foil Booster Packs (SR, UR, CR, GR, DR &amp; Shining -S)</h3>
+            <h3>Shiny Foil Booster Packs (SR, UR, CR, GR, DR &amp; Shining -S)</h3>
           </div>
           <p className="shop-section-desc">
             Excess copies beyond a <strong>4-card playset</strong> automatically convert into Pony Points dust!
@@ -480,7 +504,7 @@ export default function ShopView() {
                     <div className="foil-pack-logo">EQUESTRIA CLASH</div>
                     <div className="foil-pack-tier-title">{tier.name}</div>
                     <div className="foil-pack-count-badge">{tier.badge}</div>
-                    <div className="foil-pack-cost-pill">{tier.cost} 🪙</div>
+                    <div className="foil-pack-cost-pill">{tier.cost} Pts</div>
                   </div>
                   <div className="foil-pack-crimp bottom" />
                 </div>
@@ -488,7 +512,7 @@ export default function ShopView() {
                 <div className="pack-distribution-box">
                   <div className="pack-dist-header">
                     <h4>{tier.name}</h4>
-                    <span className="pack-dist-cost">{tier.cost} 🪙</span>
+                    <span className="pack-dist-cost">{tier.cost} Pts</span>
                   </div>
                   <p className="pack-dist-desc">{tier.description}</p>
 
@@ -508,7 +532,7 @@ export default function ShopView() {
                     disabled={purchasing}
                     onClick={() => handleBuyPack(key, tier.cost, tier.name)}
                   >
-                    {purchasing ? 'Summoning Pack...' : `Buy ${tier.name} (${tier.cost} 🪙)`}
+                    {purchasing ? 'Summoning Pack...' : `Buy ${tier.name} (${tier.cost} Pts)`}
                   </button>
                 </div>
               </div>
@@ -516,10 +540,9 @@ export default function ShopView() {
           </div>
         </div>
 
-        {/* ROW 3: SELL BACK EXTRA COPIES (BEYOND 4X PLAYSET) */}
         <div className="shop-section">
           <div className="shop-section-header">
-            <h3>♻️ Sell Back Extra Copies (Beyond 4× Playset)</h3>
+            <h3>Sell Back Extra Copies (Beyond 4x Playset)</h3>
             <span className="week-tag">
               {tradeInSummary.extraCardsCount > 0
                 ? `${tradeInSummary.extraCardsCount} Extra(s) Ready`
@@ -527,8 +550,8 @@ export default function ShopView() {
             </span>
           </div>
           <p className="shop-section-desc">
-            Convert any duplicate cards beyond a full <strong>4-card playset</strong> (or 1× for Mane Characters) back into Pony Points:{' '}
-            <strong>SR: 20 🪙 • SSR: 35 🪙 • UR: 50 🪙 • CR: 60 🪙 • DR: 80 🪙 • GR / Shining (-S): 100 🪙</strong>
+            Convert any duplicate cards beyond a full <strong>4-card playset</strong> (or 1x for Mane Characters) back into Pony Points:{' '}
+            <strong>SR: 20 • SSR: 35 • UR: 50 • CR: 60 • DR: 80 • GR / Shining (-S): 100</strong>
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
             <button
@@ -538,19 +561,18 @@ export default function ShopView() {
               onClick={handleTradeInExtras}
             >
               {tradeInSummary.extraCardsCount > 0
-                ? `♻️ Sell Back ${tradeInSummary.extraCardsCount} Extra Card(s) for +${tradeInSummary.totalPointsValue} 🪙`
-                : '♻️ No Extra Copies Beyond 4× Playset to Sell Back'}
+                ? `Sell Back ${tradeInSummary.extraCardsCount} Extra Card(s) for +${tradeInSummary.totalPointsValue} Pts`
+                : 'No Extra Copies Beyond 4x Playset to Sell Back'}
             </button>
           </div>
         </div>
 
-        {/* ROW 4: EVENT SALES (COMING SOON) */}
         <div className="shop-section">
           <div className="shop-section-header">
-            <h3>🎪 Event Sales &amp; Seasonal Bundles</h3>
+            <h3>Event Sales &amp; Seasonal Bundles</h3>
           </div>
           <div className="event-sales-alcove">
-            <span className="event-coming-soon-badge">✨ Coming Soon ✨</span>
+            <span className="event-coming-soon-badge">Coming Soon</span>
             <h4>Grand Galloping Gala &amp; Seasonal Specials</h4>
             <p>
               Limited-time holiday booster boxes, themed playmats, and discounted Mane Character collector bundles will appear here during Equestria Clash seasonal events!
@@ -558,7 +580,6 @@ export default function ShopView() {
           </div>
         </div>
 
-        {/* INTERACTIVE PACK RIP & 3D CARD FLIP MODAL */}
         {pulledCards && (
           <div
             className="pack-reveal-backdrop"
@@ -569,7 +590,7 @@ export default function ShopView() {
             <div className="pack-reveal-modal" onClick={(e) => e.stopPropagation()}>
               {packStage !== 'REVEALING' ? (
                 <div className="sealed-pack-stage">
-                  <h3>✨ {activePackTier?.name || 'Booster Pack'} Ready! ✨</h3>
+                  <h3>{activePackTier?.name || 'Booster Pack'} Ready!</h3>
                   <p>Click the booster pack or tear along the foil strip to rip it open!</p>
 
                   <div
@@ -580,7 +601,7 @@ export default function ShopView() {
                   >
                     <div className="booster-foil-top-flap">
                       <span className="foil-crimp-lines" />
-                      <span className="foil-tear-hint">✂️ TEAR HERE</span>
+                      <span className="foil-tear-hint">TEAR HERE</span>
                     </div>
                     <div className="booster-tear-laser" />
                     <div className="booster-foil-body">
@@ -596,17 +617,17 @@ export default function ShopView() {
                     onClick={handleRipPack}
                     disabled={packStage === 'RIPPING'}
                   >
-                    {packStage === 'RIPPING' ? '✨ Ripping Foil...' : '✂️ Rip Open Pack!'}
+                    {packStage === 'RIPPING' ? 'Ripping Foil...' : 'Rip Open Pack!'}
                   </button>
                 </div>
               ) : (
                 <>
-                  <h3>🎉 Tap to Flip — Click Revealed Cards to Preview!</h3>
+                  <h3>Tap to Flip — Click Revealed Cards to Preview!</h3>
                   <p>
                     Click a face-down card to flip it, or click an open card to inspect its rules text.
                     {autoDustBanner > 0 && (
                       <strong style={{ color: '#fde047', display: 'block', marginTop: '4px' }}>
-                        ♻️ Excess 5th+ copies converted into +{autoDustBanner} 🪙 Pony Points!
+                        Excess 5th+ copies converted into +{autoDustBanner} Pony Points!
                       </strong>
                     )}
                   </p>
@@ -628,19 +649,19 @@ export default function ShopView() {
                           <div className="flip-card-inner">
                             <div className="flip-card-face flip-card-back">
                               <img src={CARD_BACK_URL} alt="Card Back" />
-                              <span className="tap-to-flip-pill">Tap to Flip ✨</span>
+                              <span className="tap-to-flip-pill">Tap to Flip</span>
                             </div>
 
                             <div className={`flip-card-face flip-card-front ${foilCls}`}>
                               <span className={`pulled-rarity rarity-${card.rarity.toLowerCase()}`}>
-                                {card.id.endsWith('-S') ? `✨ ${card.rarity}-S` : card.rarity}
+                                {card.id.endsWith('-S') ? `${card.rarity}-S` : card.rarity}
                               </span>
                               <img src={card.image_url || CARD_BACK_URL} alt={card.name} />
                               <h5>{card.name}</h5>
                               <span>
                                 {card.convertedToDust
-                                  ? `♻️ +${card.convertedToDust} 🪙 Dust`
-                                  : '🔍 Click to Preview'}
+                                  ? `+${card.convertedToDust} Dust`
+                                  : 'Click to Preview'}
                               </span>
                             </div>
                           </div>
@@ -657,7 +678,7 @@ export default function ShopView() {
                         style={{ width: 'auto', padding: '10px 22px' }}
                         onClick={revealAllCards}
                       >
-                        ✨ Reveal All Cards
+                        Reveal All Cards
                       </button>
                     )}
                     <button
@@ -666,7 +687,7 @@ export default function ShopView() {
                       style={{ width: 'auto', padding: '10px 26px' }}
                       onClick={closePackModal}
                     >
-                      {allRevealed ? 'Awesome, Collect! ✨' : 'Collect & Close'}
+                      {allRevealed ? 'Awesome, Collect!' : 'Collect & Close'}
                     </button>
                   </div>
                 </>

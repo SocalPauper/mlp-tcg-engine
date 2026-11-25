@@ -4,7 +4,6 @@ import { authenticateToken, AuthenticatedRequest } from '../middleware/authMiddl
 
 const router = express.Router();
 
-// Calibrated Booster Pack Tiers (3-Card Standard, 1-Card Shining/UR+, 5-Pack Bundle)
 const PACK_TIERS = {
   STANDARD: {
     name: 'Standard Booster Pack',
@@ -38,7 +37,6 @@ const PACK_TIERS = {
   },
 };
 
-// Duplicate Trade-In Dust Values beyond a 4-card playset (Rules v1.3.0 Rule 102.1.0)
 const TRADE_IN_VALUES: Record<string, number> = {
   C: 5,
   U: 10,
@@ -143,7 +141,6 @@ async function drawSingleChaseCard(client: any, bucket: string) {
   return cardRes.rows[0];
 }
 
-// Get user shop status
 router.get('/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -226,7 +223,6 @@ router.get('/status', authenticateToken, async (req: AuthenticatedRequest, res) 
   }
 });
 
-// Buy Tiered Pack (STANDARD, SHINING, BUNDLE)
 router.post('/buy-pack', authenticateToken, async (req: AuthenticatedRequest, res) => {
   const userId = req.user?.id;
   const tierKey = String(req.body.tier || 'STANDARD').toUpperCase() as keyof typeof PACK_TIERS;
@@ -318,9 +314,9 @@ router.post('/buy-pack', authenticateToken, async (req: AuthenticatedRequest, re
              VALUES ($1, $2, 1, FALSE)
              ON CONFLICT (user_id, card_id)
              DO UPDATE SET
-               quantity = auth.user_cards.quantity + 1,
+               quantity = LEAST($3, auth.user_cards.quantity + 1),
                user_alerted = FALSE`,
-            [userId, pulledCard.id]
+            [userId, pulledCard.id, maxPlayset]
           );
         }
       }
@@ -357,7 +353,7 @@ router.post('/buy-pack', authenticateToken, async (req: AuthenticatedRequest, re
   }
 });
 
-// Buy guaranteed weekly deal card (up to 4x playset, or 1x for Mane Characters)
+// Buy guaranteed weekly deal card — strictly capped at 4x (or 1x for Mane Characters)
 router.post('/buy-deal', authenticateToken, async (req: AuthenticatedRequest, res) => {
   const userId = req.user?.id;
   const { dealId } = req.body;
@@ -374,29 +370,37 @@ router.post('/buy-deal', authenticateToken, async (req: AuthenticatedRequest, re
        WHERE d.id = $1`,
       [dealId]
     );
-    if (dealRes.rows.length === 0) throw new Error('Deal not found');
+    if (dealRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Deal not found' });
+    }
     const deal = dealRes.rows[0];
 
     const maxPlayset = getMaxPlaysetForCard(deal.card_type);
     const existingRes = await client.query(
-      'SELECT quantity FROM auth.user_cards WHERE user_id = $1 AND card_id = $2',
+      'SELECT quantity FROM auth.user_cards WHERE user_id = $1 AND card_id = $2 FOR UPDATE',
       [userId, deal.id]
     );
     const currentQty = Number(existingRes.rows[0]?.quantity) || 0;
     if (currentQty >= maxPlayset) {
-      throw new Error(
-        `You already own the maximum playset (${currentQty}/${maxPlayset}) of ${deal.name}!`
-      );
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: `You already own the maximum playset (${currentQty}/${maxPlayset}) of ${deal.name}!`,
+      });
     }
 
     const userRes = await client.query(
       'SELECT reward_points FROM auth.users WHERE id = $1 FOR UPDATE',
       [userId]
     );
-    if (userRes.rows.length === 0) throw new Error('User not found');
+    if (userRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     if (userRes.rows[0].reward_points < deal.price) {
-      throw new Error('Not enough Pony Points for this deal');
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Not enough Pony Points for this deal' });
     }
 
     await client.query('UPDATE auth.users SET reward_points = reward_points - $1 WHERE id = $2', [
