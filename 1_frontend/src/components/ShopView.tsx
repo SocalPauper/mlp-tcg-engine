@@ -191,26 +191,48 @@ export default function ShopView() {
     setAutoDustBanner(0);
   };
 
-  const handleBuyDeal = async (dealId: number, price: number) => {
-    if (points < price) {
+  const handleBuyDeal = async (deal: WeeklyDeal) => {
+    if (points < deal.price) {
       setMessage('Not enough Pony Points for this weekly deal.');
       return;
     }
+    const maxPlayset =
+      deal.card_type.toLowerCase().includes('mane') ||
+      deal.card_type.toLowerCase().includes('main')
+        ? 1
+        : 4;
+    const prevOwned = getOwnedCount({
+      id: deal.card_id,
+      card_type: deal.card_type,
+      rarity: deal.rarity,
+    });
+
     setPurchasing(true);
     setMessage(null);
     try {
       const token = localStorage.getItem('token');
       const { data } = await axios.post(
         `${API_BASE_URL}/api/shop/buy-deal`,
-        { dealId },
+        { dealId: deal.id },
         { headers: token ? { Authorization: `Bearer ${token}` } : {} }
       );
       syncPoints(data.remainingPoints);
       if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
-      if (data.ownedQuantities) setOwnedQuantities(data.ownedQuantities);
+
+      const resolvedQty =
+        typeof data.newQuantity === 'number'
+          ? data.newQuantity
+          : Math.min(maxPlayset, prevOwned + 1);
+      const resolvedMax =
+        typeof data.maxPlayset === 'number' ? data.maxPlayset : maxPlayset;
+
+      setOwnedQuantities((prev) => ({
+        ...(data.ownedQuantities || prev),
+        [deal.card_id]: resolvedQty,
+      }));
       invalidatePreviewCollectionCache();
       setMessage(
-        `✨ Added 1 copy of ${data.card.name} (${data.newQuantity}/${data.maxPlayset} owned)!`
+        `✨ Added 1 copy of ${deal.name} (${resolvedQty}/${resolvedMax} owned)!`
       );
       fetchShopData();
     } catch (err: any) {
@@ -419,7 +441,7 @@ export default function ShopView() {
                       type="button"
                       className="shop-buy-btn deal-btn"
                       disabled={purchasing || isMaxed}
-                      onClick={() => handleBuyDeal(deal.id, deal.price)}
+                      onClick={() => handleBuyDeal(deal)}
                     >
                       {isMaxed
                         ? `Max Playset (${owned}/${maxCopies})`
