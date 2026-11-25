@@ -87,8 +87,6 @@ export function matchesCardKeywordExact(card: CardDefinition, filterText: string
   for (const target of alternatives) {
     if (cardName === target) return true;
 
-    // Non-Character cards (Events, Scenes, Items, Stories, Plans) must not match character/trait
-    // keywords solely via the database `traits` affinity column.
     if (isNonCharacter) continue;
 
     const extraText = String((card as any).traitsText || '').toLowerCase();
@@ -184,7 +182,6 @@ export function getEffectiveCardCost(
   const cardType = String(card.type || '').toLowerCase();
   const cardText = sanitizeCardText(card.effectText);
 
-  // 1. Self-printed scaling cost reduction (e.g. "-1 Cost of Force of Harmony when played from Hand for each ...")
   const selfDiscountMatch = cardText.match(
     /(?:this\s+(?:character|item|event)\s+gets\s+)?-(\d+)\s*cost(?:\s+of\s+force\s+of\s+harmony)?\s+when\s+played\s+from\s+hand\s+(for\s+each\s+[^.]+)/i
   );
@@ -194,7 +191,6 @@ export function getEffectiveCardCost(
     baseCost = Math.max(0, baseCost - perUnit * scale);
   }
 
-  // 2. Temporary next-card cost discount
   if (player.nextCardCostDiscount) {
     const disc = player.nextCardCostDiscount;
     const typeMatches = !disc.cardType || cardType.includes(disc.cardType.toLowerCase());
@@ -204,7 +200,6 @@ export function getEffectiveCardCost(
     }
   }
 
-  // 3. Leader passive -1 Cost
   const leaderText = sanitizeCardText(player.leader?.effectText);
   if (
     leaderText &&
@@ -217,7 +212,6 @@ export function getEffectiveCardCost(
     baseCost = Math.max(0, baseCost - 1);
   }
 
-  // 4. Scene passive -1 Cost
   for (const sc of player.sceneArea) {
     if (!sc.isFaceUp) continue;
     const scText = sanitizeCardText(sc.card.effectText);
@@ -244,16 +238,19 @@ export function canPayHarmonyCost(
   const requiredCost = getEffectiveCardCost(player, card, rivalPlayer);
   if (requiredCost === 0) return true;
 
+  // Both face-up and face-down untapped Scenes provide 1 Force of Harmony
   const readyScenes = player.sceneArea.filter((s) => !s.isExhausted);
   if (readyScenes.length < requiredCost) return false;
 
-  const cardEl = String(card.element || 'Everyday').toLowerCase();
+  const cardEl = String(card.element || 'Everyday').trim().toLowerCase();
   if (!cardEl || cardEl === 'everyday' || cardEl === 'none') {
     return true;
   }
 
   return readyScenes.some((s) => {
-    const sEl = String(s.card.element || 'Everyday').toLowerCase();
+    // Face-down Scenes provide wild/Everyday Force of Harmony (they only restrict Inspiration Boost)
+    if (!s.isFaceUp) return true;
+    const sEl = String(s.card.element || 'Everyday').trim().toLowerCase();
     return sEl === cardEl || sEl === 'everyday' || sEl === 'none';
   });
 }
@@ -265,19 +262,24 @@ export function exhaustScenesWithElementPriority(
 ): SceneCardInPlay[] {
   if (effectiveCost <= 0) return sceneArea;
 
-  const cardEl = String(card.element || 'Everyday').toLowerCase();
+  const cardEl = String(card.element || 'Everyday').trim().toLowerCase();
   const indicesToExhaust = new Set<number>();
 
   if (cardEl && cardEl !== 'everyday' && cardEl !== 'none') {
     const exactIdx = sceneArea.findIndex(
-      (s) => !s.isExhausted && String(s.card.element || '').toLowerCase() === cardEl
+      (s) =>
+        !s.isExhausted &&
+        s.isFaceUp &&
+        String(s.card.element || '').trim().toLowerCase() === cardEl
     );
     if (exactIdx !== -1) {
       indicesToExhaust.add(exactIdx);
     } else {
       const wildIdx = sceneArea.findIndex((s) => {
-        const sEl = String(s.card.element || 'Everyday').toLowerCase();
-        return !s.isExhausted && (sEl === 'everyday' || sEl === 'none');
+        if (s.isExhausted) return false;
+        if (!s.isFaceUp) return true;
+        const sEl = String(s.card.element || 'Everyday').trim().toLowerCase();
+        return sEl === 'everyday' || sEl === 'none';
       });
       if (wildIdx !== -1) indicesToExhaust.add(wildIdx);
     }
@@ -438,7 +440,6 @@ function doesPassiveTextApplyToCharacter(
     return 0;
   }
 
-  // Adorned Character cost threshold checks (e.g., BP01-SPR24, BP01-SPR27)
   const costLess = text.match(
     /adorned\s+character\s+with\s+cost(?:\s+of\s+force\s+of\s+harmony)?\s+(\d+)\s+or\s+less/i
   );
@@ -547,7 +548,6 @@ export function calculateLanePowerBreakdown(
   const isOwnersTurn = state.turnPlayerId === playerId;
   const allLanes: LaneKey[] = ['left', 'center', 'right'];
 
-  // 1. Self passive
   const selfBonus = doesPassiveTextApplyToCharacter(
     character.effectText || '',
     character,
@@ -567,7 +567,6 @@ export function calculateLanePowerBreakdown(
     });
   }
 
-  // 2. Attached items on this slot
   for (const item of slot.items) {
     let itemBonus = Number(item.power) || 0;
     const itemText = sanitizeCardText(item.effectText);
@@ -593,13 +592,11 @@ export function calculateLanePowerBreakdown(
     }
   }
 
-  // 3. Friendly board-wide & adjacent-lane auras from other characters/items
   for (const otherLane of allLanes) {
     if (otherLane === lane) continue;
     const otherSlot = player.adventureArea[otherLane];
     if (!otherSlot.character) continue;
 
-    // Friendly character global aura (e.g. Princess Luna: Each Character that has had a Treat gets +1)
     const otherCharText = sanitizeCardText(otherSlot.character.effectText);
     if (/each\s+character\s+that\s+has\s+had\s+a\s+(?:treat|present)/i.test(otherCharText)) {
       const auraBonus = doesPassiveTextApplyToCharacter(
@@ -622,7 +619,6 @@ export function calculateLanePowerBreakdown(
       }
     }
 
-    // Items on other lanes that buff "Other Characters" or "Characters next to adorned Character"
     for (const otherItem of otherSlot.items) {
       const itText = sanitizeCardText(otherItem.effectText);
       const isOtherAll = /other\s+characters?\s+in\s+your\s+adventure\s+area\s+get/i.test(itText);
@@ -643,7 +639,6 @@ export function calculateLanePowerBreakdown(
     }
   }
 
-  // 4. Rival continuous debuff auras (e.g. BP03-CR04 Applejack: While this Character has a Treat, each Character in Rival's Adventure Area gets -1 Inspiration)
   for (const rLane of allLanes) {
     const rSlot = rival.adventureArea[rLane];
     if (!rSlot.character) continue;
@@ -661,7 +656,6 @@ export function calculateLanePowerBreakdown(
     }
   }
 
-  // 5. Leader, Scene, and Story passives
   if (player.leader) {
     const leaderBonus = doesPassiveTextApplyToCharacter(
       player.leader.effectText || '',
@@ -1051,17 +1045,12 @@ export function extractTriggerClause(
   return match ? match[1].trim() : null;
 }
 
-/**
- * Splits compound multi-sentence effects into ordered atomic clauses so every step resolves.
- */
 export function splitCompoundClauses(rawText?: string): string[] {
   let text = sanitizeCardText(rawText);
   if (!text) return [];
-  // Strip leading "Only use when ..." sentence (already enforced by canPlayCardRestrictions)
   text = text.replace(/^only\s+(?:use|play|activate)\s+when\s+[^.]+\.\s*/i, '').trim();
   if (!text) return [];
 
-  // Keep "Reveal the top N ... choose 1 ..." or "Draw N, discard M" intact as single clauses
   if (/reveal\s+the\s+top\s+\d+|draw\s+\d+.*discard\s+\d+|discard\s+.*draw\s+\d+/i.test(text)) {
     return [text];
   }
@@ -1096,7 +1085,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
   );
   const parsedMaxLimit = limitMatch ? parseInt(limitMatch[1], 10) : undefined;
 
-  // Next-card cost discount (BP03-CR05, BP04-SPR01)
   const nextDiscountMatch = text.match(
     /the\s+next\s+(Item|Event|Character|[｢\[「][^｣\]」]+[｣\]」])\s+gets\s*-(\d+)\s*cost/i
   );
@@ -1111,22 +1099,18 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Draw until hand matches rival (BP04-SPR08)
   if (/draw\s+cards?\s+until\s+you\s+have\s+as\s+many\s+cards\s+in\s+hand\s+as\s+rival/i.test(text)) {
     return { kind: 'DRAW_UNTIL_MATCH_RIVAL', amount: 1 };
   }
 
-  // Add 1 face-down Scene, tap it (BP02-SPR09)
   if (/add\s+1\s+face-down\s+scene/i.test(text)) {
     return { kind: 'ADD_FACEDOWN_SCENE', amount: 1 };
   }
 
-  // Move 1 Hand to Story Area as Plan (BP02-SPR02)
   if (/move\s+1\s+hand\s+to\s+story\s+area.*plan/i.test(text)) {
     return { kind: 'MOVE_HAND_TO_PLAN', amount: 1, requiresChoice: true };
   }
 
-  // Revive Character from Retirement to Adventure Area (BP02-SPR11)
   if (/retirement\s+area,\s*move\s+it\s+to\s+adventure\s+area/i.test(text)) {
     return {
       kind: 'REVIVE_RETIREMENT',
@@ -1137,7 +1121,6 @@ export function parseEffectClause(clauseText?: string): ParsedActivatedEffect | 
     };
   }
 
-  // Flip Scenes face-up or face-down (BP02-SPR06, BP02-SPR08, BP02-SPR10, BP04-SPR06, BP04-SPR15)
   const flipRivalDown = text.match(
     /choose\s+(\d+)\s+face-up\s+scenes?\s+in\s+rival'?s\s+scene\s+area,\s*turn\s+(?:it|them)\s+down/i
   );

@@ -26,7 +26,6 @@
   display: block;
 }
 
-/* Exact 90deg horizontal rotation for landscape Story cards */
 .rotated-story-back-img {
   position: absolute;
   top: 50%;
@@ -46,41 +45,40 @@
 
 .deck-count-pill {
   position: absolute;
-  bottom: 2px;
+  bottom: 3px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(30, 17, 36, 0.9);
+  background: rgba(30, 17, 36, 0.92);
   color: #fff;
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 900;
-  padding: 0 5px;
+  padding: 0 6px;
   border-radius: 7px;
   border: 1px solid #f472b6;
   white-space: nowrap;
 }
 
 .slot-empty-label {
-  font-size: 9.5px;
+  font-size: 10px;
   color: #7e22ce;
   font-weight: 800;
   text-align: center;
-  padding: 2px;
+  padding: 4px;
 }
 
 /* ========================================================================= */
-/* DESKTOP 3-COLUMN MTG ARENA INSPIRED TABLETOP (100dvh, NO SCROLL)          */
+/* DESKTOP 3-COLUMN TABLETOP (PROPORTIONAL, ZERO DEAD SPACE)                 */
 /* ========================================================================= */
 
 .desktop-three-col-tabletop {
   display: grid;
-  grid-template-columns: 23% 1fr;
+  grid-template-columns: 24% 1fr;
   gap: 8px;
   width: 100%;
   height: 100%;
   min-height: 0;
 }
 
-/* COLUMN 1: FACE-OFF SIDEBAR (OPP MANE -> ACTING CARD & LOG -> YOUR MANE)   */
 .col1-faceoff-sidebar {
   display: flex;
   flex-direction: column;
@@ -88,10 +86,10 @@
   gap: 6px;
   min-height: 0;
   height: 100%;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.78);
   border: 2px solid #d8b4fe;
   border-radius: 14px;
-  padding: 7px;
+  padding: 6px;
   box-sizing: border-box;
 }
 
@@ -120,8 +118,8 @@
 }
 
 .sidebar-mane-card {
-  width: 58px;
-  height: 81px;
+  width: 60px;
+  height: 84px;
   object-fit: fill;
   border-radius: 7px;
   border: 2px solid #ffd700;
@@ -142,7 +140,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 900;
   color: #4a148c;
 }
@@ -151,8 +149,8 @@
   background: #fff;
   border: 1.5px solid #ec4899;
   border-radius: 10px;
-  padding: 4px 7px;
-  font-size: 10.5px;
+  padding: 4px 8px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1.25;
   color: #4a148c;
@@ -172,24 +170,41 @@
 
 /* Middle Split inside Col 1: Acting Card Preview + Live Action Log */
 .sidebar-center-inspector-log {
-  display: grid;
-  grid-template-columns: 44% 56%;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   flex: 1;
   min-height: 0;
 }
 
 .sidebar-acting-card-pane {
-  background: rgba(243, 232, 255, 0.85);
+  background: rgba(243, 232, 255, 0.9);
   border: 1.5px solid #c084fc;
   border-radius: 10px;
-  padding: 5px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.acting-card-preview-img {
+  width: 74px;
+  height: 104px;
+  object-fit: fill;
+  border-radius: 7px;
+  border: 1.5px solid #fff;
+  box-shadow: 0 3px 8px rgba(74, 20, 140, 0.25);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.acting-card-text-col {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  min-height: 0;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
 }
 
 .sidebar-pane-label {
@@ -199,34 +214,22 @@
   text-transform: uppercase;
 }
 
-.acting-card-preview-img {
-  width: 100%;
-  max-width: 108px;
-  aspect-ratio: 2.5 / 3.5;
-  object-fit: fill;
-  border-radius: 7px;
-  border: 1.5px solid #fff;
-  box-shadow: 0 3px 8px rgba(74, 20, 140, 0.25);
-  cursor: pointer;
-}
-
 .acting-card-caption {
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 800;
   color: #4a148c;
-  line-height: 1.2;
-  text-align: center;
+  line-height: 1.28;
   overflow-y: auto;
-  max-height: 68px;
-  width: 100%;
+  max-height: 82px;
 }
 
 .sidebar-live-log-pane {
-  background: rgba(30, 17, 36, 0.92);
+  background: rgba(30, 17, 36, 0.94);
   border: 1.5px solid #f472b6;
   border-radius: 10px;
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-height: 0;
   overflow: hidden;
   color: #f3e8ff;
@@ -236,7 +239,7 @@
   display: flex;
   gap: 4px;
   padding: 4px 6px;
-  background: rgba(88, 28, 135, 0.8);
+  background: rgba(88, 28, 135, 0.85);
   border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 
@@ -245,7 +248,7 @@
   border: none;
   border-radius: 6px;
   padding: 2px 4px;
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 900;
   cursor: pointer;
   background: rgba(255, 255, 255, 0.14);
@@ -260,18 +263,18 @@
 .sidebar-log-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 5px 6px;
+  padding: 6px 7px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 9.8px;
-  line-height: 1.28;
+  font-size: 10.5px;
+  line-height: 1.3;
 }
 
 .sidebar-log-entry {
   background: rgba(255, 255, 255, 0.06);
   border-left: 2.5px solid #c084fc;
-  padding: 3px 5px;
+  padding: 3px 6px;
   border-radius: 4px;
 }
 
@@ -280,7 +283,7 @@
 .sidebar-log-entry.cat-CLASH { border-left-color: #fb7185; }
 .sidebar-log-entry.cat-PLAY { border-left-color: #38bdf8; }
 
-/* COLUMNS 2 & 3 WRAPPER (MIRRORED KAYOU ZONES + 3 LANES + CENTER PHASES)  */
+/* COLUMNS 2 & 3 WRAPPER */
 .col23-playfield-wrapper {
   display: flex;
   flex-direction: column;
@@ -292,15 +295,15 @@
 
 .playfield-top-half {
   display: grid;
-  grid-template-columns: 42% 58%;
+  grid-template-columns: 45% 55%;
   gap: 8px;
-  flex: 0.92;
+  flex: 0.9;
   min-height: 0;
 }
 
 .playfield-bottom-half {
   display: grid;
-  grid-template-columns: 42% 58%;
+  grid-template-columns: 45% 55%;
   gap: 8px;
   flex: 1.25;
   min-height: 0;
@@ -310,23 +313,23 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 5px;
+  gap: 6px;
   min-height: 0;
   height: 100%;
 }
 
 /* ========================================================================= */
-/* MIDDLE COLUMN KAYOU ZONES (4 HORIZONTAL STORIES + VERTICAL SCENES)        */
+/* MIDDLE COLUMN KAYOU ZONES (SCALED TO FILL SPACE CLEANLY)                  */
 /* ========================================================================= */
 
 .playmat-half {
   min-height: 0;
   border-radius: 13px;
-  padding: 5px 8px 13px;
+  padding: 6px 10px 14px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 5px;
+  gap: 6px;
   position: relative;
 }
 
@@ -353,9 +356,9 @@
 .active-turn-mat-badge {
   background: linear-gradient(135deg, #fde047, #f59e0b);
   color: #4a148c;
-  font-size: 8.5px;
+  font-size: 9px;
   font-weight: 900;
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 7px;
   margin-left: 5px;
   text-transform: uppercase;
@@ -365,7 +368,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 800;
   color: #581c87;
   gap: 4px;
@@ -374,16 +377,16 @@
 
 .hud-pills {
   display: flex;
-  gap: 3px;
+  gap: 4px;
   align-items: center;
 }
 
 .hud-pill {
   background: #fff;
   border: 1px solid #e9d5ff;
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 8px;
-  font-size: 9.5px;
+  font-size: 10px;
   color: #6b21a8;
   font-weight: 900;
 }
@@ -398,13 +401,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
 }
 
 .story-four-strip {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
+  gap: 6px;
   flex: 1;
   align-items: center;
 }
@@ -412,9 +417,9 @@
 .story-stage-box {
   width: 100%;
   aspect-ratio: 3.5 / 2.5;
-  max-height: 62px;
-  border-radius: 7px;
-  border: 1.5px solid #c084fc;
+  max-height: 82px;
+  border-radius: 8px;
+  border: 2px solid #c084fc;
   position: relative;
   background: #f3e8ff;
 }
@@ -423,7 +428,7 @@
   width: 100%;
   height: 100%;
   object-fit: fill;
-  border-radius: 5px;
+  border-radius: 6px;
   display: block;
 }
 
@@ -432,30 +437,30 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
-  border-radius: 5px;
+  border-radius: 6px;
 }
 
 .story-stage-label-pill {
   position: absolute;
-  bottom: 2px;
+  bottom: 3px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(30, 17, 36, 0.88);
   color: #fde047;
-  font-size: 7.5px;
+  font-size: 8.5px;
   font-weight: 900;
-  padding: 0 5px;
-  border-radius: 5px;
+  padding: 1px 6px;
+  border-radius: 6px;
   white-space: nowrap;
   z-index: 2;
 }
 
 .plan-card-overlay {
   position: absolute;
-  top: -4px;
-  right: -3px;
-  width: 24px;
-  height: 34px;
+  top: -5px;
+  right: -4px;
+  width: 30px;
+  height: 42px;
   z-index: 5;
 }
 
@@ -472,18 +477,18 @@
   transform: translateX(-50%);
   background: rgba(88, 28, 135, 0.94);
   color: #fde047;
-  font-size: 6.5px;
+  font-size: 7px;
   font-weight: 900;
-  padding: 0 2px;
+  padding: 0 3px;
   border-radius: 3px;
   white-space: nowrap;
 }
 
 .side-portrait-zone {
-  width: 54px;
-  height: 76px;
-  border: 1.5px solid #d8b4fe;
-  border-radius: 8px;
+  width: 68px;
+  height: 95px;
+  border: 2px solid #d8b4fe;
+  border-radius: 9px;
   background: rgba(255, 255, 255, 0.85);
   display: flex;
   flex-direction: column;
@@ -497,13 +502,13 @@
   width: 100%;
   height: 100%;
   object-fit: fill;
-  border-radius: 6px;
+  border-radius: 7px;
 }
 
 .zone-caption {
   position: absolute;
-  bottom: -12px;
-  font-size: 8.5px;
+  bottom: -13px;
+  font-size: 9px;
   font-weight: 900;
   color: #6b21a8;
   white-space: nowrap;
@@ -513,37 +518,39 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
 }
 
 .scene-area-tray {
   flex: 1;
-  height: 76px;
-  border: 1.5px dashed #c084fc;
-  border-radius: 9px;
+  height: 95px;
+  border: 2px dashed #c084fc;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.65);
-  padding: 3px 6px;
+  padding: 4px 8px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   overflow-x: auto;
   overflow-y: hidden;
 }
 
 .scene-card-slot {
-  width: 48px;
-  height: 67px;
+  width: 60px;
+  height: 84px;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   position: relative;
   border: 1.5px solid #fff;
-  box-shadow: 0 2px 5px rgba(74, 20, 140, 0.2);
+  box-shadow: 0 2px 6px rgba(74, 20, 140, 0.2);
   transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .scene-card-slot.exhausted {
   transform: rotate(90deg);
-  margin: 0 10px;
+  margin: 0 12px;
   filter: brightness(0.84);
 }
 
@@ -551,7 +558,7 @@
   width: 100%;
   height: 100%;
   object-fit: fill;
-  border-radius: 5px;
+  border-radius: 6px;
   display: block;
 }
 
@@ -562,21 +569,21 @@
   transform: translateX(-50%);
   background: rgba(17, 24, 39, 0.88);
   color: #fde047;
-  font-size: 7px;
+  font-size: 7.5px;
   font-weight: 900;
-  padding: 0 3px;
+  padding: 1px 4px;
   border-radius: 4px;
   white-space: nowrap;
 }
 
 /* ========================================================================= */
-/* COLUMN 3: 3-LANE CLASH ARENA, CENTER PHASES BAR & HAND                    */
+/* COLUMN 3: 3-LANE CLASH ARENA (LARGE READABLE SLOTS) & HAND DOCK           */
 /* ========================================================================= */
 
 .lane-strip-band {
   flex: 1;
   min-height: 0;
-  padding: 5px 10px;
+  padding: 6px 12px;
   border-radius: 13px;
   position: relative;
   display: flex;
@@ -602,9 +609,9 @@
 }
 
 .lane-band-tag {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 900;
-  padding: 1px 8px;
+  padding: 1px 9px;
   border-radius: 7px;
 }
 
@@ -619,30 +626,34 @@
 }
 
 .lane-band-story-pill {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 800;
   color: #581c87;
   background: rgba(255, 255, 255, 0.82);
-  padding: 1px 7px;
+  padding: 1px 8px;
   border-radius: 7px;
   border: 1px solid #e9d5ff;
 }
 
 .adventure-area-row {
   display: flex;
-  justify-content: center;
+  justify-content: space-evenly;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
   flex: 1;
-  padding-top: 8px;
+  min-height: 0;
+  padding: 10px 6px 4px;
 }
 
 .adventure-slot {
-  width: 96px;
-  height: 134px;
+  height: 100%;
+  max-height: 196px;
+  min-height: 132px;
+  aspect-ratio: 2.5 / 3.5;
+  width: auto;
   border: 2px dashed #c084fc;
-  border-radius: 11px;
-  background: rgba(255, 255, 255, 0.78);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -660,10 +671,10 @@
 
 .adventure-slot.targetable {
   border: 3px dashed #ec4899;
-  background: rgba(251, 207, 232, 0.78);
+  background: rgba(251, 207, 232, 0.82);
   cursor: pointer;
-  transform: scale(1.05);
-  box-shadow: 0 0 20px rgba(236, 72, 153, 0.8);
+  transform: scale(1.04);
+  box-shadow: 0 0 22px rgba(236, 72, 153, 0.8);
   animation: pulseTarget 1.1s infinite;
 }
 
@@ -682,7 +693,7 @@
   background: linear-gradient(135deg, #581c87 0%, #9d174d 100%);
   color: #fff;
   border-radius: 12px;
-  padding: 5px 12px;
+  padding: 6px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -737,9 +748,9 @@
 }
 
 .phase-step-pill {
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 800;
-  padding: 1px 7px;
+  padding: 1px 8px;
   border-radius: 999px;
   color: rgba(255, 255, 255, 0.65);
 }
@@ -841,7 +852,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
@@ -851,7 +862,7 @@
   gap: 6px;
   background: linear-gradient(135deg, #0369a1, #4f46e5);
   color: #fff;
-  padding: 3px 10px;
+  padding: 3px 12px;
   border-radius: 999px;
   border: 1.5px solid #fde047;
   font-size: 11px;
@@ -863,7 +874,7 @@
   color: #4a148c;
   border: none;
   border-radius: 7px;
-  padding: 2px 8px;
+  padding: 2px 9px;
   font-family: 'Nunito', sans-serif;
   font-size: 10px;
   font-weight: 900;
@@ -879,16 +890,16 @@
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 7px;
+  gap: 8px;
   padding: 2px 6px;
-  height: 112px;
+  height: 124px;
   width: 100%;
   overflow-x: auto;
 }
 
 .hand-card-item {
-  width: 78px;
-  height: 109px;
+  width: 86px;
+  height: 120px;
   border-radius: 8px;
   position: relative;
   cursor: pointer;
@@ -1057,6 +1068,8 @@
 .mobile-one-hand-layout .adventure-slot {
   width: 88px;
   height: 123px;
+  max-height: 123px;
+  min-height: 123px;
 }
 
 .mobile-timeline {

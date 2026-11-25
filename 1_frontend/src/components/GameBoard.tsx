@@ -439,10 +439,11 @@ function canAffordCardWithHarmony(
   if (cost === 0) return true;
   const readyScenes = player.sceneArea.filter((s) => !s.isExhausted);
   if (readyScenes.length < cost) return false;
-  const el = String(card.element || 'Everyday').toLowerCase();
+  const el = String(card.element || 'Everyday').trim().toLowerCase();
   if (!el || el === 'everyday' || el === 'none') return true;
   return readyScenes.some((s) => {
-    const sEl = String(s.card.element || 'Everyday').toLowerCase();
+    if (!s.isFaceUp) return true;
+    const sEl = String(s.card.element || 'Everyday').trim().toLowerCase();
     return sEl === el || sEl === 'everyday' || sEl === 'none';
   });
 }
@@ -692,7 +693,6 @@ export default function GameBoard({
   const me = gameState.players[mySeat];
   const opp = gameState.players[oppSeat];
   const isMyTurn = !isSpectator && gameState.turnPlayerId === mySeat;
-  const isOppTurn = gameState.turnPlayerId === oppSeat;
 
   useEffect(() => {
     const handleResize = () => {
@@ -981,7 +981,7 @@ export default function GameBoard({
         setLocalHintText(`${lane.toUpperCase()} lane is occupied!`);
         return;
       }
-      sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane });
+      sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane, lane });
       setSelectedHandCardId(null);
       return;
     }
@@ -991,7 +991,7 @@ export default function GameBoard({
         setLocalHintText(`Cannot adorn ${slot.character?.name || 'empty lane'}!`);
         return;
       }
-      sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane });
+      sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane, lane });
       setSelectedHandCardId(null);
     }
   };
@@ -1090,7 +1090,6 @@ export default function GameBoard({
     !me.leaderAbilityUsedThisTurn &&
     hasManeActivatedAbility(me.leader);
 
-  // Current Acting Card / Effect for Left Sidebar Display
   const currentActingCard: CardDefinition | null =
     hoveredActingCard ||
     selectedHandCard ||
@@ -1110,9 +1109,6 @@ export default function GameBoard({
     ? `${gameState.lastActionBanner.title}: ${gameState.lastActionBanner.subtitle}`
     : 'Hover or click any card to preview its rules & effects';
 
-  // =========================================================================
-  // SINGLE CONTEXT-AWARE PRIMARY ACTION BUTTON (NO REDUNDANT END TURN)
-  // =========================================================================
   const renderPrimaryActionControl = (compact = false) => {
     if (isSpectator) {
       return <span className="timeline-wait-pill">👁️ Spectating</span>;
@@ -1209,9 +1205,6 @@ export default function GameBoard({
     return <span className="timeline-wait-pill">✨ Resolving...</span>;
   };
 
-  // =========================================================================
-  // 3-LANE ADVENTURE STRIP (SHARED BETWEEN DESKTOP & MOBILE)
-  // =========================================================================
   const renderLaneStrip = (player: PlayerState, isOpponent: boolean) => {
     const ownerSide: 'SELF' | 'OPPONENT' = isOpponent ? 'OPPONENT' : 'SELF';
 
@@ -1394,9 +1387,6 @@ export default function GameBoard({
     );
   };
 
-  // =========================================================================
-  // MIDDLE COLUMN: MIRRORED KAYOU ZONES (4 HORIZONTAL STORIES + SCENES + DECKS)
-  // =========================================================================
   const renderMiddleKayouZones = (player: PlayerState, isOpponent: boolean, inDrawer = false) => {
     const readyHarmony = player.sceneArea.filter((s) => !s.isExhausted).length;
     const isPlayersTurn = gameState.turnPlayerId === player.id;
@@ -1648,7 +1638,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Mobile Log Popover */}
       {isOneHandMobile && isMobileLogOpen && (
         <div className="action-log-drawer-overlay">
           <div className="action-log-drawer">
@@ -1731,7 +1720,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 1. VS Intro Splash with 2-Player 50/50 Spin Wheel */}
       {gameState.phase === 'VS_INTRO' && (
         <div className="vs-intro-overlay">
           <div className="vs-fighters-stage" style={{ gap: '28px', flexWrap: 'wrap' }}>
@@ -1797,7 +1785,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 2. Opening Hand Mulligan Modal */}
       {gameState.phase === 'MULLIGAN' && !isSpectator && (
         <div className="mulligan-overlay">
           <h2 className="mulligan-title">✨ Opening Hand Mulligan</h2>
@@ -1844,7 +1831,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 2B. Interactive Hand / Retirement / Scene / Top-or-Bottom Choice Modal */}
       {showHandChoiceModalForMe && gameState.pendingHandChoice && (
         <div className="inspector-backdrop">
           <div className="hand-choice-modal">
@@ -1947,7 +1933,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 3. Dedicated Inspiration Boost Popup */}
       {showInspireModalForMe && gameState.contactState && (
         <div className="inspector-backdrop">
           <div className="inspire-popup-modal">
@@ -2008,7 +1993,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 4. Clash Slam Showdown Animation Overlay */}
       {gameState.phase === 'CLASH_HOLD' && gameState.lastClashEvent && (
         <div className="clash-showdown-overlay">
           <h2 style={{ color: '#fde047', fontSize: '26px', marginBottom: '18px' }}>
@@ -2056,7 +2040,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 5A. Sequential Plan Revealed Popup */}
       {gameState.lastPlanRevealEvent && (
         <div className="inspector-backdrop">
           <div
@@ -2150,7 +2133,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 5B. Story Stage Progressed Reveal Popup */}
       {gameState.lastStoryRevealEvent && (
         <div className="inspector-backdrop">
           <div className="plan-reveal-modal has-trap">
@@ -2231,7 +2213,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* 6. Fanfare Winner Screen & End-of-Match Reward Summary */}
       {gameState.phase === 'GAME_OVER' && winnerPlayer && (
         <div className="victory-fanfare-overlay">
           <div className="confetti-container">
@@ -2330,7 +2311,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Inspiration & Passive Aura Breakdown Modal */}
       {powerBreakdown && (
         <div className="inspector-backdrop" onClick={() => setPowerBreakdown(null)}>
           <div
@@ -2394,7 +2374,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Viewable Retirement Area Modal */}
       {viewedRetirement && (
         <div className="inspector-backdrop" onClick={() => setViewedRetirement(null)}>
           <div className="retirement-viewer-modal" onClick={(e) => e.stopPropagation()}>
@@ -2445,10 +2424,8 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Unified Visual Reference Card Preview Modal */}
       <CardPreviewModal card={inspectedCard} onClose={() => setInspectedCard(null)} />
 
-      {/* Live In-Match Bug Reporter Snapshot Modal */}
       {showInMatchBugModal && (
         <div
           className="inspector-backdrop"
@@ -2501,9 +2478,6 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* ===================================================================== */}
-      {/* MOBILE ONE-HAND MAGIC ARENA MODE (100dvh, NO SCROLL, SLIDE-OUT DRAWER)*/}
-      {/* ===================================================================== */}
       {isOneHandMobile ? (
         <div className="mobile-arena-shell">
           <div className="mobile-mane-header opp">
@@ -2749,13 +2723,8 @@ export default function GameBoard({
           )}
         </div>
       ) : (
-        /* ===================================================================== */
-        /* DESKTOP 3-COLUMN MTG ARENA INSPIRED TABLETOP (100dvh, NO SCROLL)      */
-        /* ===================================================================== */
         <div className="desktop-three-col-tabletop">
-          {/* COLUMN 1 (~22%): FACE-OFF SIDEBAR (OPP MANE -> ACTING CARD & LOG -> YOUR MANE) */}
           <div className="col1-faceoff-sidebar">
-            {/* Opponent Mane Card + Speech Bubble */}
             <div className={`sidebar-mane-box opp ${gameState.turnPlayerId === oppSeat ? 'active' : ''}`}>
               <img
                 src={opp.leader?.imageUrl || CARD_BACK_URL}
@@ -2772,10 +2741,8 @@ export default function GameBoard({
               </div>
             </div>
 
-            {/* Center Split: Current Acting Card / Effect + Live Action Log */}
             <div className="sidebar-center-inspector-log">
               <div className="sidebar-acting-card-pane">
-                <div className="sidebar-pane-label">✨ Acting Card</div>
                 {currentActingCard?.imageUrl ? (
                   <img
                     src={currentActingCard.imageUrl}
@@ -2786,8 +2753,11 @@ export default function GameBoard({
                 ) : (
                   <img src={CARD_BACK_URL} alt="Card Back" className="acting-card-preview-img" />
                 )}
-                <div className="acting-card-caption" title={currentActingCaption}>
-                  {currentActingCaption}
+                <div className="acting-card-text-col">
+                  <div className="sidebar-pane-label">✨ Acting Card</div>
+                  <div className="acting-card-caption" title={currentActingCaption}>
+                    {currentActingCaption}
+                  </div>
                 </div>
               </div>
 
@@ -2826,7 +2796,6 @@ export default function GameBoard({
               </div>
             </div>
 
-            {/* Your Mane Card + Speech Bubble */}
             <div className={`sidebar-mane-box self ${gameState.turnPlayerId === mySeat ? 'active' : ''}`}>
               <img
                 src={me.leader?.imageUrl || CARD_BACK_URL}
@@ -2860,15 +2829,12 @@ export default function GameBoard({
             </div>
           </div>
 
-          {/* COLUMN 2 & 3 COMBINED RIGHT AREA (WITH UNIFIED PHASES BAR ACROSS THE MIDDLE) */}
           <div className="col23-playfield-wrapper">
-            {/* TOP HALF: Opponent Kayou Zones (Col 2) + Opponent 3 Adventure Lanes (Col 3) */}
             <div className="playfield-top-half">
               {renderMiddleKayouZones(opp, true, false)}
               {renderLaneStrip(opp, true)}
             </div>
 
-            {/* CENTER HORIZONTAL PHASES & PRIMARY ACTION BAR */}
             <div className={`center-timeline-strip ${isMyTurn ? 'my-turn' : 'opp-turn'}`}>
               <div className="timeline-left-info">
                 <span className="turn-badge">TURN {gameState.turnNumber}</span>
@@ -2939,7 +2905,6 @@ export default function GameBoard({
               </div>
             </div>
 
-            {/* BOTTOM HALF: Your Kayou Zones (Col 2) + Your 3 Lanes & Hand Dock (Col 3) */}
             <div className="playfield-bottom-half">
               {renderMiddleKayouZones(me, false, false)}
 
@@ -2963,7 +2928,6 @@ export default function GameBoard({
 
                 {renderLaneStrip(me, false)}
 
-                {/* Hand Area & Quick Deploy Action Bar */}
                 {!isSpectator && (
                   <div className="desktop-hand-dock-section">
                     {isMyTurn && gameState.phase === 'MAIN_PHASE' && selectedHandCard && (
