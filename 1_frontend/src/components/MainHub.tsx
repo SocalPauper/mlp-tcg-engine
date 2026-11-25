@@ -23,6 +23,13 @@ interface LobbyRoom {
   playerCount: number;
 }
 
+interface HubChatEntry {
+  id?: string | number;
+  user: string;
+  text: string;
+  isCensored?: boolean;
+}
+
 interface MainHubProps {
   onMatchJoined: (ws: WebSocket, state: LiveGameState, seat: '0' | '1' | 'spectator') => void;
   onNavigateTab?: (tab: string) => void;
@@ -133,7 +140,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   } | null>(null);
   const [joinPasswordInput, setJoinPasswordInput] = useState('');
 
-  const [chatMessages, setChatMessages] = useState([
+  const [chatMessages, setChatMessages] = useState<HubChatEntry[]>([
     {
       user: 'Princess Celestia',
       text: 'Welcome, verified duelists of Equestria! Share your deck tech and good sportsmanship here. ✨',
@@ -147,6 +154,13 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   const playerDisplayName =
     user?.displayName || user?.username || `Pony_${Math.floor(100 + Math.random() * 900)}`;
 
+  // Record a site visit once per session/mount
+  useEffect(() => {
+    if (sessionStorage.getItem('mlp_visit_recorded')) return;
+    sessionStorage.setItem('mlp_visit_recorded', '1');
+    fetch(`${API_BASE_URL}/api/admin/visit`, { method: 'POST' }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/media/settings`)
       .then((res) => (res.ok ? res.json() : null))
@@ -157,14 +171,51 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
             setBgOpacity(parseFloat(data.settings.bg_hub_opacity));
           }
           if (data.settings.site_announcement && canChat) {
-            setChatMessages((prev) => [
-              ...prev,
-              { user: 'Royal Decree', text: data.settings.site_announcement },
-            ]);
+            setChatMessages((prev) => {
+              const alreadyHas = prev.some((m) => m.user === 'Royal Decree');
+              if (alreadyHas) return prev;
+              return [...prev, { user: 'Royal Decree', text: data.settings.site_announcement }];
+            });
           }
         }
       })
       .catch((err) => console.error('Error loading global hub theme:', err));
+  }, [canChat]);
+
+  // Sync Hub chat messages with backend so moderation (censor/delete) reflects cleanly
+  useEffect(() => {
+    if (!canChat) return;
+    const token = localStorage.getItem('token');
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+    const loadHubChat = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/admin/chat-messages?channel=HUB`, {
+          headers,
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.success && Array.isArray(data.messages)) {
+          const welcome: HubChatEntry = {
+            user: 'Princess Celestia',
+            text: 'Welcome, verified duelists of Equestria! Share your deck tech and good sportsmanship here. ✨',
+          };
+          const dbMsgs: HubChatEntry[] = [...data.messages].reverse().map((m: any) => ({
+            id: m.id,
+            user: m.authorName || 'Duelist',
+            text: m.content,
+            isCensored: Boolean(m.isCensored),
+          }));
+          setChatMessages([welcome, ...dbMsgs]);
+        }
+      } catch {
+        // Keep local messages if chat endpoint is restricted or offline
+      }
+    };
+
+    loadHubChat();
+    const poll = setInterval(loadHubChat, 10000);
+    return () => clearInterval(poll);
   }, [canChat]);
 
   useEffect(() => {
@@ -364,14 +415,47 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
     executeRoomAction(room, action);
   };
 
-  const handleSendChat = (e: React.FormEvent) => {
+  const handleSendChat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canChat || !inputMsg.trim()) return;
-    setChatMessages([
-      ...chatMessages,
-      { user: user?.displayName || user?.username || 'You', text: inputMsg.trim() },
-    ]);
+    const trimmed = inputMsg.trim();
+    if (!canChat || !trimmed) return;
+
+    const senderName = user?.displayName || user?.username || 'You';
     setInputMsg('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/admin/chat-messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          channel: 'HUB',
+          authorId: user?.id ? String(user.id) : undefined,
+          authorName: senderName,
+          content: trimmed,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: data.message?.id || Date.now(),
+            user: senderName,
+            text: trimmed,
+            isCensored: false,
+          },
+        ]);
+        return;
+      }
+    } catch {
+      // Fallback to local state append if endpoint isn't wired
+    }
+
+    setChatMessages((prev) => [...prev, { id: Date.now(), user: senderName, text: trimmed }]);
   };
 
   const currentDeckObj = availableDecks.find((d) => d.id === selectedDeck) || availableDecks[0];
@@ -656,7 +740,11 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
             <>
               <div className="chat-wireframe-messages">
                 {chatMessages.map((msg, i) => (
-                  <div key={i} className="chat-wireframe-msg">
+                  <div
+                    key={msg.id ?? i}
+                    className="chat-wireframe-msg"
+                    style={msg.isCensored ? { fontStyle: 'italic', opacity: 0.8 } : undefined}
+                  >
                     <span className="chat-wireframe-user">{msg.user}:</span> {msg.text}
                   </div>
                 ))}
