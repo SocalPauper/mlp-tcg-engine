@@ -2028,7 +2028,15 @@ export function playCardFromHand(
     if (typeMatches && nameMatches) nextDiscount = null;
   }
 
-  if (normalizedType.includes('character')) {
+  const isCharacterCard =
+    !['event', 'item', 'scene', 'story', 'plan'].includes(normalizedType) &&
+    !normalizedType.includes('mane') &&
+    !normalizedType.includes('main') &&
+    (normalizedType.includes('character') ||
+      normalizedType.includes('friend') ||
+      normalizedType.includes('pony'));
+
+  if (isCharacterCard) {
     const lane: LaneKey = targetLane || 'left';
     if (player.adventureArea[lane].character !== null) return state;
 

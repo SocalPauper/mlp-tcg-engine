@@ -285,6 +285,14 @@ const KNOWN_PET_NAMES = new Set([
 
 const NON_CHARACTER_TYPES_CLIENT = new Set(['event', 'scene', 'item', 'story', 'plan']);
 
+function isDeployableCharacterType(rawType?: string): boolean {
+  const t = String(rawType || '').trim().toLowerCase();
+  if (!t) return false;
+  if (NON_CHARACTER_TYPES_CLIENT.has(t)) return false;
+  if (t.includes('mane') || t.includes('main')) return false;
+  return t.includes('character') || t.includes('friend') || t.includes('pony');
+}
+
 function isStoryCard(card: CardDefinition | null): boolean {
   if (!card) return false;
   return (
@@ -625,6 +633,7 @@ export default function GameBoard({
   onLeaveMatch,
 }: GameBoardProps) {
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
+  const [localHintText, setLocalHintText] = useState<string | null>(null);
   const [inspectedCard, setInspectedCard] = useState<CardDefinition | null>(null);
   const [viewedRetirement, setViewedRetirement] = useState<{
     ownerName: string;
@@ -635,7 +644,6 @@ export default function GameBoard({
 
   const [isMuted, setIsMuted] = useState<boolean>(() => soundFX.isMuted());
 
-  // One-Hand Magic Arena Mobile Mode State & Slide-Out Drawer
   const [isOneHandMobile, setIsOneHandMobile] = useState<boolean>(() =>
     detectMobilePhoneViewport()
   );
@@ -648,7 +656,6 @@ export default function GameBoard({
 
   const [isLogOpen, setIsLogOpen] = useState<boolean>(false);
   const [logTab, setLogTab] = useState<'LOG' | 'DEBUG'>('LOG');
-  const [showLogOnboardingBubble, setShowLogOnboardingBubble] = useState<boolean>(true);
   const [spotlightBanner, setSpotlightBanner] = useState<ActionSpotlightEvent | null>(null);
   const [cardFlightToast, setCardFlightToast] = useState<CardFlightAnimation | null>(null);
   const lastSeenSpotlightIdRef = useRef<string | null>(null);
@@ -685,9 +692,10 @@ export default function GameBoard({
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowLogOnboardingBubble(false), 9000);
+    if (!localHintText) return;
+    const timer = setTimeout(() => setLocalHintText(null), 3200);
     return () => clearTimeout(timer);
-  }, []);
+  }, [localHintText]);
 
   useEffect(() => {
     const banner = gameState.lastActionBanner;
@@ -924,11 +932,44 @@ export default function GameBoard({
 
   const selectedHandCard = me.hand.find((c) => c.id === selectedHandCardId) || null;
 
+  const handleHandCardClick = (card: CardDefinition) => {
+    if (selectedHandCardId === card.id) {
+      setSelectedHandCardId(null);
+      setLocalHintText(null);
+      return;
+    }
+
+    if (!isMyTurn) {
+      setLocalHintText(`Wait for ${opp.displayName} to finish their turn!`);
+      setInspectedCard(card);
+      return;
+    }
+
+    if (gameState.phase !== 'MAIN_PHASE') {
+      setLocalHintText(`Finish resolving ${gameState.phase} first!`);
+      return;
+    }
+
+    const effCost = getClientEffectiveCost(me, card, opp);
+    if (!canAffordCardWithHarmony(me, card, opp)) {
+      setLocalHintText(
+        `Need ${effCost} Force of Harmony (${card.element}) to play ${card.name}!`
+      );
+      return;
+    }
+
+    setSelectedHandCardId(card.id);
+    setLocalHintText(null);
+  };
+
   const handleAdventureSlotClick = (
     ownerSide: 'SELF' | 'OPPONENT',
     lane: 'left' | 'center' | 'right'
   ) => {
-    if (!isMyTurn) return;
+    if (!isMyTurn) {
+      setLocalHintText(`It's ${opp.displayName}'s turn!`);
+      return;
+    }
 
     if (gameState.phase === 'PENDING_TARGET' && gameState.pendingTarget) {
       const isValid = gameState.pendingTarget.validTargets.some(
@@ -943,11 +984,25 @@ export default function GameBoard({
     if (ownerSide === 'SELF' && gameState.phase === 'MAIN_PHASE' && selectedHandCard) {
       const slot = me.adventureArea[lane];
       const normType = String(selectedHandCard.type || '').toLowerCase();
-      if (normType.includes('character') && slot.character !== null) return;
-      if (normType === 'item' && !canItemAdornCharacter(selectedHandCard, slot.character)) return;
+      if (isDeployableCharacterType(selectedHandCard.type)) {
+        if (slot.character !== null) {
+          setLocalHintText(`${lane.toUpperCase()} lane already has a Character!`);
+          return;
+        }
+        sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane });
+        setSelectedHandCardId(null);
+        return;
+      }
 
-      sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane });
-      setSelectedHandCardId(null);
+      if (normType === 'item') {
+        if (!canItemAdornCharacter(selectedHandCard, slot.character)) {
+          setLocalHintText(`Cannot adorn ${slot.character?.name || 'empty lane'} with ${selectedHandCard.name}!`);
+          return;
+        }
+        sendAction('PLAY_CARD', { cardId: selectedHandCard.id, laneIndex: lane });
+        setSelectedHandCardId(null);
+        return;
+      }
     }
   };
 
@@ -1106,7 +1161,6 @@ export default function GameBoard({
         );
       }
 
-      // Per gameRules.ts: startContactPhase() handles Turn 1 pass automatically or enters Contact Phase
       return (
         <button
           type="button"
@@ -1164,7 +1218,7 @@ export default function GameBoard({
               isMyTurn &&
               gameState.phase === 'MAIN_PHASE' &&
               selectedHandCard &&
-              ((selectedType.includes('character') && slot.character === null) ||
+              ((isDeployableCharacterType(selectedHandCard.type) && slot.character === null) ||
                 (selectedType === 'item' && canItemAdornCharacter(selectedHandCard, slot.character)));
 
             const isTargetable = Boolean(isPendingAbilityTarget || isDeployTarget);
@@ -1294,7 +1348,7 @@ export default function GameBoard({
                   </>
                 ) : (
                   <span className="slot-empty-label">
-                    {isTargetable ? 'Tap to Deploy' : `${laneKey.toUpperCase()} LANE`}
+                    {isTargetable ? 'Click to Deploy' : `${laneKey.toUpperCase()} LANE`}
                   </span>
                 )}
               </div>
@@ -1319,55 +1373,51 @@ export default function GameBoard({
       !player.leaderAbilityUsedThisTurn &&
       hasManeActivatedAbility(player.leader);
 
+    const activeBubbleText =
+      !isOpponent && localHintText
+        ? localHintText
+        : player.speechBubble?.text ||
+          (isOpponent ? 'Watching the board...' : 'Ready for our next move!');
+    const activeBubbleTone = !isOpponent && localHintText ? 'WARNING' : player.speechBubble?.tone || 'INFO';
+
     const maneStoryRow = (
       <div className="board-mane-story-row">
-        {/* Vertical Main Character Card + Speech Bubble */}
-        <div className="board-mane-column">
-          <div
-            className={`side-portrait-zone mane-card-box ${isPlayersTurn ? 'active-mane-glow' : ''}`}
-            onClick={() => {
-              if (inDrawer && player.leader) setInspectedCard(player.leader);
-            }}
-            onContextMenu={(e) => handleContextMenu(e, player.leader)}
-            onTouchStart={() => handleTouchStartInspect(player.leader)}
-            onTouchEnd={handleTouchEndInspect}
-          >
-            {player.leader?.imageUrl ? (
-              <img src={player.leader.imageUrl} alt={player.leader.name} />
-            ) : (
-              <img
-                src={CARD_BACK_URL}
-                alt="Main Character Card Back"
-                className="kayou-card-back-img"
-              />
-            )}
-            {canActivateMane && (
-              <button
-                type="button"
-                className="adventure-tap-btn"
-                title={cleanCardText(player.leader?.effectText)}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  sendAction('ACTIVATE_MANE_ABILITY');
-                }}
-              >
-                ✨ Activate
-              </button>
-            )}
-            <span className="zone-caption">Mane</span>
-          </div>
-
-          <div
-            key={player.speechBubble?.id || `${player.id}-idle`}
-            className={`mane-inline-bubble tone-${player.speechBubble?.tone || 'INFO'}`}
-          >
-            <strong>{player.displayName}:</strong>{' '}
-            {player.speechBubble?.text ||
-              (isOpponent ? 'Watching the board...' : 'Ready for our next move!')}
-          </div>
+        {/* Vertical Main Character Card */}
+        <div
+          className={`side-portrait-zone ${isPlayersTurn ? 'active-mane-glow' : ''}`}
+          onClick={() => {
+            if (inDrawer && player.leader) setInspectedCard(player.leader);
+          }}
+          onContextMenu={(e) => handleContextMenu(e, player.leader)}
+          onTouchStart={() => handleTouchStartInspect(player.leader)}
+          onTouchEnd={handleTouchEndInspect}
+        >
+          {player.leader?.imageUrl ? (
+            <img src={player.leader.imageUrl} alt={player.leader.name} />
+          ) : (
+            <img
+              src={CARD_BACK_URL}
+              alt="Main Character Card Back"
+              className="kayou-card-back-img"
+            />
+          )}
+          {canActivateMane && (
+            <button
+              type="button"
+              className="adventure-tap-btn"
+              title={cleanCardText(player.leader?.effectText)}
+              onClick={(e) => {
+                e.stopPropagation();
+                sendAction('ACTIVATE_MANE_ABILITY');
+              }}
+            >
+              ✨ Mane
+            </button>
+          )}
+          <span className="zone-caption">Main Char</span>
         </div>
 
-        {/* 4 Horizontal Landscape Story Stage Slots */}
+        {/* 4 Horizontal Landscape Story Stage Slots in a single row */}
         <div className="story-four-strip">
           {player.storyStages.map((st) => {
             const isNextSequentialPlan =
@@ -1526,14 +1576,19 @@ export default function GameBoard({
         }`}
       >
         <div className="player-hud-bar">
-          <div>
-            <strong>{isOpponent ? `👑 ${player.displayName}` : `✨ ${player.displayName} (You)`}</strong>
+          <div className="player-hud-left">
+            <strong>{isOpponent ? `👑 ${player.displayName}` : `✨ ${player.displayName}`}</strong>
             {isPlayersTurn && <span className="active-turn-mat-badge">Active</span>}
             {gameState.firstPlayerId === player.id && (
-              <span style={{ marginLeft: '6px', fontSize: '10.5px', color: '#be185d', fontWeight: 900 }}>
-                ★ 1st
-              </span>
+              <span style={{ fontSize: '10px', color: '#be185d', fontWeight: 900 }}>★ 1st</span>
             )}
+            <span
+              key={localHintText && !isOpponent ? localHintText : player.speechBubble?.id || 'idle'}
+              className={`mane-inline-bubble tone-${activeBubbleTone}`}
+              title={activeBubbleText}
+            >
+              💬 {activeBubbleText}
+            </span>
           </div>
           <div className="hud-pills">
             {player.nextCardCostDiscount && (
@@ -1541,7 +1596,7 @@ export default function GameBoard({
                 className="hud-pill"
                 style={{ background: '#fef08a', borderColor: '#f59e0b', color: '#78350f' }}
               >
-                🏷️ -{player.nextCardCostDiscount.amount} Cost
+                🏷️ -{player.nextCardCostDiscount.amount}
               </span>
             )}
             <span className="hud-pill story-pill">📖 {player.storyProgress}/4</span>
@@ -1552,7 +1607,6 @@ export default function GameBoard({
           </div>
         </div>
 
-        {/* Mirrored tabletop arrangement: Opponent has Mane/Story on top, Scenes below; You have Scenes on top, Mane/Story below */}
         {isOpponent ? (
           <>
             {maneStoryRow}
@@ -1623,16 +1677,10 @@ export default function GameBoard({
         </div>
       )}
 
-      {/* Collapsible Action Log & Debug Trace Drawer */}
-      <div className={`action-log-dock ${isOneHandMobile ? 'mobile-log-dock' : ''}`}>
-        {!isOneHandMobile && showLogOnboardingBubble && !isLogOpen && (
-          <div className="action-log-onboarding-bubble">
-            💬 <strong>Tip:</strong> View live card logs &amp; 🐞 Debug Trace here!
-          </div>
-        )}
-
-        {isLogOpen && (
-          <div className="action-log-drawer" style={{ width: '410px', maxHeight: '340px' }}>
+      {/* Collapsible Action Log & Debug Trace Popover */}
+      {isLogOpen && (
+        <div className="action-log-drawer-overlay">
+          <div className="action-log-drawer">
             <div className="action-log-drawer-header">
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button
@@ -1751,24 +1799,8 @@ export default function GameBoard({
               <div ref={logEndRef} />
             </div>
           </div>
-        )}
-
-        {!isOneHandMobile && (
-          <button
-            type="button"
-            className="action-log-toggle-pill"
-            onClick={() => {
-              setIsLogOpen((prev) => !prev);
-              setShowLogOnboardingBubble(false);
-            }}
-          >
-            <span>
-              📜 Log ({actionLogs.length}) • 🐞 ({debugTraces.length})
-            </span>
-            <span>{isLogOpen ? '▼' : '▲'}</span>
-          </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {turnBannerText && gameState.phase !== 'REVEAL_HOLD' && gameState.phase !== 'CLASH_HOLD' && (
         <div className="turn-transition-banner-overlay">
@@ -2551,7 +2583,6 @@ export default function GameBoard({
       {/* ===================================================================== */}
       {isOneHandMobile ? (
         <div className="mobile-arena-shell">
-          {/* Top-Left Opponent Mane Character Card + Speech Bubble & Top-Right Gear */}
           <div className="mobile-mane-header opp">
             <div className="mobile-mane-identity">
               <img
@@ -2639,10 +2670,8 @@ export default function GameBoard({
             </div>
           )}
 
-          {/* Opponent's 3 Vertical Adventure Lanes */}
           {renderLaneStrip(opp, true)}
 
-          {/* Center Turn Timeline + Single Right-Thumb Primary Action Control */}
           <div className={`center-timeline-strip mobile-timeline ${isMyTurn ? 'my-turn' : 'opp-turn'}`}>
             <div className="timeline-left-info">
               <div className="timeline-turn-row">
@@ -2665,10 +2694,8 @@ export default function GameBoard({
             {renderPrimaryActionControl(true)}
           </div>
 
-          {/* Your 3 Vertical Adventure Lanes */}
           {renderLaneStrip(me, false)}
 
-          {/* Bottom-Left Your Mane Character Card + Speech Bubble */}
           <div className="mobile-mane-header self">
             <div className="mobile-mane-identity">
               <img
@@ -2695,14 +2722,17 @@ export default function GameBoard({
                     </button>
                   )}
                 </div>
-                <div className={`mane-inline-bubble mobile-bubble tone-${me.speechBubble?.tone || 'INFO'}`}>
-                  💬 {me.speechBubble?.text || 'Ready!'}
+                <div
+                  className={`mane-inline-bubble mobile-bubble tone-${
+                    localHintText ? 'WARNING' : me.speechBubble?.tone || 'INFO'
+                  }`}
+                >
+                  💬 {localHintText || me.speechBubble?.text || 'Ready!'}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Bottom One-Thumb Fanned Arc Hand */}
           {!isSpectator && (
             <div className="mobile-fanned-hand-dock">
               {me.hand.map((card, idx) => {
@@ -2726,13 +2756,7 @@ export default function GameBoard({
                         : `translateY(${lift}px) rotate(${rot}deg)`,
                       zIndex: isSelected ? 40 : 10 + idx,
                     }}
-                    onClick={() => {
-                      if (!isMyTurn || gameState.phase !== 'MAIN_PHASE' || !canAfford) {
-                        setInspectedCard(card);
-                        return;
-                      }
-                      setSelectedHandCardId(isSelected ? null : card.id);
-                    }}
+                    onClick={() => handleHandCardClick(card)}
                     onContextMenu={(e) => handleContextMenu(e, card)}
                     onTouchStart={() => handleTouchStartInspect(card)}
                     onTouchEnd={handleTouchEndInspect}
@@ -2756,7 +2780,6 @@ export default function GameBoard({
             </div>
           )}
 
-          {/* Slide-Out Left Edge Tab & Drawer ("Boards & Scenes") */}
           <button
             type="button"
             className="boards-drawer-edge-tab"
@@ -2807,13 +2830,13 @@ export default function GameBoard({
         /* DESKTOP 2-COLUMN SINGLE-SCREEN PASTEL TABLETOP (100dvh, NO SCROLL)    */
         /* ===================================================================== */
         <div className="desktop-two-column-tabletop">
-          {/* LEFT COLUMN (~42%): Mirrored Opponent (Top) & Your (Bottom) Story, Scenes, Mane & Decks */}
+          {/* LEFT COLUMN (~44%): Mirrored Opponent (Top) & Your (Bottom) Story, Scenes, Mane & Decks */}
           <div className="desktop-left-boards-col">
             {renderPlayerBoardModule(opp, true, false)}
             {renderPlayerBoardModule(me, false, false)}
           </div>
 
-          {/* RIGHT COLUMN (~58%): 3-Lane Clash Arena, Center Turn Timeline + Single CTA & Hand */}
+          {/* RIGHT COLUMN (~56%): 3-Lane Clash Arena, Center Turn Timeline + Single CTA & Hand */}
           <div className="desktop-right-clash-col">
             {delayedTriggers.length > 0 && (
               <div className="delayed-triggers-strip">
@@ -2873,6 +2896,14 @@ export default function GameBoard({
                   <button
                     type="button"
                     className="utility-mini-btn"
+                    title="Toggle Action Log & Debug Trace"
+                    onClick={() => setIsLogOpen((prev) => !prev)}
+                  >
+                    📜 {actionLogs.length}
+                  </button>
+                  <button
+                    type="button"
+                    className="utility-mini-btn"
                     title="Switch to Mobile One-Hand View"
                     onClick={() => setIsOneHandMobile(true)}
                   >
@@ -2928,11 +2959,7 @@ export default function GameBoard({
                         className={`hand-card-item ${isSelected ? 'selected' : ''} ${
                           !canAfford ? 'unaffordable' : getCardFoilClass(card)
                         }`}
-                        onClick={() => {
-                          if (!isMyTurn || gameState.phase !== 'MAIN_PHASE') return;
-                          if (!canAfford) return;
-                          setSelectedHandCardId(isSelected ? null : card.id);
-                        }}
+                        onClick={() => handleHandCardClick(card)}
                         onContextMenu={(e) => handleContextMenu(e, card)}
                         onTouchStart={() => handleTouchStartInspect(card)}
                         onTouchEnd={handleTouchEndInspect}
