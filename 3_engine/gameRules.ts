@@ -39,6 +39,26 @@ import {
 
 export { calculateLanePowerBreakdown, canPayHarmonyCost, getEffectiveCardCost };
 
+const NON_DEPLOYABLE_CHARACTER_TYPES = new Set([
+  'event',
+  'item',
+  'scene',
+  'story',
+  'plan',
+  'mane',
+  'mane character',
+  'main character',
+  'maincharacter',
+]);
+
+export function isDeployableCharacterCard(card: CardDefinition | null | undefined): boolean {
+  if (!card) return false;
+  const norm = String(card.type || '').trim().toLowerCase();
+  if (NON_DEPLOYABLE_CHARACTER_TYPES.has(norm)) return false;
+  if (norm.includes('mane') || norm.includes('main')) return false;
+  return true;
+}
+
 export function secureShuffle<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -553,7 +573,7 @@ function triggerOnTreatChanged(
   if (!match) return state;
 
   const boost = parseInt(match[1], 10) || 1;
-  let next: KayouGameState = {
+  const next: KayouGameState = {
     ...state,
     players: {
       ...state.players,
@@ -999,7 +1019,7 @@ function buildPendingHandChoiceFromParsed(
     if (!hasEmptyLane || player.retirement.length === 0) return null;
     const validIndices = player.retirement
       .map((c, idx) =>
-        String(c.type || '').toLowerCase().includes('character') &&
+        isDeployableCharacterCard(c) &&
         matchesFilter(c, parsed.requiredNameFilter, undefined, parsed.maxLimit)
           ? idx
           : -1
@@ -1898,7 +1918,6 @@ function retireCharacterWithFarewell(
   const slot = player.adventureArea[lane];
   if (!slot.character) return state;
 
-  // Replacement Shield check (e.g., Soda / Funny Glasses / Pinkie's Tent / Rarity's Tent)
   const shieldItemIdx = slot.items.findIndex((it) => {
     const t = sanitizeCardText(it.effectText);
     if (
@@ -2017,9 +2036,8 @@ export function playCardFromHand(
   }
 
   const effectiveCost = getEffectiveCardCost(player, card, rival);
-  const normalizedType = String(card.type || '').toLowerCase();
+  const normalizedType = String(card.type || '').trim().toLowerCase();
 
-  // Consume nextCardCostDiscount if it applied to this card
   let nextDiscount = player.nextCardCostDiscount || null;
   if (nextDiscount) {
     const typeMatches =
@@ -2028,15 +2046,7 @@ export function playCardFromHand(
     if (typeMatches && nameMatches) nextDiscount = null;
   }
 
-  const isCharacterCard =
-    !['event', 'item', 'scene', 'story', 'plan'].includes(normalizedType) &&
-    !normalizedType.includes('mane') &&
-    !normalizedType.includes('main') &&
-    (normalizedType.includes('character') ||
-      normalizedType.includes('friend') ||
-      normalizedType.includes('pony'));
-
-  if (isCharacterCard) {
+  if (isDeployableCharacterCard(card)) {
     const lane: LaneKey = targetLane || 'left';
     if (player.adventureArea[lane].character !== null) return state;
 
@@ -2187,7 +2197,7 @@ export function playCardFromHand(
     );
   }
 
-  // Event card — supports compound multi-sentence clauses
+  // Event card
   let nextState: KayouGameState = {
     ...state,
     players: {
@@ -3085,7 +3095,6 @@ export function activateCharacterAdventureAbility(
     ? extractTriggerClause(charText, 'Adventure') || charText
     : null;
 
-  // Support Item-granted Adventure abilities (e.g., Today's Homework, Recorder, Candy Bag)
   if (!advClause || parseEffectClause(advClause)?.kind === 'NONE_PASSIVE') {
     const itemGranted = extractItemGrantedAdventureClause(slot);
     if (itemGranted) {
@@ -3845,7 +3854,6 @@ export function resolveBreakthroughChoice(
       revealedCard.name
     );
 
-    // Trigger reactive "Adventure: When this Character intervenes the Plan, ..." effects (e.g. SD01E-U01)
     const interveningChar = attacker.adventureArea[activeLane]?.character;
     if (interveningChar) {
       const interveneAdvClause = extractTriggerClause(interveningChar.effectText, 'Adventure');
@@ -4062,7 +4070,6 @@ export function endTurn(state: KayouGameState, playerId: '0' | '1'): KayouGameSt
     phase: 'END_PHASE',
   };
 
-  // Auto-enqueue any continuous/board-state End-of-Turn Adventure triggers from Characters currently in play
   for (const checkPid of ['0', '1'] as const) {
     const checkPlayer = workingState.players[checkPid];
     for (const laneKey of ['left', 'center', 'right'] as const) {
