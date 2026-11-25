@@ -4,6 +4,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   background:
     repeating-linear-gradient(
       90deg,
@@ -13,7 +14,7 @@
       transparent 16px
     ),
     linear-gradient(180deg, #5c3317 0%, #3e200d 48%, #291306 100%);
-  padding: 8px 16px;
+  padding: 8px 14px;
   border-top: 3px solid #fde047;
   border-bottom: 4px solid #d97706;
   box-shadow:
@@ -27,16 +28,16 @@
   z-index: 1000;
   position: sticky;
   top: 0;
-  gap: 10px;
+  gap: 8px;
 }
 
 /* Stylized Golden Emblem Logo */
 .nav-brand {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   cursor: pointer;
-  padding: 5px 12px;
+  padding: 5px 11px;
   border-radius: 999px;
   background: radial-gradient(circle at 50% 0%, rgba(147, 51, 234, 0.45), rgba(30, 12, 46, 0.78));
   border: 2px solid #ffd700;
@@ -50,22 +51,22 @@
 }
 
 .nav-brand:hover {
-  transform: scale(1.04);
+  transform: scale(1.03);
   box-shadow:
     0 6px 18px rgba(0, 0, 0, 0.6),
     0 0 26px rgba(253, 224, 71, 0.65);
 }
 
 .nav-brand-crest {
-  font-size: 18px;
+  font-size: 16px;
   filter: drop-shadow(0 2px 6px rgba(253, 224, 71, 0.8));
 }
 
 .nav-brand-title {
   font-family: 'Cinzel Decorative', serif;
   font-weight: 900;
-  font-size: 16px;
-  letter-spacing: 0.6px;
+  font-size: 14px;
+  letter-spacing: 0.4px;
   background: linear-gradient(180deg, #fffbeb 0%, #fde047 45%, #f59e0b 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -75,19 +76,19 @@
 /* Centered Uniform Carved Scroll / Plaque Tabs */
 .nav-tabs-centered-beam {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto;
   justify-content: center;
   align-items: center;
-  gap: 6px;
-  flex-wrap: nowrap;
+  gap: 5px;
+  flex-wrap: wrap;
   min-width: 0;
 }
 
 .nav-tab-btn {
   width: auto;
-  min-width: 92px;
-  height: 36px;
-  padding: 0 10px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -95,12 +96,13 @@
   background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 55%, #fde68a 100%);
   color: #451a03;
   border: 2px solid #d97706;
-  border-radius: 11px;
+  border-radius: 10px;
   cursor: pointer;
   font-family: 'Nunito', sans-serif;
   font-weight: 900;
-  font-size: 12px;
+  font-size: 11.5px;
   white-space: nowrap;
+  flex-shrink: 0;
   box-shadow:
     0 3px 8px rgba(0, 0, 0, 0.45),
     inset 0 1px 2px rgba(255, 255, 255, 0.85);
@@ -140,19 +142,21 @@
 .nav-auth-container {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .nav-bug-report-btn {
   background: rgba(244, 63, 94, 0.22);
   color: #fecdd3;
   border: 2px solid #fb7185;
-  padding: 5px 11px;
+  padding: 5px 10px;
   border-radius: 999px;
   font-family: 'Nunito', sans-serif;
   font-weight: 900;
-  font-size: 11.5px;
+  font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
   transition: transform 0.18s ease, background 0.18s ease;
@@ -167,17 +171,18 @@
 .user-profile-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .points-badge {
   background: linear-gradient(135deg, #fde047 0%, #f59e0b 100%);
   color: #451a03;
   border: 2px solid #fffbeb;
-  padding: 5px 11px;
+  padding: 5px 10px;
   border-radius: 999px;
   font-weight: 900;
-  font-size: 12px;
+  font-size: 11.5px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
@@ -188,16 +193,16 @@
 .user-profile-widget {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: rgba(24, 10, 38, 0.85);
-  padding: 4px 10px;
+  padding: 4px 9px;
   border-radius: 999px;
   border: 2px solid #f472b6;
 }
 
 .user-welcome {
   font-weight: 800;
-  font-size: 11.5px;
+  font-size: 11px;
   color: #fce7f3;
   white-space: nowrap;
 }
@@ -206,11 +211,11 @@
   background: linear-gradient(135deg, #ff4d94, #a21caf);
   color: #fff;
   border: 2px solid #ffd700;
-  padding: 6px 13px;
+  padding: 5px 11px;
   border-radius: 999px;
   font-family: 'Nunito', sans-serif;
   font-weight: 900;
-  font-size: 12px;
+  font-size: 11.5px;
   cursor: pointer;
   transition: transform 0.18s ease, filter 0.18s ease;
   white-space: nowrap;
@@ -224,8 +229,8 @@
 .logout-btn {
   background: #4b5563;
   border-color: #9ca3af;
-  padding: 4px 9px;
-  font-size: 11px;
+  padding: 4px 8px;
+  font-size: 10.5px;
 }
 
 /* Global Bug Report Modal */
@@ -318,21 +323,20 @@
   cursor: pointer;
 }
 
-@media (max-width: 1380px) {
+@media (max-width: 1520px) {
   .mlp-navbar {
-    flex-wrap: wrap;
-    justify-content: center;
-    padding: 10px 14px;
+    justify-content: space-between;
+    padding: 8px 12px;
   }
   .nav-tabs-centered-beam {
     order: 3;
     flex-basis: 100%;
-    flex-wrap: wrap;
+    justify-content: center;
     margin-top: 4px;
   }
   .nav-tab-btn {
-    min-width: 96px;
-    height: 34px;
-    font-size: 11.5px;
+    height: 32px;
+    padding: 0 8px;
+    font-size: 11px;
   }
 }
