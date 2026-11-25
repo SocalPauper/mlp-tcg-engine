@@ -46,6 +46,45 @@ interface BugReportItem {
   updated_at?: string;
 }
 
+interface SiteStatsData {
+  newAccountsToday: number;
+  gamesCreated: number;
+  gamesPlayedToday: number;
+  ponyPointsSpent: number;
+  totalWebsiteVisits: number;
+  totalRegisteredUsers: number;
+  openBugReports: number;
+  cachedAt?: string;
+  refreshIntervalLabel?: string;
+}
+
+interface GlobalAnnouncementItem {
+  id: string | number;
+  message: string;
+  updatedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface ChatMessageItem {
+  id: string | number;
+  channel: 'HUB' | 'FAN_PAGE' | string;
+  authorName: string;
+  authorId?: string;
+  content: string;
+  isCensored?: boolean;
+  createdAt?: string;
+}
+
+type AdminTabKey =
+  | 'STATS'
+  | 'ANNOUNCEMENTS'
+  | 'CHAT_MOD'
+  | 'BUGS'
+  | 'USERS'
+  | 'THEME_BINDER'
+  | 'AUDIT';
+
 const PRIORITY_COLORS: Record<string, string> = {
   CRITICAL: '#ef4444',
   HIGH: '#f97316',
@@ -59,15 +98,51 @@ const STATUS_COLORS: Record<string, string> = {
   RESOLVED: '#10b981',
 };
 
+const ADMIN_TABS: { key: AdminTabKey; label: string }[] = [
+  { key: 'STATS', label: '📊 Website Stats' },
+  { key: 'ANNOUNCEMENTS', label: '📢 Announcements' },
+  { key: 'CHAT_MOD', label: '💬 Chat Moderation' },
+  { key: 'BUGS', label: '🐞 Bug Tracker' },
+  { key: 'USERS', label: '👥 Users & Moderation' },
+  { key: 'THEME_BINDER', label: '🎨 Theme & Binder' },
+  { key: 'AUDIT', label: '🔍 Audit Decks' },
+];
+
 export default function AdminPanel() {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<AdminTabKey>('STATS');
+
+  // Website Statistics State (cached server-side / refreshed periodically)
+  const [siteStats, setSiteStats] = useState<SiteStatsData>({
+    newAccountsToday: 0,
+    gamesCreated: 0,
+    gamesPlayedToday: 0,
+    ponyPointsSpent: 0,
+    totalWebsiteVisits: 0,
+    totalRegisteredUsers: 0,
+    openBugReports: 0,
+    refreshIntervalLabel: 'Updates hourly (cached)',
+  });
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  // Global Announcements State (Create / Edit / Delete)
   const [announcement, setAnnouncement] = useState('');
+  const [announcementsList, setAnnouncementsList] = useState<GlobalAnnouncementItem[]>([]);
+  const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | number | null>(null);
+  const [editingAnnouncementText, setEditingAnnouncementText] = useState('');
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(false);
+
+  // Chat Moderation State (Main Hub & Fan Page)
+  const [chatChannelFilter, setChatChannelFilter] = useState<'ALL' | 'HUB' | 'FAN_PAGE'>('ALL');
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessageItem[]>([]);
+  const [loadingChat, setLoadingChat] = useState(false);
+
+  // Theme & Binder States
   const [selectedBgTab, setSelectedBgTab] = useState<string>('hub');
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [opacity, setOpacity] = useState<number>(1.0);
   const [savingOpacity, setSavingOpacity] = useState(false);
-
-  // Collection Binder Cover Title state
   const [binderTitle, setBinderTitle] = useState<string>('Equestria Royal Archive');
   const [savingBinderTitle, setSavingBinderTitle] = useState(false);
 
@@ -114,21 +189,242 @@ export default function AdminPanel() {
           if (data.settings.binder_cover_title) {
             setBinderTitle(data.settings.binder_cover_title);
           }
+          if (data.settings.site_announcement && announcementsList.length === 0) {
+            setAnnouncementsList([
+              {
+                id: 'current-banner',
+                message: data.settings.site_announcement,
+                updatedBy: 'Admin',
+              },
+            ]);
+          }
         }
       })
       .catch((err) => console.error('Failed to load admin settings:', err));
 
+    fetchSiteStats(false);
+    fetchAnnouncements();
+    fetchChatMessages('ALL');
     fetchUsers('');
     fetchCards();
     fetchBugReports();
   }, []);
 
-  const fetchUsers = async (query: string) => {
+  const authHeaders = (): Record<string, string> => {
     const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const fetchSiteStats = async (forceRefresh = false) => {
+    setLoadingStats(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/users?search=${encodeURIComponent(query)}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const url = `${API_BASE_URL}/api/admin/stats${forceRefresh ? '?refresh=1' : ''}`;
+      const res = await fetch(url, { headers: authHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success && data.stats) {
+        setSiteStats((prev) => ({ ...prev, ...data.stats }));
+      }
+    } catch (err) {
+      console.error('Failed to load website statistics:', err);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  const fetchAnnouncements = async () => {
+    setLoadingAnnouncements(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/announcements`, {
+        headers: authHeaders(),
       });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success && Array.isArray(data.announcements)) {
+        setAnnouncementsList(data.announcements);
+      }
+    } catch (err) {
+      console.error('Failed to fetch announcements:', err);
+    } finally {
+      setLoadingAnnouncements(false);
+    }
+  };
+
+  const postAnnouncement = async () => {
+    const trimmed = announcement.trim();
+    if (!trimmed) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/announcements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          message: trimmed,
+          updatedBy: user?.username || 'admin',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.announcement) {
+          setAnnouncementsList((prev) => [data.announcement, ...prev]);
+        } else {
+          await fetchAnnouncements();
+        }
+        setAnnouncement('');
+        alert('Global Announcement published!');
+        return;
+      }
+    } catch {
+      // Fallback to media settings endpoint if dedicated route is not yet mounted
+    }
+
+    await fetch(`${API_BASE_URL}/api/media/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: 'site_announcement',
+        value: trimmed,
+        updatedBy: user?.username || 'admin',
+      }),
+    });
+    setAnnouncementsList((prev) => [
+      { id: Date.now(), message: trimmed, updatedBy: user?.username || 'admin', createdAt: new Date().toISOString() },
+      ...prev,
+    ]);
+    setAnnouncement('');
+    alert(`Global Announcement Published: "${trimmed}"`);
+  };
+
+  const handleSaveEditedAnnouncement = async (id: string | number) => {
+    const trimmed = editingAnnouncementText.trim();
+    if (!trimmed) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/announcements/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          message: trimmed,
+          updatedBy: user?.username || 'admin',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAnnouncementsList((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? data.announcement || { ...item, message: trimmed, updatedAt: new Date().toISOString() }
+              : item
+          )
+        );
+        setEditingAnnouncementId(null);
+        setEditingAnnouncementText('');
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to update announcement:', err);
+    }
+
+    setAnnouncementsList((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, message: trimmed, updatedAt: new Date().toISOString() } : item
+      )
+    );
+    setEditingAnnouncementId(null);
+    setEditingAnnouncementText('');
+  };
+
+  const handleDeleteAnnouncement = async (id: string | number) => {
+    if (!window.confirm('Delete this global announcement?')) return;
+    try {
+      await fetch(`${API_BASE_URL}/api/admin/announcements/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+    } catch (err) {
+      console.error('Failed to delete announcement:', err);
+    }
+    setAnnouncementsList((prev) => prev.filter((item) => item.id !== id));
+    if (editingAnnouncementId === id) {
+      setEditingAnnouncementId(null);
+      setEditingAnnouncementText('');
+    }
+  };
+
+  const fetchChatMessages = async (channel: 'ALL' | 'HUB' | 'FAN_PAGE') => {
+    setLoadingChat(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/chat-messages?channel=${encodeURIComponent(channel)}`,
+        { headers: authHeaders() }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success && Array.isArray(data.messages)) {
+        setChatMessages(data.messages);
+      }
+    } catch (err) {
+      console.error('Failed to fetch chat messages:', err);
+    } finally {
+      setLoadingChat(false);
+    }
+  };
+
+  const handleCensorChatMessage = async (msgId: string | number) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/chat-messages/${msgId}/censor`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
+        body: JSON.stringify({ replacement: '[Message censored by moderator]' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === msgId
+              ? data.message || { ...m, content: '[Message censored by moderator]', isCensored: true }
+              : m
+          )
+        );
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to censor message:', err);
+    }
+
+    setChatMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId ? { ...m, content: '[Message censored by moderator]', isCensored: true } : m
+      )
+    );
+  };
+
+  const handleDeleteChatMessage = async (msgId: string | number) => {
+    if (!window.confirm('Permanently delete this chat message?')) return;
+    try {
+      await fetch(`${API_BASE_URL}/api/admin/chat-messages/${msgId}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+    } catch (err) {
+      console.error('Failed to delete message:', err);
+    }
+    setChatMessages((prev) => prev.filter((m) => m.id !== msgId));
+  };
+
+  const fetchUsers = async (query: string) => {
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/users?search=${encodeURIComponent(query)}`,
+        { headers: authHeaders() }
+      );
       const data = await res.json();
       if (data.success) {
         setUsersList(data.users || []);
@@ -154,9 +450,8 @@ export default function AdminPanel() {
   const fetchBugReports = async () => {
     setLoadingBugs(true);
     try {
-      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE_URL}/api/admin/bug-reports`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: authHeaders(),
       });
       const data = await res.json();
       if (data.success && Array.isArray(data.reports)) {
@@ -174,12 +469,11 @@ export default function AdminPanel() {
     updates: { status?: string; priority?: string; newComment?: string }
   ) => {
     try {
-      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE_URL}/api/admin/bug-reports/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...authHeaders(),
         },
         body: JSON.stringify(updates),
       });
@@ -202,12 +496,11 @@ export default function AdminPanel() {
     e.preventDefault();
     if (!newBugSummary.trim()) return;
     try {
-      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE_URL}/api/admin/bug-reports`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...authHeaders(),
         },
         body: JSON.stringify({
           summary: newBugSummary.trim(),
@@ -233,10 +526,9 @@ export default function AdminPanel() {
   const handleDeleteBug = async (id: number) => {
     if (!window.confirm(`Permanently delete Bug Report #${id}?`)) return;
     try {
-      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE_URL}/api/admin/bug-reports/${id}`, {
         method: 'DELETE',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: authHeaders(),
       });
       const data = await res.json();
       if (data.success) {
@@ -309,33 +601,17 @@ export default function AdminPanel() {
     }
   };
 
-  const postAnnouncement = async () => {
-    if (!announcement.trim()) return;
-    await fetch(`${API_BASE_URL}/api/media/settings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        key: 'site_announcement',
-        value: announcement.trim(),
-        updatedBy: user?.username || 'admin',
-      }),
-    });
-    alert(`Global Announcement Published: "${announcement}"`);
-    setAnnouncement('');
-  };
-
   const handleAwardPointsSubmit = async () => {
     if (!selectedUser) return;
     const pts = parseInt(awardPointsInput, 10);
     if (isNaN(pts)) return alert('Please enter a valid number of points.');
 
-    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/admin/users/award-points`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...authHeaders(),
         },
         body: JSON.stringify({ userId: selectedUser.id, points: pts }),
       });
@@ -356,13 +632,12 @@ export default function AdminPanel() {
   const handleGiftCardSubmit = async () => {
     if (!selectedUser || !selectedCardId) return;
 
-    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/admin/users/gift-card`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...authHeaders(),
         },
         body: JSON.stringify({ userId: selectedUser.id, cardId: selectedCardId }),
       });
@@ -389,13 +664,12 @@ export default function AdminPanel() {
       return;
     }
 
-    const token = localStorage.getItem('token');
     try {
       const res = await fetch(`${API_BASE_URL}/api/admin/users/moderate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...authHeaders(),
         },
         body: JSON.stringify({ userId: selectedUser.id, action: actionType }),
       });
@@ -424,6 +698,16 @@ export default function AdminPanel() {
     return statusOk && priorityOk;
   });
 
+  const filteredChatMessages = chatMessages.filter((m) => {
+    const channelOk = chatChannelFilter === 'ALL' || m.channel === chatChannelFilter;
+    const q = chatSearchQuery.trim().toLowerCase();
+    const searchOk =
+      !q ||
+      String(m.authorName || '').toLowerCase().includes(q) ||
+      String(m.content || '').toLowerCase().includes(q);
+    return channelOk && searchOk;
+  });
+
   const currentTabBgUrl = settings[`bg_${selectedBgTab}`] || '';
   const currentBinderCoverUrl = settings['bg_binder_cover'] || '';
 
@@ -432,85 +716,326 @@ export default function AdminPanel() {
       className="admin-container"
       style={settings['bg_admin'] ? { backgroundImage: `url(${settings['bg_admin']})` } : undefined}
     >
-      <h1>🛡️ Admin Control Panel</h1>
+      <div className="admin-header-row">
+        <h1>🛡️ Admin Control Panel</h1>
+        <span className="admin-role-pill">
+          Logged in as <strong>{user?.username || 'Admin'}</strong>
+        </span>
+      </div>
 
-      <div className="admin-grid">
-        {/* ================================================================= */}
-        {/* ALPHA BUG REPORTS, DIAGNOSTIC CLUES & PROGRESS TRACKER            */}
-        {/* ================================================================= */}
-        <div className="panel-box" style={{ gridColumn: '1 / -1' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '10px',
-            }}
+      {/* SELECTABLE MODULE TABS */}
+      <nav className="admin-tab-bar" aria-label="Admin Modules">
+        {ADMIN_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            className={`admin-tab-btn ${activeTab === t.key ? 'active' : ''}`}
+            onClick={() => setActiveTab(t.key)}
           >
+            {t.label}
+            {t.key === 'BUGS' && bugReports.filter((b) => b.status === 'OPEN').length > 0 && (
+              <span className="admin-tab-badge">
+                {bugReports.filter((b) => b.status === 'OPEN').length}
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {/* ===================================================================== */}
+      {/* TAB 1: WEBSITE STATISTICS (LIVE CACHED METRICS)                       */}
+      {/* ===================================================================== */}
+      {activeTab === 'STATS' && (
+        <div className="panel-box">
+          <div className="admin-panel-topbar">
             <div>
-              <h3 style={{ margin: '0 0 4px 0' }}>
-                🐞 Alpha Bug Reports &amp; Progress Tracker ({filteredBugs.length})
-              </h3>
-              <p style={{ fontSize: '13px', margin: 0, color: '#d8b4fe' }}>
+              <h3>📊 Website Statistics</h3>
+              <p className="admin-subtext">
+                {siteStats.refreshIntervalLabel || 'Cached snapshot updated hourly to minimize DB load'}
+                {siteStats.cachedAt ? ` • Last updated: ${new Date(siteStats.cachedAt).toLocaleString()}` : ''}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="admin-ghost-btn"
+              onClick={() => fetchSiteStats(true)}
+              disabled={loadingStats}
+            >
+              {loadingStats ? 'Refreshing...' : '🔄 Refresh Now'}
+            </button>
+          </div>
+
+          <div className="admin-stats-grid">
+            <div className="admin-stat-card">
+              <span className="admin-stat-label">New Accounts Today</span>
+              <strong className="admin-stat-value">{siteStats.newAccountsToday}</strong>
+              <span className="admin-stat-meta">Total Users: {siteStats.totalRegisteredUsers}</span>
+            </div>
+
+            <div className="admin-stat-card">
+              <span className="admin-stat-label">Games Created / Played</span>
+              <strong className="admin-stat-value">{siteStats.gamesCreated}</strong>
+              <span className="admin-stat-meta">Played Today: {siteStats.gamesPlayedToday}</span>
+            </div>
+
+            <div className="admin-stat-card">
+              <span className="admin-stat-label">Pony Points Spent</span>
+              <strong className="admin-stat-value">🪙 {siteStats.ponyPointsSpent}</strong>
+              <span className="admin-stat-meta">Shop &amp; unlock debits</span>
+            </div>
+
+            <div className="admin-stat-card">
+              <span className="admin-stat-label">Total Website Visits</span>
+              <strong className="admin-stat-value">{siteStats.totalWebsiteVisits}</strong>
+              <span className="admin-stat-meta">Open Bugs: {siteStats.openBugReports}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* TAB 2: GLOBAL ANNOUNCEMENTS (PUBLISH, EDIT & DELETE)                  */}
+      {/* ===================================================================== */}
+      {activeTab === 'ANNOUNCEMENTS' && (
+        <div className="panel-box">
+          <div className="admin-panel-topbar">
+            <div>
+              <h3>📢 Post &amp; Manage Global Announcements</h3>
+              <p className="admin-subtext">
+                Publish site-wide banners, edit existing announcements to fix typos, or delete outdated notices.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="admin-ghost-btn"
+              onClick={fetchAnnouncements}
+              disabled={loadingAnnouncements}
+            >
+              {loadingAnnouncements ? 'Refreshing...' : '🔄 Refresh'}
+            </button>
+          </div>
+
+          <div className="announcement-composer-row">
+            <textarea
+              rows={2}
+              placeholder="Type a new global announcement broadcast for all users..."
+              value={announcement}
+              onChange={(e) => setAnnouncement(e.target.value)}
+            />
+            <button type="button" onClick={postAnnouncement} className="mlp-btn announcement-publish-btn">
+              Publish Announcement
+            </button>
+          </div>
+
+          <div className="admin-list-stack">
+            {announcementsList.length === 0 ? (
+              <div className="admin-empty-state">No global announcements posted yet.</div>
+            ) : (
+              announcementsList.map((item) => {
+                const isEditing = editingAnnouncementId === item.id;
+                return (
+                  <div key={item.id} className="admin-list-card">
+                    {isEditing ? (
+                      <div className="announcement-edit-box">
+                        <textarea
+                          rows={2}
+                          value={editingAnnouncementText}
+                          onChange={(e) => setEditingAnnouncementText(e.target.value)}
+                        />
+                        <div className="mod-buttons">
+                          <button
+                            type="button"
+                            className="admin-action-btn save"
+                            onClick={() => handleSaveEditedAnnouncement(item.id)}
+                          >
+                            💾 Save Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-action-btn cancel"
+                            onClick={() => {
+                              setEditingAnnouncementId(null);
+                              setEditingAnnouncementText('');
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="admin-list-card-row">
+                        <div className="admin-list-card-body">
+                          <div className="admin-list-message">{item.message}</div>
+                          <div className="admin-list-meta">
+                            By <strong>{item.updatedBy || 'Admin'}</strong>
+                            {item.updatedAt
+                              ? ` • Edited ${new Date(item.updatedAt).toLocaleString()}`
+                              : item.createdAt
+                              ? ` • Posted ${new Date(item.createdAt).toLocaleString()}`
+                              : ''}
+                          </div>
+                        </div>
+                        <div className="mod-buttons">
+                          <button
+                            type="button"
+                            className="admin-action-btn edit"
+                            onClick={() => {
+                              setEditingAnnouncementId(item.id);
+                              setEditingAnnouncementText(item.message);
+                            }}
+                          >
+                            ✏️ Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-action-btn danger"
+                            onClick={() => handleDeleteAnnouncement(item.id)}
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* TAB 3: MAIN HUB & FAN PAGE CHAT MODERATION (CENSOR & DELETE)          */}
+      {/* ===================================================================== */}
+      {activeTab === 'CHAT_MOD' && (
+        <div className="panel-box">
+          <div className="admin-panel-topbar">
+            <div>
+              <h3>💬 Main Hub &amp; Fan Page Chat Moderation</h3>
+              <p className="admin-subtext">
+                Censor inappropriate text or permanently delete messages across the Main Hub and Fan Page chats.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="admin-ghost-btn"
+              onClick={() => fetchChatMessages(chatChannelFilter)}
+              disabled={loadingChat}
+            >
+              {loadingChat ? 'Refreshing...' : '🔄 Refresh'}
+            </button>
+          </div>
+
+          <div className="admin-filter-row">
+            <select
+              value={chatChannelFilter}
+              onChange={(e) => {
+                const next = e.target.value as 'ALL' | 'HUB' | 'FAN_PAGE';
+                setChatChannelFilter(next);
+                fetchChatMessages(next);
+              }}
+              style={{ maxWidth: '210px' }}
+            >
+              <option value="ALL">All Channels (Hub &amp; Fan Page)</option>
+              <option value="HUB">🏠 Main Hub Chat</option>
+              <option value="FAN_PAGE">🌟 Fan Page Chat</option>
+            </select>
+
+            <input
+              type="text"
+              placeholder="Filter by username or message text..."
+              value={chatSearchQuery}
+              onChange={(e) => setChatSearchQuery(e.target.value)}
+              style={{ maxWidth: '340px' }}
+            />
+          </div>
+
+          <div className="admin-list-stack">
+            {filteredChatMessages.length === 0 ? (
+              <div className="admin-empty-state">No chat messages match the current filter.</div>
+            ) : (
+              filteredChatMessages.map((msg) => (
+                <div key={msg.id} className="admin-list-card">
+                  <div className="admin-list-card-row">
+                    <div className="admin-list-card-body">
+                      <div className="chat-msg-header">
+                        <span className={`chat-channel-tag ch-${msg.channel}`}>
+                          {msg.channel === 'FAN_PAGE' ? '🌟 Fan Page' : '🏠 Main Hub'}
+                        </span>
+                        <strong>{msg.authorName}</strong>
+                        {msg.isCensored && <span className="chat-censored-pill">CENSORED</span>}
+                        {msg.createdAt && (
+                          <span className="admin-list-meta">
+                            • {new Date(msg.createdAt).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                      <div className={`admin-list-message ${msg.isCensored ? 'is-censored' : ''}`}>
+                        {msg.content}
+                      </div>
+                    </div>
+
+                    <div className="mod-buttons">
+                      <button
+                        type="button"
+                        className="admin-action-btn censor"
+                        disabled={Boolean(msg.isCensored)}
+                        onClick={() => handleCensorChatMessage(msg.id)}
+                      >
+                        🚫 Censor
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-action-btn danger"
+                        onClick={() => handleDeleteChatMessage(msg.id)}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* TAB 4: ALPHA BUG REPORTS & PROGRESS TRACKER                           */}
+      {/* ===================================================================== */}
+      {activeTab === 'BUGS' && (
+        <div className="panel-box">
+          <div className="admin-panel-topbar">
+            <div>
+              <h3>🐞 Alpha Bug Reports &amp; Progress Tracker ({filteredBugs.length})</h3>
+              <p className="admin-subtext">
                 Triage player bug reports, inspect auto-captured engine clues, set priority, and log progress notes.
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div className="mod-buttons">
               <button
                 type="button"
+                className="admin-action-btn edit"
                 onClick={() => setShowNewBugForm((prev) => !prev)}
-                style={{
-                  background: 'linear-gradient(135deg, #ec4899, #9333ea)',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '8px 14px',
-                  borderRadius: '10px',
-                  fontWeight: 900,
-                  cursor: 'pointer',
-                }}
               >
                 {showNewBugForm ? '✕ Close Form' : '+ Log New Bug'}
               </button>
               <button
                 type="button"
+                className="admin-ghost-btn"
                 onClick={fetchBugReports}
                 disabled={loadingBugs}
-                style={{
-                  background: 'rgba(255,255,255,0.12)',
-                  border: '1px solid #c084fc',
-                  color: '#fde047',
-                  padding: '8px 14px',
-                  borderRadius: '10px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                }}
               >
                 {loadingBugs ? 'Refreshing...' : '🔄 Refresh'}
               </button>
             </div>
           </div>
 
-          {/* Manual Bug Creation Form */}
           {showNewBugForm && (
-            <form
-              onSubmit={handleCreateManualBug}
-              style={{
-                background: 'rgba(24, 8, 38, 0.85)',
-                border: '2px solid #f472b6',
-                borderRadius: '12px',
-                padding: '14px',
-                marginTop: '10px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-              }}
-            >
-              <strong style={{ color: '#fde047', fontSize: '14px' }}>
-                ➕ Add New Bug / Alpha Task
-              </strong>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <form onSubmit={handleCreateManualBug} className="admin-subform-box">
+              <strong style={{ color: '#fde047', fontSize: '14px' }}>➕ Add New Bug / Alpha Task</strong>
+              <div className="admin-filter-row">
                 <select
                   value={newBugCategory}
                   onChange={(e) => setNewBugCategory(e.target.value)}
@@ -552,7 +1077,7 @@ export default function AdminPanel() {
                 value={newBugNote}
                 onChange={(e) => setNewBugNote(e.target.value)}
               />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button type="submit" className="mlp-btn">
                   Save Bug Entry 💾
                 </button>
@@ -560,8 +1085,7 @@ export default function AdminPanel() {
             </form>
           )}
 
-          {/* Filter Bar */}
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '8px' }}>
+          <div className="admin-filter-row">
             <select
               value={bugStatusFilter}
               onChange={(e) => setBugStatusFilter(e.target.value)}
@@ -586,22 +1110,9 @@ export default function AdminPanel() {
             </select>
           </div>
 
-          {/* Bug List */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              marginTop: '10px',
-              maxHeight: '540px',
-              overflowY: 'auto',
-              paddingRight: '4px',
-            }}
-          >
+          <div className="admin-list-stack">
             {filteredBugs.length === 0 ? (
-              <div style={{ padding: '24px', textAlign: 'center', color: '#c084fc' }}>
-                No bug reports match the selected filters.
-              </div>
+              <div className="admin-empty-state">No bug reports match the selected filters.</div>
             ) : (
               filteredBugs.map((bug) => {
                 const prio = bug.priority || 'MEDIUM';
@@ -611,88 +1122,42 @@ export default function AdminPanel() {
                 return (
                   <div
                     key={bug.id}
-                    style={{
-                      background: 'rgba(18, 6, 30, 0.85)',
-                      border: `1.5px solid ${PRIORITY_COLORS[prio] || '#a855f7'}`,
-                      borderRadius: '12px',
-                      padding: '14px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '10px',
-                    }}
+                    className="admin-list-card"
+                    style={{ borderColor: PRIORITY_COLORS[prio] || '#a855f7' }}
                   >
-                    {/* Header Row */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        flexWrap: 'wrap',
-                        gap: '8px',
-                      }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            flexWrap: 'wrap',
-                          }}
-                        >
+                    <div className="admin-list-card-row">
+                      <div className="admin-list-card-body">
+                        <div className="chat-msg-header">
                           <strong style={{ color: '#fde047', fontSize: '15px' }}>#{bug.id}</strong>
                           <span
-                            style={{
-                              background: PRIORITY_COLORS[prio] || '#eab308',
-                              color: '#111827',
-                              fontWeight: 900,
-                              fontSize: '10.5px',
-                              padding: '2px 8px',
-                              borderRadius: '999px',
-                            }}
+                            className="bug-badge"
+                            style={{ background: PRIORITY_COLORS[prio] || '#eab308', color: '#111827' }}
                           >
                             {prio}
                           </span>
                           <span
-                            style={{
-                              background: STATUS_COLORS[bug.status] || '#f43f5e',
-                              color: '#fff',
-                              fontWeight: 900,
-                              fontSize: '10.5px',
-                              padding: '2px 8px',
-                              borderRadius: '999px',
-                            }}
+                            className="bug-badge"
+                            style={{ background: STATUS_COLORS[bug.status] || '#f43f5e', color: '#fff' }}
                           >
                             {bug.status}
                           </span>
-                          <span style={{ fontSize: '12px', color: '#cbd5e1' }}>
+                          <span className="admin-list-meta">
                             by <strong>{bug.reporter_name}</strong> • {bug.category}
                             {bug.room_code ? ` • Room: ${bug.room_code}` : ''}
                             {bug.seat ? ` (Seat ${bug.seat})` : ''}
                           </span>
                         </div>
-                        <div style={{ fontSize: '14px', color: '#fff', fontWeight: 700 }}>
-                          {bug.summary}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                        <div className="admin-list-message">{bug.summary}</div>
+                        <div className="admin-list-meta">
                           Reported: {new Date(bug.created_at).toLocaleString()}
                         </div>
                       </div>
 
-                      {/* Controls */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: '6px',
-                          alignItems: 'center',
-                          flexWrap: 'wrap',
-                        }}
-                      >
+                      <div className="mod-buttons">
                         <select
                           value={prio}
                           onChange={(e) => handleUpdateBug(bug.id, { priority: e.target.value })}
-                          title="Set Priority"
-                          style={{ padding: '4px 8px', fontSize: '11.5px' }}
+                          style={{ width: 'auto', padding: '4px 8px', fontSize: '11.5px' }}
                         >
                           <option value="CRITICAL">Critical</option>
                           <option value="HIGH">High</option>
@@ -703,8 +1168,7 @@ export default function AdminPanel() {
                         <select
                           value={bug.status}
                           onChange={(e) => handleUpdateBug(bug.id, { status: e.target.value })}
-                          title="Set Status"
-                          style={{ padding: '4px 8px', fontSize: '11.5px' }}
+                          style={{ width: 'auto', padding: '4px 8px', fontSize: '11.5px' }}
                         >
                           <option value="OPEN">OPEN</option>
                           <option value="IN_PROGRESS">IN_PROGRESS</option>
@@ -714,76 +1178,37 @@ export default function AdminPanel() {
                         {(bug.diagnostic_clues || bug.board_snapshot) && (
                           <button
                             type="button"
+                            className="admin-action-btn inspect"
                             onClick={() => setInspectedBug(bug)}
-                            style={{
-                              background: '#0284c7',
-                              color: '#fff',
-                              border: 'none',
-                              padding: '5px 10px',
-                              borderRadius: '8px',
-                              fontSize: '11.5px',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                            }}
                           >
-                            🔍 Clues &amp; Snapshot
+                            🔍 Clues
                           </button>
                         )}
 
                         <button
                           type="button"
+                          className="admin-ghost-btn"
+                          style={{ padding: '5px 9px', fontSize: '11.5px' }}
                           onClick={() => handleDownloadBugJson(bug)}
-                          style={{
-                            background: 'rgba(255,255,255,0.12)',
-                            color: '#fde047',
-                            border: '1px solid rgba(253,224,71,0.4)',
-                            padding: '5px 9px',
-                            borderRadius: '8px',
-                            fontSize: '11.5px',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                          }}
-                          title="Download JSON"
                         >
                           📥 JSON
                         </button>
 
                         <button
                           type="button"
+                          className="admin-action-btn danger"
+                          style={{ padding: '5px 9px', fontSize: '11.5px' }}
                           onClick={() => handleDeleteBug(bug.id)}
-                          style={{
-                            background: '#dc2626',
-                            color: '#fff',
-                            border: 'none',
-                            padding: '5px 9px',
-                            borderRadius: '8px',
-                            fontSize: '11.5px',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                          }}
-                          title="Delete Bug Report"
                         >
                           🗑️
                         </button>
                       </div>
                     </div>
 
-                    {/* Auto-Detected Engine Clues Preview */}
                     {anomalies.length > 0 && (
-                      <div
-                        style={{
-                          background: 'rgba(244, 63, 94, 0.14)',
-                          border: '1px solid rgba(244, 63, 94, 0.45)',
-                          borderRadius: '8px',
-                          padding: '8px 10px',
-                          fontSize: '11.5px',
-                          color: '#fecdd3',
-                        }}
-                      >
-                        <strong style={{ color: '#fda4af' }}>
-                          ⚠️ Auto-Detected Engine Clues:
-                        </strong>
-                        <ul style={{ margin: '4px 0 0 18px', padding: 0 }}>
+                      <div className="bug-anomalies-box">
+                        <strong>⚠️ Auto-Detected Engine Clues:</strong>
+                        <ul>
                           {anomalies.slice(-3).map((line, i) => (
                             <li key={i}>{line}</li>
                           ))}
@@ -791,43 +1216,18 @@ export default function AdminPanel() {
                       </div>
                     )}
 
-                    {/* Progress Comments Thread */}
                     {notes.length > 0 && (
-                      <div
-                        style={{
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          borderRadius: '8px',
-                          padding: '8px 10px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px',
-                        }}
-                      >
-                        <span style={{ fontSize: '11px', fontWeight: 900, color: '#fde047' }}>
-                          💬 Progress Notes ({notes.length}):
-                        </span>
+                      <div className="bug-notes-box">
+                        <span>💬 Progress Notes ({notes.length}):</span>
                         {notes.map((n) => (
-                          <div
-                            key={n.id}
-                            style={{
-                              fontSize: '12px',
-                              color: '#e2e8f0',
-                              borderLeft: '2px solid #38bdf8',
-                              paddingLeft: '8px',
-                            }}
-                          >
-                            <strong style={{ color: '#7dd3fc' }}>{n.author}</strong>{' '}
-                            <span style={{ fontSize: '10.5px', color: '#94a3b8' }}>
-                              ({new Date(n.createdAt).toLocaleString()})
-                            </span>
-                            : {n.text}
+                          <div key={n.id} className="bug-note-line">
+                            <strong>{n.author}</strong> <span>({new Date(n.createdAt).toLocaleString()})</span>: {n.text}
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {/* Add Progress Comment Input */}
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div className="announcement-composer-row">
                       <input
                         type="text"
                         placeholder="Add progress comment or fix note..."
@@ -841,24 +1241,14 @@ export default function AdminPanel() {
                             handleUpdateBug(bug.id, { newComment: commentDrafts[bug.id] });
                           }
                         }}
-                        style={{ flex: 1, fontSize: '12px', padding: '6px 10px' }}
                       />
                       <button
                         type="button"
+                        className="admin-action-btn save"
                         onClick={() => {
                           if ((commentDrafts[bug.id] || '').trim()) {
                             handleUpdateBug(bug.id, { newComment: commentDrafts[bug.id] });
                           }
-                        }}
-                        style={{
-                          background: 'linear-gradient(135deg, #10b981, #059669)',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '8px',
-                          padding: '6px 12px',
-                          fontSize: '12px',
-                          fontWeight: 800,
-                          cursor: 'pointer',
                         }}
                       >
                         + Comment
@@ -870,11 +1260,15 @@ export default function AdminPanel() {
             )}
           </div>
         </div>
+      )}
 
-        {/* User Management & Moderation Hub */}
-        <div className="panel-box" style={{ gridColumn: '1 / -1' }}>
+      {/* ===================================================================== */}
+      {/* TAB 5: USER MANAGEMENT, POINTS, GIFTING & MODERATION                  */}
+      {/* ===================================================================== */}
+      {activeTab === 'USERS' && (
+        <div className="panel-box">
           <h3>👥 User Management, Points, Gifting &amp; Moderation</h3>
-          <p style={{ fontSize: '13px', margin: 0, color: '#d8b4fe' }}>
+          <p className="admin-subtext">
             Search for registered users to award Pony Points, gift specific cards, or silence, suspend, and ban accounts.
           </p>
 
@@ -886,7 +1280,7 @@ export default function AdminPanel() {
               setUserSearchQuery(e.target.value);
               fetchUsers(e.target.value);
             }}
-            style={{ maxWidth: '420px', marginTop: '6px' }}
+            style={{ maxWidth: '420px' }}
           />
 
           <div className="admin-user-table-wrapper">
@@ -929,27 +1323,8 @@ export default function AdminPanel() {
           </div>
 
           {selectedUser && (
-            <div
-              style={{
-                background: 'rgba(24, 8, 38, 0.75)',
-                border: '2px solid #ffd700',
-                borderRadius: '12px',
-                padding: '16px',
-                marginTop: '10px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '8px',
-                }}
-              >
+            <div className="admin-selected-user-box">
+              <div className="admin-panel-topbar">
                 <div>
                   <h4 style={{ margin: '0 0 4px 0', color: '#ffd700' }}>
                     Selected User: {selectedUser.username}
@@ -961,109 +1336,53 @@ export default function AdminPanel() {
                 </div>
                 <button
                   type="button"
+                  className="admin-action-btn cancel"
                   onClick={() => setSelectedUser(null)}
-                  style={{
-                    background: 'transparent',
-                    border: '1px solid #f472b6',
-                    color: '#f472b6',
-                    padding: '4px 10px',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontSize: '11px',
-                  }}
                 >
                   Deselect
                 </button>
               </div>
 
-              <div className="mod-buttons" style={{ marginTop: '6px' }}>
+              <div className="mod-buttons">
                 <button
                   type="button"
+                  className="admin-action-btn points"
                   onClick={() => setActiveModal('POINTS')}
-                  style={{
-                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    fontWeight: 900,
-                    cursor: 'pointer',
-                  }}
                 >
                   🪙 Award Pony Points
                 </button>
                 <button
                   type="button"
+                  className="admin-action-btn edit"
                   onClick={() => setActiveModal('CARD')}
-                  style={{
-                    background: 'linear-gradient(135deg, #ec4899, #9333ea)',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    fontWeight: 900,
-                    cursor: 'pointer',
-                  }}
                 >
                   🎁 Gift Specific Card
                 </button>
                 <button
                   type="button"
+                  className="admin-action-btn censor"
                   onClick={() => handleModerationAction('SILENCE')}
-                  style={{
-                    background: '#ca8a04',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 14px',
-                    borderRadius: '10px',
-                    fontWeight: 900,
-                    cursor: 'pointer',
-                  }}
                 >
                   🔇 Silence
                 </button>
                 <button
                   type="button"
+                  className="admin-action-btn suspend"
                   onClick={() => handleModerationAction('SUSPEND')}
-                  style={{
-                    background: '#ea580c',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 14px',
-                    borderRadius: '10px',
-                    fontWeight: 900,
-                    cursor: 'pointer',
-                  }}
                 >
                   ⏳ Suspend
                 </button>
                 <button
                   type="button"
+                  className="admin-action-btn danger"
                   onClick={() => handleModerationAction('BAN')}
-                  style={{
-                    background: '#dc2626',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 14px',
-                    borderRadius: '10px',
-                    fontWeight: 900,
-                    cursor: 'pointer',
-                  }}
                 >
                   🚫 Ban User
                 </button>
                 <button
                   type="button"
+                  className="admin-action-btn save"
                   onClick={() => handleModerationAction('ACTIVE')}
-                  style={{
-                    background: '#059669',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 14px',
-                    borderRadius: '10px',
-                    fontWeight: 900,
-                    cursor: 'pointer',
-                  }}
                 >
                   ✅ Restore Active
                 </button>
@@ -1071,207 +1390,143 @@ export default function AdminPanel() {
             </div>
           )}
         </div>
+      )}
 
-        {/* Global Theme & Tab Background Customizer */}
-        <div className="panel-box">
-          <h3>🎨 Global Tab Background &amp; Opacity</h3>
-          <p style={{ fontSize: '13px', margin: 0, color: '#d8b4fe' }}>
-            Upload wallpapers to R2 and adjust background opacity globally for all visitors.
-          </p>
-          <label
-            style={{
-              fontSize: '12px',
-              fontWeight: 800,
-              color: '#fbcfe8',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '4px',
-            }}
-          >
-            Target Tab:
-            <select value={selectedBgTab} onChange={(e) => handleTabChange(e.target.value)}>
-              <option value="hub">Main Hub (Landing Arena)</option>
-              <option value="stable">The Stable (Deck Builder)</option>
-              <option value="collection">Collection Binder</option>
-              <option value="shop">Card Shop</option>
-              <option value="fanPage">Fan Art &amp; Lore Page</option>
-              <option value="admin">Admin Panel</option>
-            </select>
-          </label>
+      {/* ===================================================================== */}
+      {/* TAB 6: GLOBAL THEME, TAB BACKGROUNDS & BINDER COVER                  */}
+      {/* ===================================================================== */}
+      {activeTab === 'THEME_BINDER' && (
+        <div className="admin-two-col-grid">
+          <div className="panel-box">
+            <h3>🎨 Global Tab Background &amp; Opacity</h3>
+            <p className="admin-subtext">
+              Upload wallpapers to R2 and adjust background opacity globally for all visitors.
+            </p>
+            <label className="admin-field-label">
+              Target Tab:
+              <select value={selectedBgTab} onChange={(e) => handleTabChange(e.target.value)}>
+                <option value="hub">Main Hub (Landing Arena)</option>
+                <option value="stable">The Stable (Deck Builder)</option>
+                <option value="collection">Collection Binder</option>
+                <option value="shop">Card Shop</option>
+                <option value="fanPage">Fan Art &amp; Lore Page</option>
+                <option value="admin">Admin Panel</option>
+              </select>
+            </label>
 
-          <BackgroundUploader
-            tabKey={selectedBgTab}
-            currentUrl={currentTabBgUrl}
-            onUploaded={(newUrl) =>
-              setSettings((prev) => ({ ...prev, [`bg_${selectedBgTab}`]: newUrl }))
-            }
-          />
-
-          {currentTabBgUrl && (
-            <div
-              style={{
-                borderRadius: '10px',
-                overflow: 'hidden',
-                border: '1px solid #9333ea',
-                maxHeight: '110px',
-              }}
-            >
-              <img
-                src={currentTabBgUrl}
-                alt="Active Wallpaper Preview"
-                style={{ width: '100%', height: '110px', objectFit: 'cover', opacity }}
-              />
-            </div>
-          )}
-
-          <label
-            style={{
-              fontSize: '12px',
-              fontWeight: 800,
-              color: '#fbcfe8',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
-            }}
-          >
-            Global Wallpaper Opacity: {Math.round(opacity * 100)}%
-            <input
-              type="range"
-              min="0.1"
-              max="1.0"
-              step="0.05"
-              value={opacity}
-              onChange={(e) => setOpacity(parseFloat(e.target.value))}
-              style={{ accentColor: '#ec4899', cursor: 'pointer' }}
-            />
-          </label>
-          <button
-            type="button"
-            onClick={handleSaveOpacity}
-            disabled={savingOpacity}
-            className="mlp-btn"
-          >
-            {savingOpacity ? 'Saving...' : 'Save Global Opacity'}
-          </button>
-        </div>
-
-        {/* Collection Binder Cover Art & Name Customizer */}
-        <div className="panel-box">
-          <h3>📖 Collection Binder Cover &amp; Title</h3>
-          <p style={{ fontSize: '13px', margin: 0, color: '#d8b4fe' }}>
-            Customize the closed 3-ring binder front cover art and global album name for all players.
-          </p>
-
-          <label
-            style={{
-              fontSize: '12px',
-              fontWeight: 800,
-              color: '#fbcfe8',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
-            }}
-          >
-            Global Binder Title:
-            <input
-              type="text"
-              placeholder="e.g., Equestria Royal Archive"
-              value={binderTitle}
-              onChange={(e) => setBinderTitle(e.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            onClick={handleSaveBinderTitle}
-            disabled={savingBinderTitle}
-            className="mlp-btn"
-          >
-            {savingBinderTitle ? 'Saving Title...' : 'Save Binder Title'}
-          </button>
-
-          <div style={{ marginTop: '4px' }}>
-            <span
-              style={{
-                fontSize: '12px',
-                fontWeight: 800,
-                color: '#fbcfe8',
-                display: 'block',
-                marginBottom: '6px',
-              }}
-            >
-              Binder Cover Artwork (R2 Upload):
-            </span>
             <BackgroundUploader
-              tabKey="binder_cover"
-              currentUrl={currentBinderCoverUrl}
+              tabKey={selectedBgTab}
+              currentUrl={currentTabBgUrl}
               onUploaded={(newUrl) =>
-                setSettings((prev) => ({ ...prev, bg_binder_cover: newUrl }))
+                setSettings((prev) => ({ ...prev, [`bg_${selectedBgTab}`]: newUrl }))
               }
             />
+
+            {currentTabBgUrl && (
+              <div className="admin-preview-box">
+                <img
+                  src={currentTabBgUrl}
+                  alt="Active Wallpaper Preview"
+                  style={{ width: '100%', height: '120px', objectFit: 'cover', opacity }}
+                />
+              </div>
+            )}
+
+            <label className="admin-field-label">
+              Global Wallpaper Opacity: {Math.round(opacity * 100)}%
+              <input
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value={opacity}
+                onChange={(e) => setOpacity(parseFloat(e.target.value))}
+                style={{ accentColor: '#ec4899', cursor: 'pointer' }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleSaveOpacity}
+              disabled={savingOpacity}
+              className="mlp-btn"
+            >
+              {savingOpacity ? 'Saving...' : 'Save Global Opacity'}
+            </button>
           </div>
 
-          {currentBinderCoverUrl && (
-            <div
-              style={{
-                borderRadius: '10px',
-                overflow: 'hidden',
-                border: '2px solid #ffd700',
-                maxHeight: '140px',
-              }}
+          <div className="panel-box">
+            <h3>📖 Collection Binder Cover &amp; Title</h3>
+            <p className="admin-subtext">
+              Customize the closed 3-ring binder front cover art and global album name for all players.
+            </p>
+
+            <label className="admin-field-label">
+              Global Binder Title:
+              <input
+                type="text"
+                placeholder="e.g., Equestria Royal Archive"
+                value={binderTitle}
+                onChange={(e) => setBinderTitle(e.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleSaveBinderTitle}
+              disabled={savingBinderTitle}
+              className="mlp-btn"
             >
-              <img
-                src={currentBinderCoverUrl}
-                alt="Binder Cover Preview"
-                style={{ width: '100%', height: '140px', objectFit: 'cover' }}
+              {savingBinderTitle ? 'Saving Title...' : 'Save Binder Title'}
+            </button>
+
+            <div>
+              <span className="admin-field-label" style={{ marginBottom: '6px' }}>
+                Binder Cover Artwork (R2 Upload):
+              </span>
+              <BackgroundUploader
+                tabKey="binder_cover"
+                currentUrl={currentBinderCoverUrl}
+                onUploaded={(newUrl) =>
+                  setSettings((prev) => ({ ...prev, bg_binder_cover: newUrl }))
+                }
               />
             </div>
-          )}
-        </div>
 
-        {/* Statistics */}
-        <div className="panel-box">
-          <h3>📊 Website Statistics</h3>
-          <p>
-            Total Visits: <strong>14,289</strong>
-          </p>
-          <p>
-            Active Games Created: <strong>342</strong>
-          </p>
-          <p>
-            Registered Users: <strong>1,204</strong>
-          </p>
+            {currentBinderCoverUrl && (
+              <div className="admin-preview-box gold">
+                <img
+                  src={currentBinderCoverUrl}
+                  alt="Binder Cover Preview"
+                  style={{ width: '100%', height: '140px', objectFit: 'cover' }}
+                />
+              </div>
+            )}
+          </div>
         </div>
+      )}
 
-        {/* Public Announcements */}
-        <div className="panel-box">
-          <h3>📢 Post Global Announcement</h3>
-          <textarea
-            rows={3}
-            placeholder="Type announcement broadcast for all users..."
-            value={announcement}
-            onChange={(e) => setAnnouncement(e.target.value)}
-          />
-          <button onClick={postAnnouncement} className="mlp-btn">
-            Publish Announcement
-          </button>
-        </div>
-
-        {/* Content Auditing */}
+      {/* ===================================================================== */}
+      {/* TAB 7: AUDIT DECKS & CONTENT                                          */}
+      {/* ===================================================================== */}
+      {activeTab === 'AUDIT' && (
         <div className="panel-box">
           <h3>🔍 Audit Decks &amp; Content</h3>
-          <p>
+          <p className="admin-subtext">
             Review user-submitted deck lists for policy compliance and ban flagged card combinations.
           </p>
-          <button className="mlp-btn">Audit Database Decks</button>
+          <div>
+            <button type="button" className="mlp-btn">
+              Audit Database Decks
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* MODAL 1: AWARD PONY POINTS */}
       {activeModal === 'POINTS' && selectedUser && (
         <div className="admin-modal-backdrop" onClick={() => setActiveModal(null)}>
           <div className="admin-modal-box" onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: 0, color: '#ffd700' }}>🪙 Award Pony Points</h3>
-            <p style={{ fontSize: '13px', margin: 0, color: '#fbcfe8' }}>
+            <p className="admin-subtext">
               Grant Pony Points to user <strong>{selectedUser.username}</strong>:
             </p>
             <input
@@ -1280,35 +1535,11 @@ export default function AdminPanel() {
               value={awardPointsInput}
               onChange={(e) => setAwardPointsInput(e.target.value)}
             />
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid #c084fc',
-                  color: '#c084fc',
-                  padding: '8px 16px',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontWeight: 800,
-                }}
-              >
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <button type="button" className="admin-action-btn cancel" onClick={() => setActiveModal(null)}>
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={handleAwardPointsSubmit}
-                style={{
-                  background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '8px 20px',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontWeight: 900,
-                }}
-              >
+              <button type="button" className="admin-action-btn points" onClick={handleAwardPointsSubmit}>
                 Submit &amp; Award
               </button>
             </div>
@@ -1321,7 +1552,7 @@ export default function AdminPanel() {
         <div className="admin-modal-backdrop" onClick={() => setActiveModal(null)}>
           <div className="admin-modal-box" onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: 0, color: '#ffd700' }}>🎁 Gift Specific Card</h3>
-            <p style={{ fontSize: '13px', margin: 0, color: '#fbcfe8' }}>
+            <p className="admin-subtext">
               Select a card to gift directly to <strong>{selectedUser.username}</strong>&apos;s collection:
             </p>
 
@@ -1344,35 +1575,11 @@ export default function AdminPanel() {
               ))}
             </select>
 
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid #c084fc',
-                  color: '#c084fc',
-                  padding: '8px 16px',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontWeight: 800,
-                }}
-              >
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <button type="button" className="admin-action-btn cancel" onClick={() => setActiveModal(null)}>
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={handleGiftCardSubmit}
-                style={{
-                  background: 'linear-gradient(135deg, #ec4899, #9333ea)',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '8px 20px',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontWeight: 900,
-                }}
-              >
+              <button type="button" className="admin-action-btn edit" onClick={handleGiftCardSubmit}>
                 Gift Card 🎁
               </button>
             </div>
@@ -1388,22 +1595,11 @@ export default function AdminPanel() {
             style={{ maxWidth: '820px', width: '94vw', maxHeight: '85dvh', overflowY: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="admin-panel-topbar">
               <h3 style={{ margin: 0, color: '#fde047' }}>
                 🔍 Diagnostic Clues — Bug #{inspectedBug.id}
               </h3>
-              <button
-                type="button"
-                onClick={() => setInspectedBug(null)}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid #f472b6',
-                  color: '#f472b6',
-                  borderRadius: '8px',
-                  padding: '4px 10px',
-                  cursor: 'pointer',
-                }}
-              >
+              <button type="button" className="admin-action-btn cancel" onClick={() => setInspectedBug(null)}>
                 ✕ Close
               </button>
             </div>
@@ -1417,18 +1613,7 @@ export default function AdminPanel() {
                 <strong style={{ color: '#38bdf8', fontSize: '12.5px' }}>
                   Structured Diagnostic Clues:
                 </strong>
-                <pre
-                  style={{
-                    background: '#090410',
-                    color: '#e2e8f0',
-                    padding: '12px',
-                    borderRadius: '10px',
-                    fontSize: '11.5px',
-                    maxHeight: '240px',
-                    overflow: 'auto',
-                    margin: 0,
-                  }}
-                >
+                <pre className="admin-json-pre">
                   {JSON.stringify(inspectedBug.diagnostic_clues, null, 2)}
                 </pre>
               </>
@@ -1439,18 +1624,7 @@ export default function AdminPanel() {
                 <strong style={{ color: '#f472b6', fontSize: '12.5px' }}>
                   Full Board Snapshot &amp; Debug Trace:
                 </strong>
-                <pre
-                  style={{
-                    background: '#090410',
-                    color: '#cbd5e1',
-                    padding: '12px',
-                    borderRadius: '10px',
-                    fontSize: '11px',
-                    maxHeight: '240px',
-                    overflow: 'auto',
-                    margin: 0,
-                  }}
-                >
+                <pre className="admin-json-pre">
                   {JSON.stringify(inspectedBug.board_snapshot, null, 2)}
                 </pre>
               </>
