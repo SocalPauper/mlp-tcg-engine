@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../App';
 import { API_BASE_URL } from '../config';
 import { LiveGameState } from './GameBoard';
@@ -107,6 +107,12 @@ const KAYOU_MLP_NEWS = [
   },
 ];
 
+const WELCOME_CHAT_MSG: HubChatEntry = {
+  id: 'welcome-celestia',
+  user: 'Princess Celestia',
+  text: 'Welcome, verified duelists of Equestria! Share your deck tech and good sportsmanship here. ✨',
+};
+
 export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) {
   const { user } = useAuth();
   const isGuest = !user;
@@ -140,12 +146,8 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   } | null>(null);
   const [joinPasswordInput, setJoinPasswordInput] = useState('');
 
-  const [chatMessages, setChatMessages] = useState<HubChatEntry[]>([
-    {
-      user: 'Princess Celestia',
-      text: 'Welcome, verified duelists of Equestria! Share your deck tech and good sportsmanship here. ✨',
-    },
-  ]);
+  const [siteAnnouncement, setSiteAnnouncement] = useState<string>('');
+  const [dbChatMessages, setDbChatMessages] = useState<HubChatEntry[]>([]);
   const [inputMsg, setInputMsg] = useState('');
 
   const [customBgUrl, setCustomBgUrl] = useState<string>('');
@@ -154,75 +156,84 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
   const playerDisplayName =
     user?.displayName || user?.username || `Pony_${Math.floor(100 + Math.random() * 900)}`;
 
-  // Record a site visit once per session/mount
   useEffect(() => {
     if (sessionStorage.getItem('mlp_visit_recorded')) return;
     sessionStorage.setItem('mlp_visit_recorded', '1');
     fetch(`${API_BASE_URL}/api/admin/visit`, { method: 'POST' }).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    fetch(`${API_BASE_URL}/api/media/settings`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.success && data.settings) {
-          if (data.settings.bg_hub) setCustomBgUrl(data.settings.bg_hub);
-          if (data.settings.bg_hub_opacity !== undefined) {
-            setBgOpacity(parseFloat(data.settings.bg_hub_opacity));
-          }
-          if (data.settings.site_announcement && canChat) {
-            setChatMessages((prev) => {
-              const alreadyHas = prev.some((m) => m.user === 'Royal Decree');
-              if (alreadyHas) return prev;
-              return [...prev, { user: 'Royal Decree', text: data.settings.site_announcement }];
-            });
-          }
+  const loadSettingsAndAnnouncement = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/media/settings`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.success && data.settings) {
+        if (data.settings.bg_hub) setCustomBgUrl(data.settings.bg_hub);
+        if (data.settings.bg_hub_opacity !== undefined) {
+          setBgOpacity(parseFloat(data.settings.bg_hub_opacity));
         }
-      })
-      .catch((err) => console.error('Error loading global hub theme:', err));
-  }, [canChat]);
+        setSiteAnnouncement(String(data.settings.site_announcement || '').trim());
+      }
+    } catch (err) {
+      console.error('Error loading global hub theme:', err);
+    }
+  }, []);
 
-  // Sync Hub chat messages with backend so moderation (censor/delete) reflects cleanly
   useEffect(() => {
+    loadSettingsAndAnnouncement();
+    const timer = setInterval(loadSettingsAndAnnouncement, 8000);
+    return () => clearInterval(timer);
+  }, [loadSettingsAndAnnouncement]);
+
+  const loadHubChat = useCallback(async () => {
     if (!canChat) return;
     const token = localStorage.getItem('token');
     const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-    const loadHubChat = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/admin/chat-messages?channel=HUB`, {
-          headers,
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.success && Array.isArray(data.messages)) {
-          const welcome: HubChatEntry = {
-            user: 'Princess Celestia',
-            text: 'Welcome, verified duelists of Equestria! Share your deck tech and good sportsmanship here. ✨',
-          };
-          const dbMsgs: HubChatEntry[] = [...data.messages].reverse().map((m: any) => ({
-            id: m.id,
-            user: m.authorName || 'Duelist',
-            text: m.content,
-            isCensored: Boolean(m.isCensored),
-          }));
-          setChatMessages([welcome, ...dbMsgs]);
-        }
-      } catch {
-        // Keep local messages if chat endpoint is restricted or offline
+    try {
+      let res = await fetch(`${API_BASE_URL}/api/admin/chat/feed?channel=HUB`, { headers });
+      if (!res.ok) {
+        res = await fetch(`${API_BASE_URL}/api/admin/chat-messages?channel=HUB`, { headers });
       }
-    };
-
-    loadHubChat();
-    const poll = setInterval(loadHubChat, 10000);
-    return () => clearInterval(poll);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.messages)) {
+        const mapped: HubChatEntry[] = [...data.messages].reverse().map((m: any) => ({
+          id: m.id,
+          user: m.authorName || 'Duelist',
+          text: m.content,
+          isCensored: Boolean(m.isCensored),
+        }));
+        setDbChatMessages(mapped);
+      }
+    } catch {
+      // Preserve current messages on transient network errors
+    }
   }, [canChat]);
+
+  useEffect(() => {
+    if (!canChat) return;
+    loadHubChat();
+    const poll = setInterval(loadHubChat, 5000);
+    return () => clearInterval(poll);
+  }, [canChat, loadHubChat]);
+
+  const chatMessages: HubChatEntry[] = React.useMemo(() => {
+    const list: HubChatEntry[] = [WELCOME_CHAT_MSG];
+    if (siteAnnouncement) {
+      list.push({
+        id: 'royal-decree',
+        user: 'Royal Decree',
+        text: siteAnnouncement,
+      });
+    }
+    return [...list, ...dbChatMessages];
+  }, [siteAnnouncement, dbChatMessages]);
 
   useEffect(() => {
     localStorage.setItem('mlp_last_deck_id', selectedDeck);
   }, [selectedDeck]);
 
-  // Hydrate both Starter Decks and Custom Decks directly from /api/decks + /api/cards so R2 image URLs always match DB
   useEffect(() => {
     const token = localStorage.getItem('token');
     Promise.all([
@@ -290,7 +301,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
       .catch((err) => console.error('Error loading decks:', err));
   }, [isGuest]);
 
-  // WebSocket for Matchmaking & Live Lobby Rooms List
   useEffect(() => {
     const wsUrl = API_BASE_URL.replace(/^http/, 'ws');
     const socket = new WebSocket(wsUrl);
@@ -440,7 +450,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
       });
       if (res.ok) {
         const data = await res.json();
-        setChatMessages((prev) => [
+        setDbChatMessages((prev) => [
           ...prev,
           {
             id: data.message?.id || Date.now(),
@@ -455,7 +465,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
       // Fallback to local state append if endpoint isn't wired
     }
 
-    setChatMessages((prev) => [...prev, { id: Date.now(), user: senderName, text: trimmed }]);
+    setDbChatMessages((prev) => [...prev, { id: Date.now(), user: senderName, text: trimmed }]);
   };
 
   const currentDeckObj = availableDecks.find((d) => d.id === selectedDeck) || availableDecks[0];
@@ -482,9 +492,7 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
       )}
 
       <div className="hub-wireframe-layout">
-        {/* LEFT MAIN STACK */}
         <div className="hub-left-stack">
-          {/* 1. MATCHMAKING CONTROL CENTER */}
           <div className="cloud-panel">
             <h3>☁️ Matchmaking Control Center</h3>
 
@@ -562,7 +570,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
             </button>
           </div>
 
-          {/* 2. QUICK PLAY (PROMPTS FOR STARTER DECK FIRST) */}
           <div className="cloud-panel quick-play-module">
             <h3 style={{ marginBottom: '6px', color: '#fffdf7' }}>
               ⚡ Quick Play (Starter Decks Only)
@@ -580,7 +587,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
             </button>
           </div>
 
-          {/* 3. CURRENT GAMES BROWSER & CREATE PRIVATE MATCH */}
           <div className="lobby-dual-grid">
             <div className="cloud-panel">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -683,7 +689,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
             </div>
           </div>
 
-          {/* 4. BOTTOM ROW: RANKED STANDINGS PREVIEW & KAYOU MLP TCG NEWS FEED */}
           <div className="hub-bottom-row">
             <div className="cloud-panel">
               <h3>🏆 Ranked Ladder</h3>
@@ -725,7 +730,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
           </div>
         </div>
 
-        {/* RIGHT COLUMN: VERIFIED-ONLY COMMUNITY CHAT */}
         <div className="cloud-panel chat-wireframe-panel">
           <div>
             <h3>💬 Equestrian Community Chat</h3>
@@ -780,7 +784,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         </div>
       </div>
 
-      {/* MODAL A: IN-HUB DECK SELECTOR POPUP */}
       {showDeckPickerModal && (
         <div className="hub-modal-backdrop" onClick={() => setShowDeckPickerModal(false)}>
           <div className="hub-picker-modal" onClick={(e) => e.stopPropagation()}>
@@ -831,7 +834,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         </div>
       )}
 
-      {/* MODAL B: QUICK PLAY STARTER DECK PICKER */}
       {showQuickPlayStarterModal && (
         <div className="hub-modal-backdrop" onClick={() => setShowQuickPlayStarterModal(false)}>
           <div className="hub-picker-modal" onClick={(e) => e.stopPropagation()}>
@@ -892,7 +894,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         </div>
       )}
 
-      {/* MODAL C: PRIVATE ROOM PASSWORD PROMPT */}
       {passwordPromptRoom && (
         <div className="hub-modal-backdrop" onClick={() => setPasswordPromptRoom(null)}>
           <div
@@ -939,7 +940,6 @@ export default function MainHub({ onMatchJoined, onNavigateTab }: MainHubProps) 
         </div>
       )}
 
-      {/* MODAL D: MATCHMAKING SEARCHING OVERLAY */}
       {isSearchingQueue && (
         <div className="hub-modal-backdrop" onClick={handleCancelQueue}>
           <div

@@ -83,7 +83,7 @@ const requireAdmin = async (
   }
 };
 
-// Public lightweight visit incrementer (call from frontend on mount if desired)
+// Public lightweight visit incrementer
 router.post('/visit', async (_req, res) => {
   try {
     await ensureAdminTables();
@@ -96,6 +96,78 @@ router.post('/visit', async (_req, res) => {
     res.json({ success: true, totalWebsiteVisits: Number(rows[0]?.metric_value || 0) });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Public/non-admin chat feed reader so MainHub & Fan Page users see censored/deleted updates
+router.get('/chat/feed', async (req, res) => {
+  try {
+    await ensureAdminTables();
+    const channelParam = String(req.query.channel || 'HUB').toUpperCase();
+    const channel = channelParam === 'FAN_PAGE' ? 'FAN_PAGE' : 'HUB';
+
+    const { rows } = await pool.query(
+      `SELECT id,
+              channel,
+              author_name AS "authorName",
+              content,
+              is_censored AS "isCensored",
+              created_at AS "createdAt"
+       FROM game.chat_messages
+       WHERE UPPER(channel) = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [channel]
+    );
+
+    return res.json({ success: true, messages: rows });
+  } catch (err: any) {
+    console.error('[CHAT FEED GET ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Post a chat message to HUB or FAN_PAGE (any non-safe-mode authenticated user)
+router.post('/chat-messages', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    await ensureAdminTables();
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { rows: uRows } = await pool.query(
+      'SELECT id, username, display_name, is_safe_mode FROM auth.users WHERE id = $1',
+      [userId]
+    );
+    if (uRows.length === 0 || uRows[0].is_safe_mode) {
+      return res.status(403).json({ success: false, error: 'Account cannot post in chat' });
+    }
+
+    const channel =
+      String(req.body?.channel || 'HUB').toUpperCase() === 'FAN_PAGE' ? 'FAN_PAGE' : 'HUB';
+    const content = String(req.body?.content || '').trim().slice(0, 1000);
+    if (!content) return res.status(400).json({ success: false, error: 'Message required' });
+
+    const authorName = String(
+      req.body?.authorName || uRows[0].display_name || uRows[0].username || 'Duelist'
+    ).slice(0, 120);
+
+    const { rows } = await pool.query(
+      `INSERT INTO game.chat_messages (channel, author_id, author_name, content)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id,
+                 channel,
+                 author_id AS "authorId",
+                 author_name AS "authorName",
+                 content,
+                 is_censored AS "isCensored",
+                 created_at AS "createdAt"`,
+      [channel, String(userId), authorName, content]
+    );
+
+    return res.json({ success: true, message: rows[0] });
+  } catch (err: any) {
+    console.error('[CHAT POST ERROR]', err.message);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
