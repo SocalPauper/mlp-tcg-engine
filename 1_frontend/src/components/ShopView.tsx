@@ -1,476 +1,572 @@
-import express from 'express';
-import { pool } from '../../4_data/db.js';
-import { authenticateToken, AuthenticatedRequest } from '../middleware/authMiddleware.js';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { API_BASE_URL } from '../config';
+import { useAuth } from '../App';
+import { getCardFoilClass } from '../styles/cardFoil';
+import CardPreviewModal, { PreviewableCard } from './CardPreviewModal';
+import './ShopView.css';
 
-const router = express.Router();
-
-const PACK_TIERS = {
-  STANDARD: {
-    name: 'Standard Booster Pack',
-    badge: '3 CHASE CARDS',
-    cost: 100,
-    packsCount: 1,
-    cardsPerPack: 3,
-    description:
-      '3 high-rarity cards (SR, ER, UR, CR, GR & Shining -S). Includes 10-pack CR+ pity guarantee!',
-    rates: { SR: 0.65, UR: 0.22, CR: 0.08, SHINING: 0.03, GR: 0.02 },
-  },
-  SHINING: {
-    name: 'Shining & UR+ Pack',
-    badge: '1 GUARANTEED UR+',
-    cost: 180,
-    packsCount: 1,
-    cardsPerPack: 1,
-    description:
-      '1 guaranteed Ultra Rare, Crystal Rare, Gold Rare, or Shining (-S) foil alternate art!',
-    rates: { UR: 0.50, CR: 0.25, SHINING: 0.15, GR: 0.10 },
-  },
-  BUNDLE: {
-    name: '5-Pack Booster Box',
-    badge: '15 CARDS (5×3)',
-    cost: 450,
-    packsCount: 5,
-    cardsPerPack: 3,
-    description:
-      '5 Standard Boosters (10% discount) with a guaranteed UR or higher chase hit in the box!',
-    rates: { SR: 0.60, UR: 0.24, CR: 0.09, SHINING: 0.04, GR: 0.03 },
-  },
-};
-
-// Duplicate Trade-In Dust Values beyond a 4-card playset (Rules v1.3.0 Rule 102.1.0)
-const TRADE_IN_VALUES: Record<string, number> = {
-  C: 5,
-  U: 10,
-  R: 15,
-  SPR: 15,
-  SR: 20,
-  SSR: 35,
-  UR: 50,
-  CR: 60,
-  DR: 80,
-  SHINING: 100,
-  GR: 100,
-};
-
-function getCurrentWeekId() {
-  const now = new Date();
-  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+interface CardItem extends PreviewableCard {
+  id: string;
+  name: string;
+  card_type: string;
+  element: string;
+  rarity: string;
+  cost: number;
+  power: number;
+  effect_text?: string;
+  image_url?: string;
+  convertedToDust?: number;
 }
 
-function getCardDustRate(cardId: string, rarity: string): number {
-  if (String(cardId || '').trim().toUpperCase().endsWith('-S')) {
-    return TRADE_IN_VALUES.SHINING;
-  }
-  const normRarity = String(rarity || 'SR').trim().toUpperCase();
-  return TRADE_IN_VALUES[normRarity] ?? 20;
+interface WeeklyDeal {
+  id: number;
+  price: number;
+  slot_index: number;
+  card_id: string;
+  name: string;
+  card_type: string;
+  element: string;
+  rarity: string;
+  cost: number;
+  power: number;
+  effect_text?: string;
+  image_url?: string;
 }
 
-function getMaxPlaysetForCard(cardType: string): number {
-  const t = String(cardType || '').trim().toLowerCase();
-  return t.includes('mane') || t.includes('main character') ? 1 : 4;
-}
+const CARD_BACK_URL = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp';
 
-async function calculateTradeInSummary(client: any, userId: string) {
-  const { rows } = await client.query(
-    `SELECT uc.card_id, uc.quantity, c.rarity, c.card_type
-     FROM auth.user_cards uc
-     JOIN game.cards c ON uc.card_id = c.id
-     WHERE uc.user_id = $1`,
-    [userId]
-  );
+export default function ShopView() {
+  const { user, updateUserPoints } = useAuth();
+  const [points, setPoints] = useState<number>(user?.reward_points ?? 0);
+  const [pityCounter, setPityCounter] = useState<number>(0);
+  const [weekId, setWeekId] = useState<string>('');
+  const [deals, setDeals] = useState<WeeklyDeal[]>([]);
+  const [tiers, setTiers] = useState<Record<string, any>>({});
+  const [tradeInSummary, setTradeInSummary] = useState<{
+    extraCardsCount: number;
+    totalPointsValue: number;
+  }>({ extraCardsCount: 0, totalPointsValue: 0 });
+  const [loading, setLoading] = useState(true);
+  const [purchasing, setPurchasing] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
-  let extraCardsCount = 0;
-  let totalPointsValue = 0;
+  const [customBgUrl, setCustomBgUrl] = useState<string>('');
+  const [bgOpacity, setBgOpacity] = useState<number>(1);
 
-  for (const row of rows) {
-    const maxPlayset = getMaxPlaysetForCard(row.card_type);
-    const qty = Number(row.quantity) || 0;
-    if (qty > maxPlayset) {
-      const extras = qty - maxPlayset;
-      const rate = getCardDustRate(row.card_id, row.rarity);
-      extraCardsCount += extras;
-      totalPointsValue += extras * rate;
-    }
-  }
+  const [activePackTier, setActivePackTier] = useState<{ key: string; name: string } | null>(null);
+  const [packStage, setPackStage] = useState<'SEALED' | 'RIPPING' | 'REVEALING'>('SEALED');
+  const [pulledCards, setPulledCards] = useState<CardItem[] | null>(null);
+  const [autoDustBanner, setAutoDustBanner] = useState<number>(0);
+  const [flippedIndices, setFlippedIndices] = useState<Record<number, boolean>>({});
+  const [previewCard, setPreviewCard] = useState<PreviewableCard | null>(null);
 
-  return { extraCardsCount, totalPointsValue };
-}
-
-async function drawSingleChaseCard(client: any, bucket: string) {
-  let cardRes;
-  if (bucket === 'SHINING') {
-    cardRes = await client.query(
-      `SELECT id, name, card_type, element, rarity, cost, power, effect_text, image_url
-       FROM game.cards
-       WHERE id ILIKE '%-S'
-       ORDER BY RANDOM() LIMIT 1`
-    );
-  } else {
-    cardRes = await client.query(
-      `SELECT id, name, card_type, element, rarity, cost, power, effect_text, image_url
-       FROM game.cards
-       WHERE rarity = $1 AND id NOT ILIKE '%-S'
-       ORDER BY RANDOM() LIMIT 1`,
-      [bucket]
-    );
-  }
-
-  if (!cardRes || cardRes.rows.length === 0) {
-    cardRes = await client.query(
-      `SELECT id, name, card_type, element, rarity, cost, power, effect_text, image_url
-       FROM game.cards
-       WHERE rarity IN ('SR', 'SSR', 'UR', 'GR', 'CR', 'DR') OR id ILIKE '%-S'
-       ORDER BY RANDOM() LIMIT 1`
-    );
-  }
-  return cardRes.rows[0];
-}
-
-// Get user shop status
-router.get('/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-  const client = await pool.connect();
-  try {
-    const userRes = await client.query(
-      'SELECT reward_points, pity_counter FROM auth.users WHERE id = $1',
-      [userId]
-    );
-    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    const rewardPoints = userRes.rows[0].reward_points;
-    const pityCounter = userRes.rows[0].pity_counter ?? 0;
-
-    const weekId = getCurrentWeekId();
-    let dealsRes = await client.query(
-      `SELECT d.id, d.price, d.slot_index, c.id as card_id, c.name, c.card_type, c.element, c.rarity, c.cost, c.power, c.effect_text, c.image_url 
-       FROM game.weekly_shop_deals d
-       JOIN game.cards c ON d.card_id = c.id
-       WHERE d.week_identifier = $1 ORDER BY d.slot_index ASC`,
-      [weekId]
-    );
-
-    if (dealsRes.rows.length === 0) {
-      const slotSpecs = [
-        { query: `rarity = 'SR' AND id NOT ILIKE '%-S'`, price: 150 },
-        { query: `rarity = 'UR' AND id NOT ILIKE '%-S'`, price: 350 },
-        { query: `(rarity = 'CR' OR id ILIKE '%-S')`, price: 350 },
-        { query: `rarity = 'GR'`, price: 600 },
-      ];
-
-      const chosenIds = new Set<string>();
-      for (let i = 0; i < slotSpecs.length; i++) {
-        const spec = slotSpecs[i];
-        let pickRes = await client.query(
-          `SELECT id FROM game.cards WHERE ${spec.query} ORDER BY RANDOM() LIMIT 1`
-        );
-        if (pickRes.rows.length === 0) {
-          pickRes = await client.query(
-            `SELECT id FROM game.cards WHERE rarity IN ('SR', 'UR', 'CR', 'GR', 'DR') ORDER BY RANDOM() LIMIT 1`
-          );
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/media/settings`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && data.settings) {
+          if (data.settings.bg_shop) setCustomBgUrl(data.settings.bg_shop);
+          if (data.settings.bg_shop_opacity !== undefined) {
+            setBgOpacity(parseFloat(data.settings.bg_shop_opacity));
+          }
         }
-        const pickedId = pickRes.rows[0]?.id;
-        if (pickedId && !chosenIds.has(pickedId)) {
-          chosenIds.add(pickedId);
-          await client.query(
-            `INSERT INTO game.weekly_shop_deals (card_id, price, week_identifier, slot_index)
-             VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
-            [pickedId, spec.price, weekId, i + 1]
-          );
-        }
+      })
+      .catch((err) => console.error('Error loading global shop theme:', err));
+  }, []);
+
+  const syncPoints = (newVal: number) => {
+    setPoints(newVal);
+    updateUserPoints(newVal);
+  };
+
+  const fetchShopData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const { data } = await axios.get(`${API_BASE_URL}/api/shop/status`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      syncPoints(data.reward_points);
+      setPityCounter(data.pityCounter ?? 0);
+      setWeekId(data.weekId || '');
+      setDeals(data.weeklyDeals || []);
+      setTiers(data.tiers || {});
+      if (data.tradeInSummary) {
+        setTradeInSummary(data.tradeInSummary);
       }
+    } catch (err) {
+      console.error('Failed to load shop', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      dealsRes = await client.query(
-        `SELECT d.id, d.price, d.slot_index, c.id as card_id, c.name, c.card_type, c.element, c.rarity, c.cost, c.power, c.effect_text, c.image_url 
-         FROM game.weekly_shop_deals d
-         JOIN game.cards c ON d.card_id = c.id
-         WHERE d.week_identifier = $1 ORDER BY d.slot_index ASC`,
-        [weekId]
+  useEffect(() => {
+    fetchShopData();
+  }, []);
+
+  const handleBuyPack = async (tierKey: string, cost: number, tierName: string) => {
+    if (points < cost) {
+      setMessage('Not enough Pony Points! Play public matches or trade in extra copies to earn points.');
+      return;
+    }
+    setPurchasing(true);
+    setMessage(null);
+    setAutoDustBanner(0);
+    try {
+      const token = localStorage.getItem('token');
+      const { data } = await axios.post(
+        `${API_BASE_URL}/api/shop/buy-pack`,
+        { tier: tierKey },
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
       );
+      syncPoints(data.remainingPoints);
+      if (data.pityCounter !== undefined) setPityCounter(data.pityCounter);
+      if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
+      if (data.autoDustEarned > 0) setAutoDustBanner(data.autoDustEarned);
+      setPulledCards(data.cards);
+      setActivePackTier({ key: tierKey, name: tierName });
+      setPackStage('SEALED');
+      setFlippedIndices({});
+    } catch (err: any) {
+      setMessage(err.response?.data?.error || 'Failed to open pack.');
+    } finally {
+      setPurchasing(false);
     }
+  };
 
-    const tradeInSummary = await calculateTradeInSummary(client, userId);
+  const handleRipPack = () => {
+    if (packStage !== 'SEALED') return;
+    setPackStage('RIPPING');
+    setTimeout(() => {
+      setPackStage('REVEALING');
+    }, 680);
+  };
 
-    res.json({
-      reward_points: rewardPoints,
-      pityCounter,
-      weekId,
-      weeklyDeals: dealsRes.rows,
-      tiers: PACK_TIERS,
-      tradeInValues: TRADE_IN_VALUES,
-      tradeInSummary,
+  const handleCardSlotClick = (card: CardItem, idx: number) => {
+    if (!flippedIndices[idx]) {
+      setFlippedIndices((prev) => ({ ...prev, [idx]: true }));
+    } else {
+      setPreviewCard(card);
+    }
+  };
+
+  const revealAllCards = () => {
+    if (!pulledCards) return;
+    const all: Record<number, boolean> = {};
+    pulledCards.forEach((_, idx) => {
+      all[idx] = true;
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
+    setFlippedIndices(all);
+  };
+
+  const closePackModal = () => {
+    setPulledCards(null);
+    setActivePackTier(null);
+    setPackStage('SEALED');
+    setFlippedIndices({});
+    setPreviewCard(null);
+    setAutoDustBanner(0);
+  };
+
+  const handleBuyDeal = async (dealId: number, price: number) => {
+    if (points < price) {
+      setMessage('Not enough Pony Points for this weekly deal.');
+      return;
+    }
+    setPurchasing(true);
+    setMessage(null);
+    try {
+      const token = localStorage.getItem('token');
+      const { data } = await axios.post(
+        `${API_BASE_URL}/api/shop/buy-deal`,
+        { dealId },
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      syncPoints(data.remainingPoints);
+      if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
+      setMessage(`✨ Successfully unlocked featured card: ${data.card.name}!`);
+      fetchShopData();
+    } catch (err: any) {
+      setMessage(err.response?.data?.error || 'Failed to buy deal.');
+    } finally {
+      setPurchasing(false);
+    }
+  };
+
+  const handleTradeInExtras = async () => {
+    if (tradeInSummary.extraCardsCount <= 0) return;
+    if (
+      !window.confirm(
+        `Trade in ${tradeInSummary.extraCardsCount} extra card(s) beyond your 4-card playsets for +${tradeInSummary.totalPointsValue} Pony Points?`
+      )
+    ) {
+      return;
+    }
+
+    setPurchasing(true);
+    setMessage(null);
+    try {
+      const token = localStorage.getItem('token');
+      const { data } = await axios.post(
+        `${API_BASE_URL}/api/shop/trade-in-extras`,
+        {},
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      syncPoints(data.remainingPoints);
+      setTradeInSummary(data.tradeInSummary || { extraCardsCount: 0, totalPointsValue: 0 });
+      setMessage(
+        `♻️ Traded in ${data.tradedCount} extra copy/copies beyond 4x playsets for +${data.pointsEarned} Pony Points!`
+      );
+    } catch (err: any) {
+      setMessage(err.response?.data?.error || 'Failed to trade in extra cards.');
+    } finally {
+      setPurchasing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="shop-viewport">
+        <div className="shop-loading">Opening the Canterlot Pony Point Shop... ✨</div>
+      </div>
+    );
   }
-});
 
-// Buy Tiered Pack
-router.post('/buy-pack', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  const userId = req.user?.id;
-  const tierKey = String(req.body.tier || 'STANDARD').toUpperCase() as keyof typeof PACK_TIERS;
-  const packConfig = PACK_TIERS[tierKey] || PACK_TIERS.STANDARD;
+  const allRevealed =
+    pulledCards !== null &&
+    pulledCards.length > 0 &&
+    pulledCards.every((_, idx) => Boolean(flippedIndices[idx]));
 
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const formatRate = (prob: number) => {
+    const pct = prob * 100;
+    return Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(1)}%`;
+  };
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  const getPackVisualClass = (key: string) => {
+    const k = key.toLowerCase();
+    if (k === 'shining') return 'tier-harmony';
+    if (k === 'bundle') return 'tier-royal';
+    return 'tier-sparkle';
+  };
 
-    const userRes = await client.query(
-      'SELECT reward_points, pity_counter FROM auth.users WHERE id = $1 FOR UPDATE',
-      [userId]
-    );
-    if (userRes.rows.length === 0) throw new Error('User not found');
+  return (
+    <div
+      className="shop-viewport"
+      style={customBgUrl ? { backgroundImage: `url(${customBgUrl})` } : undefined}
+    >
+      {customBgUrl && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: '#150624',
+            opacity: 1 - bgOpacity,
+            zIndex: 1,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
 
-    if (userRes.rows[0].reward_points < packConfig.cost) {
-      throw new Error('Not enough Pony Points');
-    }
+      <div className="shop-container">
+        <CardPreviewModal card={previewCard} onClose={() => setPreviewCard(null)} />
 
-    let pityCounter = Number(userRes.rows[0].pity_counter || 0);
+        <div className="shop-header">
+          <div>
+            <h2>✨ The Pony Point Shop ✨</h2>
+            <span className="shop-subtitle">
+              All C, U, R &amp; SPR cards are free! Spend Pony Points on high-rarity chase packs &amp; Shining foils
+            </span>
+          </div>
 
-    await client.query(
-      'UPDATE auth.users SET reward_points = reward_points - $1 WHERE id = $2',
-      [packConfig.cost, userId]
-    );
+          <div className="shop-header-actions">
+            <span
+              className="week-tag"
+              title="Guaranteed CR, Shining (-S), or GR every 10th Standard chase slot"
+            >
+              ✨ CR+ Pity: {pityCounter}/10
+            </span>
 
-    const totalCards = packConfig.packsCount * packConfig.cardsPerPack;
-    const pulledCards: any[] = [];
-    let autoDustEarned = 0;
+            <button
+              type="button"
+              className="trade-in-btn"
+              disabled={purchasing || tradeInSummary.extraCardsCount <= 0}
+              onClick={handleTradeInExtras}
+              title="Convert any cards with more than 4 copies in your collection into Pony Points"
+            >
+              {tradeInSummary.extraCardsCount > 0
+                ? `♻️ Trade-In ${tradeInSummary.extraCardsCount} Extra(s) (+${tradeInSummary.totalPointsValue} 🪙)`
+                : '♻️ 4x Playset Protection Active'}
+            </button>
 
-    for (let i = 0; i < totalCards; i++) {
-      const isChaseSlot =
-        packConfig.cardsPerPack === 1 || (i + 1) % packConfig.cardsPerPack === 0;
+            <div className="shop-points-badge">
+              🪙 Pony Points: <strong>{points}</strong>
+            </div>
+          </div>
+        </div>
 
-      let targetBucket = 'SR';
-      if (isChaseSlot) {
-        pityCounter += 1;
-        if (pityCounter >= 10) {
-          const pityRoll = Math.random();
-          targetBucket = pityRoll < 0.6 ? 'CR' : pityRoll < 0.85 ? 'SHINING' : 'GR';
-          pityCounter = 0;
-        } else {
-          const roll = Math.random();
-          let cumulative = 0;
-          for (const [bucket, chance] of Object.entries(packConfig.rates)) {
-            cumulative += chance;
-            if (roll <= cumulative) {
-              targetBucket = bucket;
-              break;
-            }
-          }
-          if (['CR', 'SHINING', 'GR'].includes(targetBucket)) {
-            pityCounter = 0;
-          }
-        }
-      } else {
-        targetBucket = Math.random() < 0.85 ? 'SR' : 'UR';
-      }
+        {message && <div className="shop-message-banner">{message}</div>}
 
-      if (
-        tierKey === 'BUNDLE' &&
-        i === totalCards - 1 &&
-        !pulledCards.some(
-          (c) => ['UR', 'CR', 'GR', 'DR'].includes(c.rarity) || String(c.id).endsWith('-S')
-        )
-      ) {
-        targetBucket = 'UR';
-      }
+        {/* ROW 1: CARDS OF THE WEEK ON MINIATURE EASELS WITH SPOTLIGHTS */}
+        <div className="shop-section">
+          <div className="shop-section-header">
+            <h3>🌟 Cards of the Week</h3>
+            {weekId && <span className="week-tag">Auto-Rotating • {weekId}</span>}
+          </div>
+          <p className="shop-section-desc">
+            Spotlighted single cards available for direct unlock. Click any card on its easel to inspect its rules!
+          </p>
 
-      const pulledCard = await drawSingleChaseCard(client, targetBucket);
-      if (pulledCard) {
-        const maxPlayset = getMaxPlaysetForCard(pulledCard.card_type);
-        const existingRes = await client.query(
-          'SELECT quantity FROM auth.user_cards WHERE user_id = $1 AND card_id = $2',
-          [userId, pulledCard.id]
-        );
-        const currentQty = Number(existingRes.rows[0]?.quantity) || 0;
+          <div className="weekly-easels-grid">
+            {deals.map((deal) => (
+              <div key={deal.id} className="easel-stage">
+                <div className="easel-spotlight-beam" aria-hidden="true" />
+                <span className="easel-rarity-pill">
+                  {deal.card_id.endsWith('-S') ? `✨ ${deal.rarity}-S` : deal.rarity}
+                </span>
 
-        if (currentQty >= maxPlayset) {
-          const dust = getCardDustRate(pulledCard.id, pulledCard.rarity);
-          autoDustEarned += dust;
-          pulledCards.push({ ...pulledCard, convertedToDust: dust });
-        } else {
-          pulledCards.push(pulledCard);
-          await client.query(
-            `INSERT INTO auth.user_cards (user_id, card_id, quantity, user_alerted)
-             VALUES ($1, $2, 1, FALSE)
-             ON CONFLICT (user_id, card_id)
-             DO UPDATE SET
-               quantity = auth.user_cards.quantity + 1,
-               user_alerted = FALSE`,
-            [userId, pulledCard.id]
-          );
-        }
-      }
-    }
+                <div className="mini-easel-assembly">
+                  <div className="easel-top-finial" />
+                  <div
+                    className={`easel-card-canvas ${getCardFoilClass({
+                      id: deal.card_id,
+                      rarity: deal.rarity,
+                    })}`}
+                    onClick={() =>
+                      setPreviewCard({
+                        id: deal.card_id,
+                        name: deal.name,
+                        card_type: deal.card_type,
+                        element: deal.element,
+                        rarity: deal.rarity,
+                        cost: deal.cost,
+                        power: deal.power,
+                        effect_text: deal.effect_text,
+                        image_url: deal.image_url,
+                      })
+                    }
+                  >
+                    <img src={deal.image_url || CARD_BACK_URL} alt={deal.name} />
+                  </div>
+                  <div className="easel-ledge" />
+                  <div className="easel-legs" aria-hidden="true">
+                    <span className="easel-leg left" />
+                    <span className="easel-leg right" />
+                  </div>
+                </div>
 
-    const updatedUser = await client.query(
-      `UPDATE auth.users
-       SET reward_points = reward_points + $1,
-           pity_counter = $2
-       WHERE id = $3
-       RETURNING reward_points, pity_counter`,
-      [autoDustEarned, pityCounter, userId]
-    );
+                <div className="easel-info-plaque">
+                  <h4>{deal.name}</h4>
+                  <div className="easel-card-meta">
+                    {deal.card_type} • {deal.element || 'Unaligned'}
+                  </div>
+                  <button
+                    type="button"
+                    className="shop-buy-btn deal-btn"
+                    disabled={purchasing}
+                    onClick={() => handleBuyDeal(deal.id, deal.price)}
+                  >
+                    Unlock Card ({deal.price} 🪙)
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-    const tradeInSummary = await calculateTradeInSummary(client, userId);
+        {/* ROW 2: 3 SHINY FOIL BOOSTER PACK OBJECTS + DISTRIBUTION BOXES */}
+        <div className="shop-section">
+          <div className="shop-section-header">
+            <h3>🎁 Shiny Foil Booster Packs (SR, UR, CR, GR, DR &amp; Shining -S)</h3>
+          </div>
+          <p className="shop-section-desc">
+            Excess copies beyond a <strong>4-card playset</strong> automatically convert into Pony Points dust!
+          </p>
 
-    await client.query('COMMIT');
-    res.json({
-      success: true,
-      tierName: packConfig.name,
-      remainingPoints: updatedUser.rows[0].reward_points,
-      pityCounter: updatedUser.rows[0].pity_counter,
-      autoDustEarned,
-      cards: pulledCards,
-      tradeInSummary,
-    });
-  } catch (err: any) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
-  }
-});
+          <div className="packs-showcase-grid">
+            {Object.entries(tiers).map(([key, tier]) => (
+              <div key={key} className="pack-showcase-column">
+                <div
+                  className={`shiny-foil-pack ${getPackVisualClass(key)}`}
+                  onClick={() => !purchasing && handleBuyPack(key, tier.cost, tier.name)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) =>
+                    e.key === 'Enter' && !purchasing && handleBuyPack(key, tier.cost, tier.name)
+                  }
+                >
+                  <div className="foil-pack-crimp" />
+                  <div className="foil-pack-center">
+                    <div className="foil-pack-logo">EQUESTRIA CLASH</div>
+                    <div className="foil-pack-tier-title">{tier.name}</div>
+                    <div className="foil-pack-count-badge">{tier.badge}</div>
+                    <div className="foil-pack-cost-pill">{tier.cost} 🪙</div>
+                  </div>
+                  <div className="foil-pack-crimp bottom" />
+                </div>
 
-// Buy guaranteed weekly deal card
-router.post('/buy-deal', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  const userId = req.user?.id;
-  const { dealId } = req.body;
+                <div className="pack-distribution-box">
+                  <div className="pack-dist-header">
+                    <h4>{tier.name}</h4>
+                    <span className="pack-dist-cost">{tier.cost} 🪙</span>
+                  </div>
+                  <p className="pack-dist-desc">{tier.description}</p>
 
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+                  {tier.rates && (
+                    <div className="pack-odds-pills">
+                      {Object.entries(tier.rates).map(([rar, prob]) => (
+                        <span key={rar} className="odds-pill">
+                          {rar}: {formatRate(Number(prob))}
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+                  <button
+                    type="button"
+                    className="shop-buy-btn"
+                    disabled={purchasing}
+                    onClick={() => handleBuyPack(key, tier.cost, tier.name)}
+                  >
+                    {purchasing ? 'Summoning Pack...' : `Buy ${tier.name} (${tier.cost} 🪙)`}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-    const dealRes = await client.query(
-      `SELECT d.price, c.* FROM game.weekly_shop_deals d
-       JOIN game.cards c ON d.card_id = c.id
-       WHERE d.id = $1`,
-      [dealId]
-    );
-    if (dealRes.rows.length === 0) throw new Error('Deal not found');
-    const deal = dealRes.rows[0];
+        {/* ROW 3: EVENT SALES (COMING SOON) */}
+        <div className="shop-section">
+          <div className="shop-section-header">
+            <h3>🎪 Event Sales &amp; Seasonal Bundles</h3>
+          </div>
+          <div className="event-sales-alcove">
+            <span className="event-coming-soon-badge">✨ Coming Soon ✨</span>
+            <h4>Grand Galloping Gala &amp; Seasonal Specials</h4>
+            <p>
+              Limited-time holiday booster boxes, themed playmats, and discounted Mane Character collector bundles will appear here during Equestria Clash seasonal events!
+            </p>
+          </div>
+        </div>
 
-    const userRes = await client.query(
-      'SELECT reward_points FROM auth.users WHERE id = $1 FOR UPDATE',
-      [userId]
-    );
-    if (userRes.rows.length === 0) throw new Error('User not found');
+        {/* INTERACTIVE PACK RIP & 3D CARD FLIP MODAL */}
+        {pulledCards && (
+          <div
+            className="pack-reveal-backdrop"
+            onClick={() => {
+              if (packStage === 'REVEALING' && allRevealed && !previewCard) closePackModal();
+            }}
+          >
+            <div className="pack-reveal-modal" onClick={(e) => e.stopPropagation()}>
+              {packStage !== 'REVEALING' ? (
+                <div className="sealed-pack-stage">
+                  <h3>✨ {activePackTier?.name || 'Booster Pack'} Ready! ✨</h3>
+                  <p>Click the booster pack or tear along the foil strip to rip it open!</p>
 
-    if (userRes.rows[0].reward_points < deal.price) {
-      throw new Error('Not enough Pony Points for this deal');
-    }
+                  <div
+                    className={`booster-foil-wrapper ${
+                      packStage === 'RIPPING' ? 'ripping-active' : 'sealed-idle'
+                    } ${getPackVisualClass(activePackTier?.key || 'standard')}`}
+                    onClick={handleRipPack}
+                  >
+                    <div className="booster-foil-top-flap">
+                      <span className="foil-crimp-lines" />
+                      <span className="foil-tear-hint">✂️ TEAR HERE</span>
+                    </div>
+                    <div className="booster-tear-laser" />
+                    <div className="booster-foil-body">
+                      <div className="booster-emblem">EQUESTRIA CLASH</div>
+                      <div className="booster-sub-emblem">{activePackTier?.name}</div>
+                      <div className="booster-sparkle-ring">✦ ✧ ✦</div>
+                    </div>
+                  </div>
 
-    await client.query('UPDATE auth.users SET reward_points = reward_points - $1 WHERE id = $2', [
-      deal.price,
-      userId,
-    ]);
+                  <button
+                    type="button"
+                    className="shop-buy-btn rip-trigger-btn"
+                    onClick={handleRipPack}
+                    disabled={packStage === 'RIPPING'}
+                  >
+                    {packStage === 'RIPPING' ? '✨ Ripping Foil...' : '✂️ Rip Open Pack!'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h3>🎉 Tap to Flip — Click Revealed Cards to Preview!</h3>
+                  <p>
+                    Click a face-down card to flip it, or click an open card to inspect its rules text.
+                    {autoDustBanner > 0 && (
+                      <strong style={{ color: '#fde047', display: 'block', marginTop: '4px' }}>
+                        ♻️ Excess 5th+ copies converted into +{autoDustBanner} 🪙 Pony Points!
+                      </strong>
+                    )}
+                  </p>
 
-    const maxPlayset = getMaxPlaysetForCard(deal.card_type);
-    await client.query(
-      `INSERT INTO auth.user_cards (user_id, card_id, quantity, user_alerted)
-       VALUES ($1, $2, 1, FALSE)
-       ON CONFLICT (user_id, card_id)
-       DO UPDATE SET
-         quantity = LEAST($3, auth.user_cards.quantity + 1),
-         user_alerted = FALSE`,
-      [userId, deal.id, maxPlayset]
-    );
+                  <div className="pulled-cards-row">
+                    {pulledCards.map((card, idx) => {
+                      const isFlipped = Boolean(flippedIndices[idx]);
+                      const foilCls = getCardFoilClass(card);
+                      const isUltra = Boolean(foilCls);
+                      return (
+                        <div
+                          key={idx}
+                          className={`flip-card-scene ${isFlipped ? 'is-flipped' : ''} ${
+                            isUltra ? 'ultra-foil' : ''
+                          }`}
+                          style={{ animationDelay: `${idx * 0.08}s` }}
+                          onClick={() => handleCardSlotClick(card, idx)}
+                        >
+                          <div className="flip-card-inner">
+                            <div className="flip-card-face flip-card-back">
+                              <img src={CARD_BACK_URL} alt="Card Back" />
+                              <span className="tap-to-flip-pill">Tap to Flip ✨</span>
+                            </div>
 
-    const updatedUser = await client.query('SELECT reward_points FROM auth.users WHERE id = $1', [
-      userId,
-    ]);
-    const tradeInSummary = await calculateTradeInSummary(client, userId);
+                            <div className={`flip-card-face flip-card-front ${foilCls}`}>
+                              <span className={`pulled-rarity rarity-${card.rarity.toLowerCase()}`}>
+                                {card.id.endsWith('-S') ? `✨ ${card.rarity}-S` : card.rarity}
+                              </span>
+                              <img src={card.image_url || CARD_BACK_URL} alt={card.name} />
+                              <h5>{card.name}</h5>
+                              <span>
+                                {card.convertedToDust
+                                  ? `♻️ +${card.convertedToDust} 🪙 Dust`
+                                  : '🔍 Click to Preview'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-    await client.query('COMMIT');
-    res.json({
-      success: true,
-      remainingPoints: updatedUser.rows[0].reward_points,
-      card: deal,
-      tradeInSummary,
-    });
-  } catch (err: any) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// Trade in any extra copies beyond a 4-card playset (x1 for Mane Characters)
-router.post('/trade-in-extras', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const { rows } = await client.query(
-      `SELECT uc.card_id, uc.quantity, c.rarity, c.card_type
-       FROM auth.user_cards uc
-       JOIN game.cards c ON uc.card_id = c.id
-       WHERE uc.user_id = $1
-       FOR UPDATE OF uc`,
-      [userId]
-    );
-
-    let tradedCount = 0;
-    let pointsEarned = 0;
-
-    for (const row of rows) {
-      const maxPlayset = getMaxPlaysetForCard(row.card_type);
-      const qty = Number(row.quantity) || 0;
-      if (qty > maxPlayset) {
-        const extras = qty - maxPlayset;
-        const rate = getCardDustRate(row.card_id, row.rarity);
-        tradedCount += extras;
-        pointsEarned += extras * rate;
-
-        await client.query(
-          `UPDATE auth.user_cards SET quantity = $1 WHERE user_id = $2 AND card_id = $3`,
-          [maxPlayset, userId, row.card_id]
-        );
-      }
-    }
-
-    if (tradedCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'No extra copies beyond your 4x playsets to trade in!' });
-    }
-
-    const updatedUser = await client.query(
-      `UPDATE auth.users
-       SET reward_points = reward_points + $1
-       WHERE id = $2
-       RETURNING reward_points`,
-      [pointsEarned, userId]
-    );
-
-    await client.query('COMMIT');
-    res.json({
-      success: true,
-      tradedCount,
-      pointsEarned,
-      remainingPoints: updatedUser.rows[0].reward_points,
-      tradeInSummary: { extraCardsCount: 0, totalPointsValue: 0 },
-    });
-  } catch (err: any) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
-  }
-});
-
-export default router;
+                  <div className="pack-modal-actions">
+                    {!allRevealed && (
+                      <button
+                        type="button"
+                        className="shop-buy-btn deal-btn"
+                        style={{ width: 'auto', padding: '10px 22px' }}
+                        onClick={revealAllCards}
+                      >
+                        ✨ Reveal All Cards
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="shop-buy-btn"
+                      style={{ width: 'auto', padding: '10px 26px' }}
+                      onClick={closePackModal}
+                    >
+                      {allRevealed ? 'Awesome, Collect! ✨' : 'Collect & Close'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
