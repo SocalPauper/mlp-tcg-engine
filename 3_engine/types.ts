@@ -1,32 +1,21 @@
-export type DeckId = string;
+export type LaneKey = 'left' | 'center' | 'right';
 
-export type CardType =
-  | 'Mane Character'
-  | 'MainCharacter'
-  | 'Character'
-  | 'Friend Character'
-  | 'Item'
-  | 'Event'
-  | 'Scene'
-  | 'Story'
-  | 'Plan';
-
-export type HarmonyColor =
+export type ElementType =
   | 'Magic'
-  | 'Honesty'
   | 'Loyalty'
-  | 'Laughter'
+  | 'Honesty'
   | 'Generosity'
   | 'Kindness'
+  | 'Laughter'
   | 'Everyday'
-  | 'None';
+  | string;
 
 export interface CardDefinition {
   id: string;
   cardNumber: string;
   name: string;
-  type: CardType | string;
-  element: HarmonyColor | string;
+  type: string;
+  element: ElementType;
   cost: number;
   power: number;
   defense: number;
@@ -61,42 +50,23 @@ export interface AdventureSlot {
   hadTreat: boolean;
   presents: CardDefinition[];
   hadPresent: boolean;
-  preventRetireInContact?: boolean;
+  preventRetireInContact: boolean;
 }
 
 export interface PowerModifierLine {
-  sourceName: string;
-  sourceType: 'BASE' | 'ITEM' | 'MANE_PASSIVE' | 'SCENE_PASSIVE' | 'STORY_PASSIVE' | 'INSPO_BOOST';
-  amount: number;
+  label: string;
+  bonus: number;
+  color: string;
 }
 
 export interface LanePowerBreakdown {
   basePower: number;
-  modifiers: PowerModifierLine[];
+  lines: PowerModifierLine[];
   totalPower: number;
 }
 
-export interface NextCardDiscount {
-  filter?: string;
-  cardType?: string;
-  amount: number;
-}
-
-export type PendingEffectAction =
-  | 'BUFF_POWER'
-  | 'BUFF_TWO_TARGETS'
-  | 'DEBUFF_OPPONENT'
-  | 'RETIRE_OPPONENT'
-  | 'PREVENT_RETIRE_IN_CONTACT'
-  | 'MOVE_FRIENDLY'
-  | 'SWITCH_POSITIONS'
-  | 'READY_FRIENDLY'
-  | 'TREAT_CHARACTER'
-  | 'REMOVE_TREAT'
-  | 'DELIVER_PRESENT'
-  | 'UNWRAP_PRESENT';
-
 export interface PendingTargetSelection {
+  playerId?: '0' | '1';
   sourceCard: CardDefinition;
   sourceOrigin:
     | 'HAND_EVENT'
@@ -108,16 +78,28 @@ export interface PendingTargetSelection {
     | 'STORY_PROMOTION'
     | 'DELAYED_TRIGGER';
   sourceLane?: LaneKey;
-  effectAction: PendingEffectAction;
+  effectAction:
+    | 'BUFF_POWER'
+    | 'BUFF_TWO_TARGETS'
+    | 'DEBUFF_OPPONENT'
+    | 'TREAT_CHARACTER'
+    | 'REMOVE_TREAT'
+    | 'DELIVER_PRESENT'
+    | 'UNWRAP_PRESENT'
+    | 'SWITCH_POSITIONS'
+    | 'RETIRE_OPPONENT'
+    | 'READY_FRIENDLY'
+    | 'MOVE_FRIENDLY'
+    | 'PREVENT_RETIRE_IN_CONTACT';
   value: number;
   maxTargetCostOrPower?: number;
+  secondaryNameFilter?: string;
   promptText: string;
   validTargets: {
     owner: 'SELF' | 'OPPONENT';
     lane: LaneKey;
   }[];
   selectedFromLane?: LaneKey;
-  secondaryNameFilter?: string;
   resumeAttackQueue?: LaneKey[] | null;
   resumeEndTurnForPlayer?: '0' | '1' | null;
 }
@@ -197,38 +179,17 @@ export interface MatchRewardSummary {
   note: string;
 }
 
-export interface DebugTraceEntry {
-  id: string;
-  turn: number;
-  phase: GamePhase;
-  turnPlayer: string;
-  actor: string;
-  cardId: string;
-  cardName: string;
-  cardText: string;
-  triggerType: string;
-  detectedKeywords: string[];
-  parsedKind: string;
-  targetsOrChoice: string;
-  status: 'RESOLVED' | 'QUEUED_DELAYED' | 'QUEUED_STACK' | 'AWAITING_INPUT' | 'SKIPPED';
-  notes: string;
-  timestamp: number;
-}
-
 export interface ActionSpotlightEvent {
   id: string;
   actorId: '0' | '1';
   actorName: string;
   actionType:
     | 'PLAY_CHARACTER'
-    | 'ADORN_ITEM'
     | 'PLAY_EVENT'
-    | 'ACTIVATE_ABILITY'
-    | 'ENTER_CONTACT'
-    | 'INTERVENE_PLAN'
-    | 'PROGRESS_STORY'
+    | 'ADORN_ITEM'
     | 'TRIGGER_KEYWORD'
-    | 'DELAYED_TRIGGER';
+    | 'DELAYED_TRIGGER'
+    | 'SYSTEM';
   comicWord?: string;
   title: string;
   subtitle: string;
@@ -244,6 +205,24 @@ export interface ActionLogEntry {
   sourceCard?: string;
   text: string;
   category: 'PLAY' | 'EFFECT' | 'CLASH' | 'STORY' | 'SYSTEM';
+  timestamp: number;
+}
+
+export interface DebugTraceEntry {
+  id: string;
+  turn: number;
+  phase: string;
+  turnPlayer: string;
+  actor: string;
+  cardId: string;
+  cardName: string;
+  cardText: string;
+  triggerType: string;
+  detectedKeywords: string[];
+  parsedKind: string;
+  targetsOrChoice: string;
+  status: 'RESOLVED' | 'AWAITING_INPUT' | 'QUEUED_STACK' | 'QUEUED_DELAYED' | 'SKIPPED';
+  notes: string;
   timestamp: number;
 }
 
@@ -267,8 +246,8 @@ export interface PlayerState {
   mulliganStatus: 'PENDING' | 'KEPT' | 'MULLIGANED';
   turnsTaken: number;
   actedLanesThisTurn: LaneKey[];
-  nextCardCostDiscount?: NextCardDiscount | null;
-  isConnected?: boolean;
+  nextCardCostDiscount?: { filter?: string; cardType?: string; amount: number } | null;
+  isConnected: boolean;
   speechBubble?: ManeSpeechBubble | null;
 }
 
@@ -287,9 +266,7 @@ export type GamePhase =
   | 'END_PHASE'
   | 'GAME_OVER';
 
-export type LaneKey = 'left' | 'center' | 'right';
-
-export interface ContactCombatState {
+export interface ContactPhaseState {
   activeLane: LaneKey;
   laneQueue: LaneKey[];
   promptPlayerId: '0' | '1';
@@ -298,7 +275,7 @@ export interface ContactCombatState {
   defenderPower: number;
 }
 
-export interface ClashAnimationEvent {
+export interface ClashEvent {
   id: number;
   lane: LaneKey;
   attackerCard: CardDefinition;
@@ -331,43 +308,43 @@ export interface StoryRevealEvent {
   isGameWinningStage: boolean;
 }
 
-export interface PublicAnnouncement {
+export interface AnnouncementBanner {
   type: string;
   message: string;
   timestamp: number;
-}
-
-export interface HydratedDeckPayload {
-  leader: CardDefinition;
-  storyDeck: CardDefinition[];
-  sceneDeck: CardDefinition[];
-  mainDeck: CardDefinition[];
 }
 
 export interface KayouGameState {
   roomId: string;
   phase: GamePhase;
   firstPlayerId: '0' | '1';
-  wheelSpinDegrees?: number;
+  wheelSpinDegrees: number;
   turnPlayerId: '0' | '1';
   turnNumber: number;
   winnerId: '0' | '1' | null;
-  winReason?: string | null;
+  winReason: string | null;
   turnDeadlineMs?: number;
   players: Record<'0' | '1', PlayerState>;
-  contactState: ContactCombatState | null;
+  contactState: ContactPhaseState | null;
   pendingTarget: PendingTargetSelection | null;
-  pendingHandChoice?: PendingHandChoice | null;
-  pendingLaneQueueAfterReveal: LaneKey[] | null;
-  effectResolutionQueue?: QueuedEffectItem[];
-  delayedTriggers?: DelayedTriggerEntry[];
-  lastClashEvent: ClashAnimationEvent | null;
+  pendingHandChoice: PendingHandChoice | null;
+  pendingLaneQueueAfterReveal?: LaneKey[] | null;
+  effectResolutionQueue: QueuedEffectItem[];
+  delayedTriggers: DelayedTriggerEntry[];
+  lastClashEvent: ClashEvent | null;
   lastPlanRevealEvent: PlanRevealEvent | null;
   lastStoryRevealEvent: StoryRevealEvent | null;
   lastActionBanner?: ActionSpotlightEvent | null;
   lastCardFlight?: CardFlightAnimation | null;
   rewardSummary?: Partial<Record<'0' | '1', MatchRewardSummary>>;
-  announcements: PublicAnnouncement[];
+  announcements: AnnouncementBanner[];
   actionLog: ActionLogEntry[];
-  debugTrace?: DebugTraceEntry[];
+  debugTrace: DebugTraceEntry[];
+}
+
+export interface HydratedDeckPayload {
+  leader: CardDefinition | null;
+  storyDeck: CardDefinition[];
+  sceneDeck: CardDefinition[];
+  mainDeck: CardDefinition[];
 }

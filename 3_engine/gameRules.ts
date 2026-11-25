@@ -679,6 +679,7 @@ function buildPendingTargetFromParsed(
       .map((l) => ({ owner: 'SELF' as const, lane: l }));
     if (firstTargets.length === 0 || secondTargets.length === 0) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -706,6 +707,7 @@ function buildPendingTargetFromParsed(
       .map((l) => ({ owner: 'SELF' as const, lane: l }));
     if (validTargets.length === 0) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -729,6 +731,7 @@ function buildPendingTargetFromParsed(
       .map((l) => ({ owner: 'SELF' as const, lane: l }));
     if (validTargets.length === 0) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -749,6 +752,7 @@ function buildPendingTargetFromParsed(
       .map((l) => ({ owner: 'OPPONENT' as const, lane: l }));
     if (validTargets.length === 0) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -767,6 +771,7 @@ function buildPendingTargetFromParsed(
       .map((l) => ({ owner: 'SELF' as const, lane: l }));
     if (validTargets.length === 0) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -803,6 +808,7 @@ function buildPendingTargetFromParsed(
     }
     if (targets.length === 0) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -839,6 +845,7 @@ function buildPendingTargetFromParsed(
     }
     if (targets.length === 0) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -869,6 +876,7 @@ function buildPendingTargetFromParsed(
     }
     if (targets.length === 0) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -889,6 +897,7 @@ function buildPendingTargetFromParsed(
       .map((l) => ({ owner: targetOwner as 'SELF' | 'OPPONENT', lane: l }));
     if (occupiedLanes.length < 2) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -915,6 +924,7 @@ function buildPendingTargetFromParsed(
       .map((l) => ({ owner: 'OPPONENT' as const, lane: l }));
     if (validTargets.length === 0) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -934,6 +944,7 @@ function buildPendingTargetFromParsed(
       .map((l) => ({ owner: 'SELF' as const, lane: l }));
     if (validTargets.length === 0) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -952,6 +963,7 @@ function buildPendingTargetFromParsed(
       .map((l) => ({ owner: 'SELF' as const, lane: l }));
     if (validTargets.length === 0) return null;
     return {
+      playerId,
       sourceCard,
       sourceOrigin,
       sourceLane,
@@ -2093,7 +2105,7 @@ export function playCardFromHand(
     workingState = setManeSpeechBubble(
       workingState,
       playerId,
-      `I summon ${card.name} to the ${lane.toUpperCase()} lane!`,
+      `I play ${card.name} to the ${lane.toUpperCase()} lane!`,
       'INFO'
     );
 
@@ -2105,7 +2117,7 @@ export function playCardFromHand(
       `Placed in ${lane.toUpperCase()} Adventure Lane`,
       card,
       lane,
-      'SUMMON!'
+      'PLAY!'
     );
 
     if (!/Appear\s*:/i.test(sanitizeCardText(card.effectText))) {
@@ -2216,18 +2228,18 @@ export function playCardFromHand(
   nextState = appendActionLog(
     nextState,
     player.displayName,
-    `played Event ${card.name} (${card.id}) (Cost: ${effectiveCost} Force of Harmony).`,
+    `used Event ${card.name} (${card.id}) (Cost: ${effectiveCost} Force of Harmony).`,
     'PLAY',
     card.name
   );
 
-  nextState = setManeSpeechBubble(nextState, playerId, `I cast Event: ${card.name}!`, 'EFFECT');
+  nextState = setManeSpeechBubble(nextState, playerId, `I use Event: ${card.name}!`, 'EFFECT');
 
   nextState = setActionSpotlight(
     nextState,
     playerId,
     'PLAY_EVENT',
-    `${player.displayName} played Event: ${card.name}`,
+    `${player.displayName} used Event: ${card.name}`,
     sanitizeCardText(card.effectText) || 'Event activated',
     card,
     undefined,
@@ -2259,7 +2271,8 @@ export function resolveHandChoice(
   selectedIndices: number[]
 ): KayouGameState {
   if (state.phase !== 'PENDING_HAND_CHOICE' || !state.pendingHandChoice) return state;
-  if (state.pendingHandChoice.playerId !== playerId && state.turnPlayerId !== playerId) return state;
+  if (state.pendingHandChoice.playerId && state.pendingHandChoice.playerId !== playerId) return state;
+  if (!state.pendingHandChoice.playerId && state.turnPlayerId !== playerId) return state;
 
   const choice = state.pendingHandChoice;
   const actingPlayerId = choice.playerId || playerId;
@@ -2576,10 +2589,13 @@ export function resolveTargetSelection(
   targetOwner: 'SELF' | 'OPPONENT',
   targetLane: LaneKey
 ): KayouGameState {
-  if (state.turnPlayerId !== playerId || !state.pendingTarget) return state;
+  if (!state.pendingTarget) return state;
   const pending = state.pendingTarget;
-  const oppId: '0' | '1' = playerId === '0' ? '1' : '0';
-  const targetPlayerId: '0' | '1' = targetOwner === 'SELF' ? playerId : oppId;
+  const actingPlayerId: '0' | '1' = pending.playerId || state.turnPlayerId;
+  if (actingPlayerId !== playerId) return state;
+
+  const oppId: '0' | '1' = actingPlayerId === '0' ? '1' : '0';
+  const targetPlayerId: '0' | '1' = targetOwner === 'SELF' ? actingPlayerId : oppId;
   const resumeQueue = pending.resumeAttackQueue;
   const resumeEndTurn = pending.resumeEndTurnForPlayer;
 
@@ -2588,7 +2604,7 @@ export function resolveTargetSelection(
   };
 
   if (pending.effectAction === 'BUFF_TWO_TARGETS' && targetOwner === 'SELF') {
-    const me = state.players[playerId];
+    const me = state.players[actingPlayerId];
     const slot = me.adventureArea[targetLane];
     if (!slot.character) return state;
 
@@ -2596,7 +2612,7 @@ export function resolveTargetSelection(
       ...state,
       players: {
         ...state.players,
-        [playerId]: {
+        [actingPlayerId]: {
           ...me,
           adventureArea: {
             ...me.adventureArea,
@@ -2620,7 +2636,7 @@ export function resolveTargetSelection(
     if (!pending.selectedFromLane && pending.secondaryNameFilter) {
       const secondTargets = (['left', 'center', 'right'] as LaneKey[])
         .filter((l) => {
-          const c = logged.players[playerId].adventureArea[l].character;
+          const c = logged.players[actingPlayerId].adventureArea[l].character;
           return c !== null && matchesFilter(c, pending.secondaryNameFilter);
         })
         .map((l) => ({ owner: 'SELF' as const, lane: l }));
@@ -2631,6 +2647,7 @@ export function resolveTargetSelection(
           phase: 'PENDING_TARGET',
           pendingTarget: {
             ...pending,
+            playerId: actingPlayerId,
             selectedFromLane: targetLane,
             promptText: `${pending.sourceCard.name}: Select 「${pending.secondaryNameFilter}」 to grant +${pending.value} Inspiration (2 of 2):`,
             validTargets: secondTargets,
@@ -2647,7 +2664,7 @@ export function resolveTargetSelection(
   }
 
   if (pending.effectAction === 'REMOVE_TREAT' && targetOwner === 'SELF') {
-    const me = state.players[playerId];
+    const me = state.players[actingPlayerId];
     const slot = me.adventureArea[targetLane];
     if (!slot.character || slot.treats <= 0) return state;
 
@@ -2657,7 +2674,7 @@ export function resolveTargetSelection(
       pendingTarget: null,
       players: {
         ...state.players,
-        [playerId]: {
+        [actingPlayerId]: {
           ...me,
           adventureArea: {
             ...me.adventureArea,
@@ -2676,12 +2693,12 @@ export function resolveTargetSelection(
       'EFFECT',
       pending.sourceCard.name
     );
-    next = triggerOnTreatChanged(next, playerId, targetLane, 'REMOVED');
+    next = triggerOnTreatChanged(next, actingPlayerId, targetLane, 'REMOVED');
     return finishAndResume(next);
   }
 
   if (pending.effectAction === 'PREVENT_RETIRE_IN_CONTACT' && targetOwner === 'SELF') {
-    const me = state.players[playerId];
+    const me = state.players[actingPlayerId];
     const slot = me.adventureArea[targetLane];
     if (!slot.character) return state;
 
@@ -2692,7 +2709,7 @@ export function resolveTargetSelection(
         pendingTarget: null,
         players: {
           ...state.players,
-          [playerId]: {
+          [actingPlayerId]: {
             ...me,
             adventureArea: {
               ...me.adventureArea,
@@ -2713,7 +2730,7 @@ export function resolveTargetSelection(
   }
 
   if (pending.effectAction === 'MOVE_FRIENDLY' && !pending.selectedFromLane) {
-    if (targetOwner !== 'SELF' || !state.players[playerId].adventureArea[targetLane].character)
+    if (targetOwner !== 'SELF' || !state.players[actingPlayerId].adventureArea[targetLane].character)
       return state;
     const destinations = (['left', 'center', 'right'] as LaneKey[])
       .filter((l) => l !== targetLane)
@@ -2723,9 +2740,10 @@ export function resolveTargetSelection(
       ...state,
       pendingTarget: {
         ...pending,
+        playerId: actingPlayerId,
         selectedFromLane: targetLane,
         promptText: `Select destination lane to move ${
-          state.players[playerId].adventureArea[targetLane].character!.name
+          state.players[actingPlayerId].adventureArea[targetLane].character!.name
         } to:`,
         validTargets: destinations,
       },
@@ -2737,7 +2755,7 @@ export function resolveTargetSelection(
     const toLane = targetLane;
     if (fromLane === toLane) return state;
 
-    const me = state.players[playerId];
+    const me = state.players[actingPlayerId];
     const fromSlot = me.adventureArea[fromLane];
     const toSlot = me.adventureArea[toLane];
 
@@ -2748,7 +2766,7 @@ export function resolveTargetSelection(
         pendingTarget: null,
         players: {
           ...state.players,
-          [playerId]: {
+          [actingPlayerId]: {
             ...me,
             adventureArea: {
               ...me.adventureArea,
@@ -2778,6 +2796,7 @@ export function resolveTargetSelection(
       ...state,
       pendingTarget: {
         ...pending,
+        playerId: actingPlayerId,
         selectedFromLane: targetLane,
         promptText: `Select the second Character to switch positions with ${
           targetPlayer.adventureArea[targetLane].character!.name
@@ -2813,7 +2832,7 @@ export function resolveTargetSelection(
           },
         },
       },
-      state.players[playerId].displayName,
+      state.players[actingPlayerId].displayName,
       `switched positions of Characters in ${laneA.toUpperCase()} and ${laneB.toUpperCase()} lanes.`,
       'EFFECT',
       pending.sourceCard.name
@@ -2822,7 +2841,7 @@ export function resolveTargetSelection(
   }
 
   if (pending.effectAction === 'BUFF_POWER' && targetOwner === 'SELF') {
-    const me = state.players[playerId];
+    const me = state.players[actingPlayerId];
     const slot = me.adventureArea[targetLane];
     if (!slot.character) return state;
 
@@ -2838,7 +2857,7 @@ export function resolveTargetSelection(
         pendingTarget: null,
         players: {
           ...state.players,
-          [playerId]: {
+          [actingPlayerId]: {
             ...me,
             adventureArea: {
               ...me.adventureArea,
@@ -2882,7 +2901,7 @@ export function resolveTargetSelection(
           },
         },
       },
-      state.players[playerId].displayName,
+      state.players[actingPlayerId].displayName,
       `applied -${pending.value} Inspiration to rival's ${slot.character.name} (${slot.character.id}).`,
       'EFFECT',
       pending.sourceCard.name
@@ -2915,7 +2934,7 @@ export function resolveTargetSelection(
           },
         },
       },
-      state.players[playerId].displayName,
+      state.players[actingPlayerId].displayName,
       `placed ${pending.value} Treat on ${slot.character.name} (${slot.character.id}).`,
       'EFFECT',
       pending.sourceCard.name
@@ -2925,7 +2944,7 @@ export function resolveTargetSelection(
   }
 
   if (pending.effectAction === 'DELIVER_PRESENT') {
-    const me = state.players[playerId];
+    const me = state.players[actingPlayerId];
     if (me.mainDeck.length === 0) {
       return finishAndResume({ ...state, phase: 'MAIN_PHASE', pendingTarget: null });
     }
@@ -2936,7 +2955,7 @@ export function resolveTargetSelection(
       ...state,
       players: {
         ...state.players,
-        [playerId]: {
+        [actingPlayerId]: {
           ...me,
           mainDeck: restDeck,
         },
@@ -3009,7 +3028,7 @@ export function resolveTargetSelection(
 
     updatedState = appendActionLog(
       updatedState,
-      state.players[playerId].displayName,
+      state.players[actingPlayerId].displayName,
       `unwrapped a Present on ${slot.character.name} (${slot.character.id})!`,
       'EFFECT',
       pending.sourceCard.name
@@ -3020,7 +3039,7 @@ export function resolveTargetSelection(
   }
 
   if (pending.effectAction === 'READY_FRIENDLY' && targetOwner === 'SELF') {
-    const me = state.players[playerId];
+    const me = state.players[actingPlayerId];
     const slot = me.adventureArea[targetLane];
     if (!slot.character) return state;
 
@@ -3031,7 +3050,7 @@ export function resolveTargetSelection(
         pendingTarget: null,
         players: {
           ...state.players,
-          [playerId]: {
+          [actingPlayerId]: {
             ...me,
             adventureArea: {
               ...me.adventureArea,
@@ -3068,7 +3087,9 @@ export function resolveTargetSelection(
 }
 
 export function cancelTargetSelection(state: KayouGameState, playerId: '0' | '1'): KayouGameState {
-  if (state.phase !== 'PENDING_TARGET' || state.turnPlayerId !== playerId) return state;
+  if (state.phase !== 'PENDING_TARGET' || !state.pendingTarget) return state;
+  const actingPlayerId = state.pendingTarget.playerId || state.turnPlayerId;
+  if (actingPlayerId !== playerId) return state;
   const resumeQueue = state.pendingTarget?.resumeAttackQueue;
   const resumeEndTurn = state.pendingTarget?.resumeEndTurnForPlayer;
   const cleared: KayouGameState = {
