@@ -3,7 +3,10 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../App';
 import { getCardFoilClass } from '../styles/cardFoil';
-import CardPreviewModal, { PreviewableCard } from './CardPreviewModal';
+import CardPreviewModal, {
+  PreviewableCard,
+  invalidatePreviewCollectionCache,
+} from './CardPreviewModal';
 import './ShopView.css';
 
 interface CardItem extends PreviewableCard {
@@ -43,6 +46,7 @@ export default function ShopView() {
   const [weekId, setWeekId] = useState<string>('');
   const [deals, setDeals] = useState<WeeklyDeal[]>([]);
   const [tiers, setTiers] = useState<Record<string, any>>({});
+  const [ownedQuantities, setOwnedQuantities] = useState<Record<string, number>>({});
   const [tradeInSummary, setTradeInSummary] = useState<{
     extraCardsCount: number;
     totalPointsValue: number;
@@ -94,6 +98,9 @@ export default function ShopView() {
       if (data.tradeInSummary) {
         setTradeInSummary(data.tradeInSummary);
       }
+      if (data.ownedQuantities) {
+        setOwnedQuantities(data.ownedQuantities);
+      }
     } catch (err) {
       console.error('Failed to load shop', err);
     } finally {
@@ -104,6 +111,19 @@ export default function ShopView() {
   useEffect(() => {
     fetchShopData();
   }, []);
+
+  const getOwnedCount = (card: { id: string; card_type?: string; rarity?: string }) => {
+    if (ownedQuantities[card.id] !== undefined) {
+      return ownedQuantities[card.id];
+    }
+    const id = String(card.id || '').toUpperCase();
+    const rarity = String(card.rarity || 'C').toUpperCase();
+    const cType = String(card.card_type || '').toLowerCase();
+    const maxPlayset = cType.includes('mane') || cType.includes('main') ? 1 : 4;
+    if (id.endsWith('-S')) return 0;
+    if (/^SD/i.test(id) || ['C', 'U', 'R', 'SPR'].includes(rarity)) return maxPlayset;
+    return 0;
+  };
 
   const handleBuyPack = async (tierKey: string, cost: number, tierName: string) => {
     if (points < cost) {
@@ -123,6 +143,8 @@ export default function ShopView() {
       syncPoints(data.remainingPoints);
       if (data.pityCounter !== undefined) setPityCounter(data.pityCounter);
       if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
+      if (data.ownedQuantities) setOwnedQuantities(data.ownedQuantities);
+      invalidatePreviewCollectionCache();
       if (data.autoDustEarned > 0) setAutoDustBanner(data.autoDustEarned);
       setPulledCards(data.cards);
       setActivePackTier({ key: tierKey, name: tierName });
@@ -185,7 +207,11 @@ export default function ShopView() {
       );
       syncPoints(data.remainingPoints);
       if (data.tradeInSummary) setTradeInSummary(data.tradeInSummary);
-      setMessage(`✨ Successfully unlocked featured card: ${data.card.name}!`);
+      if (data.ownedQuantities) setOwnedQuantities(data.ownedQuantities);
+      invalidatePreviewCollectionCache();
+      setMessage(
+        `✨ Added 1 copy of ${data.card.name} (${data.newQuantity}/${data.maxPlayset} owned)!`
+      );
       fetchShopData();
     } catch (err: any) {
       setMessage(err.response?.data?.error || 'Failed to buy deal.');
@@ -215,6 +241,8 @@ export default function ShopView() {
       );
       syncPoints(data.remainingPoints);
       setTradeInSummary(data.tradeInSummary || { extraCardsCount: 0, totalPointsValue: 0 });
+      if (data.ownedQuantities) setOwnedQuantities(data.ownedQuantities);
+      invalidatePreviewCollectionCache();
       setMessage(
         `♻️ Sold back ${data.tradedCount} extra copy/copies beyond 4× playsets for +${data.pointsEarned} Pony Points!`
       );
@@ -269,7 +297,11 @@ export default function ShopView() {
       )}
 
       <div className="shop-container">
-        <CardPreviewModal card={previewCard} onClose={() => setPreviewCard(null)} />
+        <CardPreviewModal
+          card={previewCard}
+          ownedCount={previewCard ? getOwnedCount(previewCard) : undefined}
+          onClose={() => setPreviewCard(null)}
+        />
 
         <div className="shop-header">
           <div>
@@ -314,63 +346,89 @@ export default function ShopView() {
             {weekId && <span className="week-tag">Auto-Rotating • {weekId}</span>}
           </div>
           <p className="shop-section-desc">
-            Spotlighted single cards available for direct unlock. Click any card on its easel to inspect its rules!
+            Spotlighted single cards available up to a full playset (4× standard / 1× Mane Character). Click any card to inspect its rules!
           </p>
 
           <div className="weekly-easels-grid">
-            {deals.map((deal) => (
-              <div key={deal.id} className="easel-stage">
-                <div className="easel-spotlight-beam" aria-hidden="true" />
-                <span className="easel-rarity-pill">
-                  {deal.card_id.endsWith('-S') ? `✨ ${deal.rarity}-S` : deal.rarity}
-                </span>
+            {deals.map((deal) => {
+              const maxCopies =
+                deal.card_type.toLowerCase().includes('mane') ||
+                deal.card_type.toLowerCase().includes('main')
+                  ? 1
+                  : 4;
+              const owned = getOwnedCount({
+                id: deal.card_id,
+                card_type: deal.card_type,
+                rarity: deal.rarity,
+              });
+              const isMaxed = owned >= maxCopies;
 
-                <div className="mini-easel-assembly">
-                  <div className="easel-top-finial" />
-                  <div
-                    className={`easel-card-canvas ${getCardFoilClass({
-                      id: deal.card_id,
-                      rarity: deal.rarity,
-                    })}`}
-                    onClick={() =>
-                      setPreviewCard({
+              return (
+                <div key={deal.id} className="easel-stage">
+                  <div className="easel-spotlight-beam" aria-hidden="true" />
+                  <span className="easel-rarity-pill">
+                    {deal.card_id.endsWith('-S') ? `✨ ${deal.rarity}-S` : deal.rarity}
+                  </span>
+
+                  <div className="mini-easel-assembly">
+                    <div className="easel-top-finial" />
+                    <div
+                      className={`easel-card-canvas ${getCardFoilClass({
                         id: deal.card_id,
-                        name: deal.name,
-                        card_type: deal.card_type,
-                        element: deal.element,
                         rarity: deal.rarity,
-                        cost: deal.cost,
-                        power: deal.power,
-                        effect_text: deal.effect_text,
-                        image_url: deal.image_url,
-                      })
-                    }
-                  >
-                    <img src={deal.image_url || CARD_BACK_URL} alt={deal.name} />
+                      })}`}
+                      onClick={() =>
+                        setPreviewCard({
+                          id: deal.card_id,
+                          name: deal.name,
+                          card_type: deal.card_type,
+                          element: deal.element,
+                          rarity: deal.rarity,
+                          cost: deal.cost,
+                          power: deal.power,
+                          effect_text: deal.effect_text,
+                          image_url: deal.image_url,
+                        })
+                      }
+                    >
+                      <img src={deal.image_url || CARD_BACK_URL} alt={deal.name} />
+                    </div>
+                    <div className="easel-ledge" />
+                    <div className="easel-legs" aria-hidden="true">
+                      <span className="easel-leg left" />
+                      <span className="easel-leg right" />
+                    </div>
                   </div>
-                  <div className="easel-ledge" />
-                  <div className="easel-legs" aria-hidden="true">
-                    <span className="easel-leg left" />
-                    <span className="easel-leg right" />
-                  </div>
-                </div>
 
-                <div className="easel-info-plaque">
-                  <h4>{deal.name}</h4>
-                  <div className="easel-card-meta">
-                    {deal.card_type} • {deal.element || 'Unaligned'}
+                  <div className="easel-info-plaque">
+                    <h4>{deal.name}</h4>
+                    <div className="easel-card-meta">
+                      {deal.card_type} • {deal.element || 'Unaligned'}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '0.82rem',
+                        fontWeight: 900,
+                        color: isMaxed ? '#6ee7b7' : '#fde047',
+                        marginBottom: '10px',
+                      }}
+                    >
+                      📖 Copies Owned: {owned} / {maxCopies}
+                    </div>
+                    <button
+                      type="button"
+                      className="shop-buy-btn deal-btn"
+                      disabled={purchasing || isMaxed}
+                      onClick={() => handleBuyDeal(deal.id, deal.price)}
+                    >
+                      {isMaxed
+                        ? `Max Playset (${owned}/${maxCopies})`
+                        : `Buy Copy (${deal.price} 🪙)`}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    className="shop-buy-btn deal-btn"
-                    disabled={purchasing}
-                    onClick={() => handleBuyDeal(deal.id, deal.price)}
-                  >
-                    Unlock Card ({deal.price} 🪙)
-                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

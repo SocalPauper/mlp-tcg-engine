@@ -40,10 +40,15 @@ const PACK_TIERS = {
 
 // Duplicate Trade-In Dust Values beyond a 4-card playset (Rules v1.3.0 Rule 102.1.0)
 const TRADE_IN_VALUES: Record<string, number> = {
+  C: 5,
+  U: 10,
+  R: 15,
+  SPR: 15,
   SR: 20,
   SSR: 35,
   UR: 50,
-  CR: 50,
+  CR: 60,
+  DR: 80,
   SHINING: 100,
   GR: 100,
 };
@@ -59,10 +64,15 @@ function getCurrentWeekId() {
 }
 
 function getCardDustRate(cardId: string, rarity: string): number {
-  if (String(cardId || '').toUpperCase().endsWith('-S')) {
+  if (String(cardId || '').trim().toUpperCase().endsWith('-S')) {
     return TRADE_IN_VALUES.SHINING;
   }
-  return TRADE_IN_VALUES[String(rarity || 'SR').toUpperCase()] || 20;
+  return TRADE_IN_VALUES[String(rarity || 'SR').trim().toUpperCase()] ?? 20;
+}
+
+function getMaxPlaysetForCard(cardType: string): number {
+  const t = String(cardType || '').trim().toLowerCase();
+  return t.includes('mane') || t.includes('main character') ? 1 : 4;
 }
 
 async function calculateTradeInSummary(client: any, userId: string) {
@@ -78,7 +88,7 @@ async function calculateTradeInSummary(client: any, userId: string) {
   let totalPointsValue = 0;
 
   for (const row of rows) {
-    const maxPlayset = String(row.card_type || '').toLowerCase().includes('mane') ? 1 : 4;
+    const maxPlayset = getMaxPlaysetForCard(row.card_type);
     const qty = Number(row.quantity) || 0;
     if (qty > maxPlayset) {
       const extras = qty - maxPlayset;
@@ -89,6 +99,18 @@ async function calculateTradeInSummary(client: any, userId: string) {
   }
 
   return { extraCardsCount, totalPointsValue };
+}
+
+async function getUserOwnedQuantities(client: any, userId: string): Promise<Record<string, number>> {
+  const { rows } = await client.query(
+    `SELECT card_id, quantity FROM auth.user_cards WHERE user_id = $1`,
+    [userId]
+  );
+  const ownedQuantities: Record<string, number> = {};
+  for (const r of rows) {
+    ownedQuantities[r.card_id] = Number(r.quantity) || 0;
+  }
+  return ownedQuantities;
 }
 
 async function drawSingleChaseCard(client: any, bucket: string) {
@@ -114,7 +136,7 @@ async function drawSingleChaseCard(client: any, bucket: string) {
     cardRes = await client.query(
       `SELECT id, name, card_type, element, rarity, cost, power, effect_text, image_url
        FROM game.cards
-       WHERE rarity IN ('SR', 'SSR', 'UR', 'GR', 'CR') OR id ILIKE '%-S'
+       WHERE rarity IN ('SR', 'SSR', 'UR', 'GR', 'CR', 'DR') OR id ILIKE '%-S'
        ORDER BY RANDOM() LIMIT 1`
     );
   }
@@ -161,7 +183,7 @@ router.get('/status', authenticateToken, async (req: AuthenticatedRequest, res) 
         );
         if (pickRes.rows.length === 0) {
           pickRes = await client.query(
-            `SELECT id FROM game.cards WHERE rarity IN ('SR', 'UR', 'CR', 'GR') ORDER BY RANDOM() LIMIT 1`
+            `SELECT id FROM game.cards WHERE rarity IN ('SR', 'UR', 'CR', 'GR', 'DR') ORDER BY RANDOM() LIMIT 1`
           );
         }
         const pickedId = pickRes.rows[0]?.id;
@@ -185,6 +207,7 @@ router.get('/status', authenticateToken, async (req: AuthenticatedRequest, res) 
     }
 
     const tradeInSummary = await calculateTradeInSummary(client, userId);
+    const ownedQuantities = await getUserOwnedQuantities(client, userId);
 
     res.json({
       reward_points: rewardPoints,
@@ -194,6 +217,7 @@ router.get('/status', authenticateToken, async (req: AuthenticatedRequest, res) 
       tiers: PACK_TIERS,
       tradeInValues: TRADE_IN_VALUES,
       tradeInSummary,
+      ownedQuantities,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -243,7 +267,6 @@ router.post('/buy-pack', authenticateToken, async (req: AuthenticatedRequest, re
       if (isChaseSlot) {
         pityCounter += 1;
         if (pityCounter >= 10) {
-          // 10-Pack Pity Guarantee: CR, Shining (-S), or GR
           const pityRoll = Math.random();
           targetBucket = pityRoll < 0.6 ? 'CR' : pityRoll < 0.85 ? 'SHINING' : 'GR';
           pityCounter = 0;
@@ -262,16 +285,14 @@ router.post('/buy-pack', authenticateToken, async (req: AuthenticatedRequest, re
           }
         }
       } else {
-        // Show slots 1 & 2: 85% SR, 15% UR
         targetBucket = Math.random() < 0.85 ? 'SR' : 'UR';
       }
 
-      // Bundle guarantee: ensure last card of a 5-pack bundle is at least UR
       if (
         tierKey === 'BUNDLE' &&
         i === totalCards - 1 &&
         !pulledCards.some(
-          (c) => ['UR', 'CR', 'GR'].includes(c.rarity) || String(c.id).endsWith('-S')
+          (c) => ['UR', 'CR', 'GR', 'DR'].includes(c.rarity) || String(c.id).endsWith('-S')
         )
       ) {
         targetBucket = 'UR';
@@ -279,15 +300,14 @@ router.post('/buy-pack', authenticateToken, async (req: AuthenticatedRequest, re
 
       const pulledCard = await drawSingleChaseCard(client, targetBucket);
       if (pulledCard) {
-        const maxPlayset = String(pulledCard.card_type || '').toLowerCase().includes('mane') ? 1 : 4;
+        const maxPlayset = getMaxPlaysetForCard(pulledCard.card_type);
         const existingRes = await client.query(
           'SELECT quantity FROM auth.user_cards WHERE user_id = $1 AND card_id = $2',
           [userId, pulledCard.id]
         );
-        const currentQty = existingRes.rows[0]?.quantity || 0;
+        const currentQty = Number(existingRes.rows[0]?.quantity) || 0;
 
         if (currentQty >= maxPlayset) {
-          // Excess copy beyond 4-card playset auto-converts to Pony Points dust!
           const dust = getCardDustRate(pulledCard.id, pulledCard.rarity);
           autoDustEarned += dust;
           pulledCards.push({ ...pulledCard, convertedToDust: dust });
@@ -316,6 +336,7 @@ router.post('/buy-pack', authenticateToken, async (req: AuthenticatedRequest, re
     );
 
     const tradeInSummary = await calculateTradeInSummary(client, userId);
+    const ownedQuantities = await getUserOwnedQuantities(client, userId);
 
     await client.query('COMMIT');
     res.json({
@@ -326,6 +347,7 @@ router.post('/buy-pack', authenticateToken, async (req: AuthenticatedRequest, re
       autoDustEarned,
       cards: pulledCards,
       tradeInSummary,
+      ownedQuantities,
     });
   } catch (err: any) {
     await client.query('ROLLBACK');
@@ -335,7 +357,7 @@ router.post('/buy-pack', authenticateToken, async (req: AuthenticatedRequest, re
   }
 });
 
-// Buy guaranteed weekly deal card
+// Buy guaranteed weekly deal card (up to 4x playset, or 1x for Mane Characters)
 router.post('/buy-deal', authenticateToken, async (req: AuthenticatedRequest, res) => {
   const userId = req.user?.id;
   const { dealId } = req.body;
@@ -355,6 +377,18 @@ router.post('/buy-deal', authenticateToken, async (req: AuthenticatedRequest, re
     if (dealRes.rows.length === 0) throw new Error('Deal not found');
     const deal = dealRes.rows[0];
 
+    const maxPlayset = getMaxPlaysetForCard(deal.card_type);
+    const existingRes = await client.query(
+      'SELECT quantity FROM auth.user_cards WHERE user_id = $1 AND card_id = $2',
+      [userId, deal.id]
+    );
+    const currentQty = Number(existingRes.rows[0]?.quantity) || 0;
+    if (currentQty >= maxPlayset) {
+      throw new Error(
+        `You already own the maximum playset (${currentQty}/${maxPlayset}) of ${deal.name}!`
+      );
+    }
+
     const userRes = await client.query(
       'SELECT reward_points FROM auth.users WHERE id = $1 FOR UPDATE',
       [userId]
@@ -370,27 +404,32 @@ router.post('/buy-deal', authenticateToken, async (req: AuthenticatedRequest, re
       userId,
     ]);
 
-    await client.query(
+    const upsertRes = await client.query(
       `INSERT INTO auth.user_cards (user_id, card_id, quantity, user_alerted)
        VALUES ($1, $2, 1, FALSE)
        ON CONFLICT (user_id, card_id)
        DO UPDATE SET
-         quantity = LEAST(4, auth.user_cards.quantity + 1),
-         user_alerted = FALSE`,
-      [userId, deal.id]
+         quantity = LEAST($3, auth.user_cards.quantity + 1),
+         user_alerted = FALSE
+       RETURNING quantity`,
+      [userId, deal.id, maxPlayset]
     );
 
     const updatedUser = await client.query('SELECT reward_points FROM auth.users WHERE id = $1', [
       userId,
     ]);
     const tradeInSummary = await calculateTradeInSummary(client, userId);
+    const ownedQuantities = await getUserOwnedQuantities(client, userId);
 
     await client.query('COMMIT');
     res.json({
       success: true,
       remainingPoints: updatedUser.rows[0].reward_points,
       card: deal,
+      newQuantity: Number(upsertRes.rows[0]?.quantity) || currentQty + 1,
+      maxPlayset,
       tradeInSummary,
+      ownedQuantities,
     });
   } catch (err: any) {
     await client.query('ROLLBACK');
@@ -422,7 +461,7 @@ router.post('/trade-in-extras', authenticateToken, async (req: AuthenticatedRequ
     let pointsEarned = 0;
 
     for (const row of rows) {
-      const maxPlayset = String(row.card_type || '').toLowerCase().includes('mane') ? 1 : 4;
+      const maxPlayset = getMaxPlaysetForCard(row.card_type);
       const qty = Number(row.quantity) || 0;
       if (qty > maxPlayset) {
         const extras = qty - maxPlayset;
@@ -450,6 +489,8 @@ router.post('/trade-in-extras', authenticateToken, async (req: AuthenticatedRequ
       [pointsEarned, userId]
     );
 
+    const ownedQuantities = await getUserOwnedQuantities(client, userId);
+
     await client.query('COMMIT');
     res.json({
       success: true,
@@ -457,6 +498,7 @@ router.post('/trade-in-extras', authenticateToken, async (req: AuthenticatedRequ
       pointsEarned,
       remainingPoints: updatedUser.rows[0].reward_points,
       tradeInSummary: { extraCardsCount: 0, totalPointsValue: 0 },
+      ownedQuantities,
     });
   } catch (err: any) {
     await client.query('ROLLBACK');

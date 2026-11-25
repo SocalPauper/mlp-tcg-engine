@@ -1,231 +1,245 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { API_BASE_URL } from '../config';
 import { getCardFoilClass } from '../styles/cardFoil';
-import './CardPreviewModal.css';
 
 export interface PreviewableCard {
   id: string;
   name: string;
-  set_code?: string;
-  setCode?: string;
   card_type?: string;
   type?: string;
+  element?: string | null;
+  rarity?: string;
   cost?: number;
   power?: number;
-  defense?: number;
   traits?: string;
   effect_text?: string;
   effectText?: string;
-  element?: string | null;
-  rarity?: string;
   image_url?: string;
   imageUrl?: string;
 }
 
 interface CardPreviewModalProps {
   card: PreviewableCard | null;
-  onClose: () => void;
   ownedCount?: number;
+  hideOwnership?: boolean;
+  onClose: () => void;
 }
 
-const CARD_BACK_URL = 'https://pub-7c3c4a1adbf240ddbb5c65941361f846.r2.dev/cards/CardBack.webp';
+let cachedCollectionMap: Record<string, number> | null = null;
 
-function sanitizeText(raw?: string): string {
-  if (!raw) return '';
-  return raw
-    .replace(/\{\{[^}]*$/g, '')
-    .replace(/\{\{|\}\}/g, '')
-    .replace(/\bonly\s+only\b/gi, 'Only')
-    .trim();
+export function invalidatePreviewCollectionCache() {
+  cachedCollectionMap = null;
 }
 
-function parseCleanTraits(raw?: string): string[] {
-  const cleaned = sanitizeText(raw);
-  if (!cleaned) return [];
-  // Ignore raw numeric placeholders or leaked effect sentences in traits column
-  if (/^\d+$/.test(cleaned) || cleaned.length > 48 || /when promoted|draw \d/i.test(cleaned)) {
-    return [];
-  }
-  return cleaned
-    .split(/[,/|•·]+/)
-    .map((t) => t.trim())
-    .filter((t) => t.length > 0 && !/^\d+$/.test(t));
-}
+export default function CardPreviewModal({
+  card,
+  ownedCount,
+  hideOwnership = false,
+  onClose,
+}: CardPreviewModalProps) {
+  const [fetchedQty, setFetchedQty] = useState<number | null>(null);
 
-function splitEffectClauses(rawText: string): string[] {
-  if (!rawText) return [];
-  // Insert line breaks before major Kayou trigger keywords so compound cards are easy to read
-  const normalized = rawText.replace(
-    /\s+(?=(?:Appear|Farewell|Adventure|Pre-Plan|Inspo Boost|Inspiration Boost|Treat for you!|Treat for me!|Deliver Present|Unwrap Present)\b)/gi,
-    '\n'
-  );
-  return normalized
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function renderFormattedClause(clause: string, keyPrefix: string) {
-  const tokenRegex =
-    /((?:Appear|Farewell|Adventure|Pre-Plan|Inspo Boost|Inspiration Boost|Treat for you!|Treat for me!|Deliver Present|Unwrap Present|Only adorn|Only use when|Tap)\s*:?|[｢\[「][^｣\]」]+[｣\]」])/gi;
-
-  const parts = clause.split(tokenRegex);
-  return parts.map((part, idx) => {
-    if (!part) return null;
-    if (/^[｢\[「][^｣\]」]+[｣\]」]$/.test(part)) {
-      return (
-        <span key={`${keyPrefix}-${idx}`} className="preview-bracket-chip">
-          {part}
-        </span>
-      );
+  useEffect(() => {
+    if (!card || hideOwnership || ownedCount !== undefined) {
+      setFetchedQty(null);
+      return;
     }
-    if (
-      /^(?:Appear|Farewell|Adventure|Pre-Plan|Inspo Boost|Inspiration Boost|Treat for you!|Treat for me!|Deliver Present|Unwrap Present|Only adorn|Only use when|Tap)\s*:?$/i.test(
-        part
-      )
-    ) {
-      return (
-        <span key={`${keyPrefix}-${idx}`} className="preview-keyword-chip">
-          {part.trim()}
-        </span>
-      );
-    }
-    return <React.Fragment key={`${keyPrefix}-${idx}`}>{part}</React.Fragment>;
-  });
-}
 
-export default function CardPreviewModal({ card, onClose, ownedCount }: CardPreviewModalProps) {
+    const computeQty = (map: Record<string, number>) => {
+      if (map[card.id] !== undefined) return map[card.id];
+      const id = String(card.id || '').toUpperCase();
+      const rarity = String(card.rarity || 'C').toUpperCase();
+      const cType = String(card.card_type || card.type || '').toLowerCase();
+      const maxPlayset = cType.includes('mane') || cType.includes('main') ? 1 : 4;
+      if (id.endsWith('-S')) return 0;
+      if (/^SD/i.test(id) || ['C', 'U', 'R', 'SPR'].includes(rarity)) return maxPlayset;
+      return 0;
+    };
+
+    if (cachedCollectionMap) {
+      setFetchedQty(computeQty(cachedCollectionMap));
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setFetchedQty(computeQty({}));
+      return;
+    }
+
+    fetch(`${API_BASE_URL}/api/auth/me/collection`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows) => {
+        const map: Record<string, number> = {};
+        if (Array.isArray(rows)) {
+          for (const r of rows) {
+            map[r.card_id] = Number(r.quantity) || 0;
+          }
+        }
+        cachedCollectionMap = map;
+        setFetchedQty(computeQty(map));
+      })
+      .catch(() => setFetchedQty(computeQty({})));
+  }, [card, ownedCount, hideOwnership]);
+
   if (!card) return null;
 
+  const imgSrc = card.image_url || card.imageUrl || '';
+  const rulesText = card.effect_text || card.effectText || 'No special effect text.';
   const cardType = card.card_type || card.type || 'Card';
-  const imageUrl = card.image_url || card.imageUrl || CARD_BACK_URL;
-  const setCode = card.set_code || card.setCode || card.id.split('-')[0] || '';
-  const rawEffect = sanitizeText(card.effect_text ?? card.effectText);
-  const displayEffect =
-    rawEffect ||
-    (card.id.toUpperCase().includes('ER')
-      ? 'Inspo Boost: Your matching characters get +1 Inspiration until the end of this Contact.'
-      : '');
-
-  const isStory =
-    cardType === 'Story' ||
-    /-(?:C2[5-9]|C[3-4]\d)/i.test(card.id || '') ||
-    (card.name || '').includes(' - ') ||
-    (card.name || '').includes(' – ');
-
-  const isCharacter = cardType.toLowerCase().includes('character') && !cardType.toLowerCase().includes('mane');
-  const hasCost = ['Character', 'Friend Character', 'Event', 'Item'].includes(cardType) && card.cost !== undefined;
-  const rarityUpper = String(card.rarity || 'C').toUpperCase();
-  const isShining = card.id.toUpperCase().endsWith('-S');
-  const isUltra = ['UR', 'GR', 'CR', 'DR', 'SPR'].includes(rarityUpper) || isShining;
+  const maxCopies =
+    cardType.toLowerCase().includes('mane') || cardType.toLowerCase().includes('main') ? 1 : 4;
+  const resolvedOwned = ownedCount !== undefined ? ownedCount : fetchedQty;
   const foilCls = getCardFoilClass(card);
-  const traitsList = parseCleanTraits(card.traits);
-  const effectClauses = splitEffectClauses(displayEffect);
 
   return (
-    <div className="preview-overlay" onClick={onClose}>
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(12, 4, 24, 0.85)',
+        backdropFilter: 'blur(6px)',
+        zIndex: 10050,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+      }}
+    >
       <div
-        className={`preview-modal ${isStory ? 'story-landscape-modal' : ''} ${
-          isUltra ? 'ultra-rare-glow' : ''
-        }`}
         onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'radial-gradient(circle at top, #3b0764 0%, #1a0b2e 100%)',
+          border: '3px solid #ffd700',
+          borderRadius: '24px',
+          padding: '24px',
+          maxWidth: '640px',
+          width: '100%',
+          color: '#fff',
+          display: 'flex',
+          gap: '22px',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.9)',
+          fontFamily: "'Nunito', sans-serif",
+        }}
       >
-        <button
-          type="button"
-          className="preview-close-btn"
-          onClick={onClose}
-          aria-label="Close preview"
-        >
-          ✕
-        </button>
-
         <div
-          className={`preview-image-container ${
-            isStory ? 'story-landscape-box' : ''
-          } ${foilCls}`}
+          className={foilCls}
+          style={{
+            width: '210px',
+            borderRadius: '14px',
+            overflow: 'hidden',
+            border: '2px solid #ffd700',
+            flexShrink: 0,
+            margin: '0 auto',
+          }}
         >
-          <img src={imageUrl} alt={card.name} />
+          <img
+            src={imgSrc}
+            alt={card.name}
+            style={{ width: '100%', display: 'block', objectFit: 'cover' }}
+          />
         </div>
 
-        <div className="preview-data-panel">
-          <div className="preview-header">
-            <div>
-              <h2>{card.name}</h2>
-              <div className="preview-subtitle-row">
-                <span className="preview-card-id">{card.id}</span>
-                {setCode && <span className="preview-set-chip">{setCode}</span>}
-              </div>
-            </div>
+        <div
+          style={{
+            flex: 1,
+            minWidth: '240px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '8px',
+              flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#e9d5ff' }}>
+              {card.id}
+            </span>
 
-            <div className="preview-stat-badges">
-              {hasCost && (
-                <div className="preview-cost-badge" title="Force of Harmony Cost">
-                  <span className="stat-mini-label">COST</span>
-                  <strong>{card.cost}</strong>
-                </div>
-              )}
-              {isCharacter && card.power !== undefined && (
-                <div className="preview-inspo-badge" title="Base Inspiration">
-                  <span className="stat-mini-label">INSPO</span>
-                  <strong>⚡ {card.power}</strong>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="preview-meta-grid">
-            <div>
-              <span className="preview-meta-label">CARD TYPE</span>
-              <span className="preview-meta-value">{cardType}</span>
-            </div>
-            <div>
-              <span className="preview-meta-label">RARITY</span>
-              <span className={`preview-rarity-pill ${isUltra ? 'ultra' : ''}`}>
-                {isShining ? `${rarityUpper}-S (Shining Foil)` : rarityUpper}
-              </span>
-            </div>
-            {card.element && (
-              <div>
-                <span className="preview-meta-label">ELEMENT</span>
-                <span className="preview-element-pill">{card.element}</span>
-              </div>
-            )}
-            {traitsList.length > 0 && (
-              <div>
-                <span className="preview-meta-label">TRAITS</span>
-                <div className="preview-traits-row">
-                  {traitsList.map((trait, idx) => (
-                    <span key={idx} className="preview-trait-pill">
-                      {trait}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="preview-rules-box">
-            <span className="preview-meta-label">ABILITIES &amp; EFFECTS</span>
-            {effectClauses.length > 0 ? (
-              <div className="preview-clauses-list">
-                {effectClauses.map((clause, idx) => (
-                  <p key={idx} className="preview-clause-line">
-                    {renderFormattedClause(clause, `cl-${idx}`)}
-                  </p>
-                ))}
-              </div>
-            ) : (
-              <p className="preview-empty-rules">No printed abilities.</p>
-            )}
-          </div>
-
-          <div className="preview-footer">
-            <span className="preview-hint-text">Click outside or ✕ to close</span>
-            {typeof ownedCount === 'number' && (
-              <span className={`preview-owned-badge ${ownedCount > 0 ? 'owned' : 'missing'}`}>
-                {ownedCount > 0 ? `Owned: ×${ownedCount}` : 'Not Yet Collected'}
+            {!hideOwnership && resolvedOwned !== null && (
+              <span
+                style={{
+                  background:
+                    resolvedOwned >= maxCopies
+                      ? 'rgba(16, 185, 129, 0.25)'
+                      : resolvedOwned > 0
+                      ? 'rgba(253, 224, 71, 0.2)'
+                      : 'rgba(148, 163, 184, 0.2)',
+                  border: `1.5px solid ${
+                    resolvedOwned >= maxCopies
+                      ? '#34d399'
+                      : resolvedOwned > 0
+                      ? '#fde047'
+                      : '#94a3b8'
+                  }`,
+                  color:
+                    resolvedOwned >= maxCopies
+                      ? '#6ee7b7'
+                      : resolvedOwned > 0
+                      ? '#fde047'
+                      : '#cbd5e1',
+                  padding: '3px 10px',
+                  borderRadius: '999px',
+                  fontSize: '12px',
+                  fontWeight: 900,
+                }}
+              >
+                📖 Copies Owned: {resolvedOwned} / {maxCopies}
               </span>
             )}
           </div>
+
+          <h3 style={{ margin: 0, color: '#ffd700', fontSize: '1.4rem' }}>{card.name}</h3>
+
+          <div style={{ fontSize: '13px', color: '#fbcfe8', fontWeight: 800 }}>
+            {cardType} • {card.element || 'Everyday'} • Rarity: {card.rarity || 'C'}
+            {card.cost !== undefined ? ` • Cost: ${card.cost}` : ''}
+            {card.power ? ` • Inspiration: ${card.power}` : ''}
+          </div>
+
+          <div
+            style={{
+              background: 'rgba(15, 5, 28, 0.78)',
+              border: '1.5px solid rgba(192, 132, 252, 0.5)',
+              borderRadius: '14px',
+              padding: '12px 14px',
+              fontSize: '13.5px',
+              lineHeight: 1.5,
+              color: '#f3e8ff',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {rulesText}
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              marginTop: '6px',
+              alignSelf: 'flex-end',
+              background: 'linear-gradient(135deg, #ec4899, #9333ea)',
+              color: '#fff',
+              border: '2px solid #ffd700',
+              borderRadius: '999px',
+              padding: '8px 22px',
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            Close Preview
+          </button>
         </div>
       </div>
     </div>
